@@ -1,0 +1,208 @@
+---
+title: "Step 1: Generate co-abundance data bundles"
+author: "Zachary Amir, Z.Amir@uq.edu.au"
+date: "May 10th, 2023"
+format: html
+editor: source
+---
+
+## Introduction
+
+This code will generate count histories and associated covariates and bundle the data to implement Zachary Amir's co-abundance models on the High Performance Computers (HPC).
+
+Although it will not run effectivly here, the code that runs on the HPC is included here (or maybe move to different script?)
+
+This code works off the spatially resampled captures and covariates that are genarated in the 4-step cam trap data standardization pipeline. See "Dropbox/CT capture histories database/R scripts CT data cleaning" for more info.
+
+## Code log & notes
+
+May 10th, 2023: Initalize R project and GitHub Repos. Migrate old code and make slight tweaks where needed.
+
+```{r clear environment & load libraries, include=FALSE}
+
+## start fresh
+rm(list = ls())
+
+library(tidyverse)
+library(plyr)
+
+
+```
+
+```{r import and inspect data, include=FALSE}
+
+## import the data
+caps= as.data.frame(read_csv("data/raw/ECL and Collaborator spatially resampled captures 3km_20221123.csv"))
+head(caps)
+str(caps) #classes are already formatted
+
+## Inspect survey_ids and landscapes
+sort(unique(caps$survey_id)) # This has been updated, but wait to include full updates
+
+
+## Remove Brodie's data W of wallace line --> doesnt have relevant species
+caps = caps[!caps$survey_id %in% c("Brodie-New_Guinea-Arfak Mts_2015",
+                                   "Brodie-New_Guinea-Nimbokrang_2015",
+                                   "Brodie-Halmahera-Weda_2013",
+                                   "Brodie-Sulawesi-Buton_south_2013",
+                                   "Brodie-Sulawesi-Buton_north_2013",
+                                   "Brodie-Sulawesi-Tangkoko_2013"),]
+
+## I found a bug below where Brodie and Jaysilan provided ~almost~ the exact same datasets
+## so remove Jaysilan's in favor of brodie's --> cleaner w/ more data 
+caps = caps[!caps$survey_id %in% c("Gunung Mulu National Park_2010",
+                                   "Hose Mountain_2012",
+                                   "Pulong Tau National Park_2010",
+                                   "Ulu Baram_2012_a"),]
+
+#### To be conservative, lets thin the data to big surveys
+
+# Remove surveys w/ less than or equal to 5 sampling units and less than 20 trap nights
+### WILL UPDATE THIS to 10 cameras and less than 100 trapnights w/ update! 
+surv_sum = ddply(caps, .(survey_id), summarize,
+                 num_cam = length(unique(cell_id_3km)),
+                 effort = as.numeric(difftime(max(Date), min(Date), unit = "days")))
+keep = surv_sum$survey_id[surv_sum$num_cam >= 5 &
+                            surv_sum$effort > 19]
+length(keep) #262 surveys
+
+caps2 = caps[caps$survey_id %in% keep,]
+dim(caps)[1]-dim(caps2)[1] #removed almost 40,843 records, which is 20% of the data  
+
+## save and move forward
+caps = caps2
+rm(caps2, keep, surv_sum)
+
+
+```
+
+```{r select and standardize species to include, include=FALSE}
+
+##### Which species will be included and how to standardize species?
+
+# which species have sufficent (n=100) detections?
+sp_count = ddply(caps, .(Species), summarize,
+                 num_cap = length(Species))
+keep = sp_count[sp_count$num_cap >= 100,]
+
+keep[order(keep$num_cap),]
+
+## where are leopards?
+#### UPDATE --> We should have 100+ detections, make sure to find them!!! 
+sp_count[sp_count$Species == "Panthera_pardus",] # suprisinging! only 74 detections after thinning data. only 84 without thinning either.  
+unique(caps$Species[grepl("Panth", caps$Species)]) # no missing species... just add for later. 
+
+## manually add them
+keep = add_row(keep, sp_count[sp_count$Species == "Panthera_pardus",])
+
+## Standardize muntjacs, tragulus, Hystrix (?), Neofelis, Capricornis, Tupaia, maybe Canis_lupus
+## remove from analysis: Ghost Homo_sapiens, unID'd, remove, Aves, bird, unkown, bird_pheasent, etc
+
+# Hystrix_brachyura & Hystirix_brachyura need to match but dont! 
+
+
+### Clean up and combine some speices names
+
+# Hystrix
+unique(caps$Species[grepl("brachy", caps$Species)]) #typo!
+caps$Species[caps$Species == "Hystirix_brachyura"] = "Hystrix_sp"
+unique(caps$Species[grepl("Hystrix", caps$Species)])
+nrow(caps[caps$Species == "Hystrix_crassispinis",]) ## dont change this one! 
+caps$Species[caps$Species %in% c("Hystrix_brachyura","Hystrix_sp", "Hystrix")] = "Hystrix_sp"
+
+# Muntjac
+unique(caps$Species[grepl("Munt", caps$Species)]) # ecologically very similar species, just combine
+caps$Species[grepl("Munt", caps$Species)] = "Muntiacus_sp"
+
+# clouded leopards
+unique(caps$Species[grepl("Neof", caps$Species)]) #just geographical differences
+caps$Species[grepl("Neof", caps$Species)] = "Neofelis_sp"
+
+# mousedeer
+unique(caps$Species[grepl("Trag", caps$Species)]) #Amazed that these are even differentiated 
+caps$Species[grepl("Trag", caps$Species)] = "Tragulus_sp"
+
+# serow
+unique(caps$Species[grepl("Capric", caps$Species)]) #I think these were recently combined anyway 
+caps$Species[grepl("Capric", caps$Species)] = "Capricornis_sp"
+
+# treeshrew
+unique(caps$Species[grepl("Tupai", caps$Species)]) #Amazed that these are even differentiated 
+caps$Species[grepl("Tupai", caps$Species)] = "Tupaia_sp"
+caps$Species[caps$Species == "Scandentia"] = "Tupaia_sp" #standardize the order as well. 
+
+#dogs
+unique(caps$Species[grepl("Canis_lup", caps$Species)]) #Just call these dogs, we dont have pics to know if domestic or not 
+caps$Species[grepl("Canis_lup", caps$Species)] = "Canis_lupus"
+
+# mongoose
+unique(caps$Species[grepl("Herpe", caps$Species)]) #Maybe a stretch, but I think we can combine here. 
+caps$Species[grepl("Herpe", caps$Species)] = "Herpestes_sp"
+
+# Murids
+unique(caps$Species[grepl("Muri", caps$Species)]) #exactly the same 
+caps$Species[grepl("Muri", caps$Species)] = "Muridae_spp" #spp denotes family here. 
+
+#squirells 
+unique(caps$Species[grepl("Sciur", caps$Species)]) #exactly the same 
+caps$Species[grepl("Sciur", caps$Species)] = "Sciuridae_spp"
+caps$Species[caps$Species == "Squirrel_ssp"] = "Sciuridae_spp"
+
+#Argus pheasent
+unique(caps$Species[grepl("Arg", caps$Species)]) #exactly the same 
+caps$Species[grepl("Arg", caps$Species)] = "Argusianus_argus"
+
+#Combine northern and southern pig tail macaques into one species Macaca_leonina Macaca_nemestrina 
+caps$Species[caps$Species %in% c("Macaca_leonina", "Macaca_nemestrina" )] = "Macaca_nemestrina"
+
+#chickens
+unique(caps$Species[grepl("Gallu", caps$Species)]) #Just dont want domestic chooks 
+caps$Species[startsWith(caps$Species, "Gallus")] = "Gallus_gallus"
+
+#palm civet 
+caps$Species[caps$Species == "Paradoxurus_musangus_or_hermaphroditus"] =  "Paradoxurus_hermaphroditus"
+
+
+### Save a vector of species names we want to analyze 
+# which species have sufficent (n=100) detections?
+sp_count = ddply(caps, .(Species), summarize,
+                 num_cap = length(Species))
+keep = sp_count$Species[sp_count$num_cap >= 100]
+
+# remove some of the not useful fluff
+keep = keep[!keep %in% c("Aves","bird","Bird_Phesant",
+                         "Camera", "Camera_Trapper", "Dirt_bike",
+                         "Mammalia", "remove", "Reptile",
+                         "Rodent","Unknown","Unkown",
+                         "Vehicle", "unidentified", "Ghost")] 
+keep = keep[!grepl("Homo_", keep)] #remove all people
+
+## dont forget those leopards! 
+keep = c(keep, "Panthera_pardus")
+
+## remove even more! 
+keep = keep[!keep %in% c("Amaurornis_phoenicurus","Amaurornis_sp",
+                         "Callosciurus_erythraeus", "Callosciurus_notatus",
+                         "Chalcophaps_indica","Copsychus_saularis",
+                         "Dremomys_rufigenis", "Garrulax_milleti",
+                         "Geokichla_citrina", "Lariscus_insignis",
+                         "Maxomys_sp", "Muridae_spp", "Rheithrosciurus_macrotis",
+                         "Rollulus_rouloul", "Rodentia",
+                         "Scincidae", "Sciuridae_spp")]
+
+## try and get this list to 32 MAX --> remove 20 more spieces
+keep = keep[!keep %in% c("Tupaia_sp", "Phasianidae_spp", "Gallus_gallus",
+                         "Argusianus_argus", "Leopoldamys_sabanus",
+                         "Lophura_bulweri","Lophura_diardi",
+                         "Lophura_ignita","Lophura_nycthemera",
+                         "Melogale_moschata", "Varanus_salvator",
+                         "Atherurus_macrourus", "Hystrix_sp", "Arctonyx_collaris",
+                         "Macaca_arctoides", "Trichys_fasciculata", 
+                         "Hystrix_crassispinis", "Echinosorex_gymnura")]
+
+
+### I think these should be good to go! 
+keep
+
+```
+

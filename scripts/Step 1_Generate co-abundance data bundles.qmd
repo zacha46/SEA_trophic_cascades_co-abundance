@@ -10,9 +10,9 @@ editor: source
 
 This code will generate count histories and associated covariates and bundle the data to implement Zachary Amir's co-abundance models on the High Performance Computers (HPC).
 
-Although it will not run effectivly here, the code that runs on the HPC is included here (or maybe move to different script?)
+Although it will not run effectively here, the code that runs on the HPC is included here (or maybe move to different script?)
 
-This code works off the spatially resampled captures and covariates that are genarated in the 4-step cam trap data standardization pipeline. See "Dropbox/CT capture histories database/R scripts CT data cleaning" for more info.
+This code works off the spatially re-sampled captures and covariates that are generated in the 4-step cam trap data standardization pipeline. See "Dropbox/CT capture histories database/R scripts CT data cleaning" for more info.
 
 ## Code log & notes
 
@@ -25,6 +25,7 @@ rm(list = ls())
 
 library(tidyverse)
 library(plyr)
+library(traitdata)
 
 
 ```
@@ -94,6 +95,9 @@ unique(caps$Species[grepl("Panth", caps$Species)]) # no missing species... just 
 
 ## manually add them
 keep = add_row(keep, sp_count[sp_count$Species == "Panthera_pardus",])
+
+length(keep$Species) # 110 species before any cleaning 
+
 
 ## Standardize muntjacs, tragulus, Hystrix (?), Neofelis, Capricornis, Tupaia, maybe Canis_lupus
 ## remove from analysis: Ghost Homo_sapiens, unID'd, remove, Aves, bird, unkown, bird_pheasent, etc
@@ -169,6 +173,8 @@ sp_count = ddply(caps, .(Species), summarize,
                  num_cap = length(Species))
 keep = sp_count$Species[sp_count$num_cap >= 100]
 
+length(keep) # 85 after combining genera
+
 # remove some of the not useful fluff
 keep = keep[!keep %in% c("Aves","bird","Bird_Phesant",
                          "Camera", "Camera_Trapper", "Dirt_bike",
@@ -180,29 +186,203 @@ keep = keep[!grepl("Homo_", keep)] #remove all people
 ## dont forget those leopards! 
 keep = c(keep, "Panthera_pardus")
 
-## remove even more! 
-keep = keep[!keep %in% c("Amaurornis_phoenicurus","Amaurornis_sp",
-                         "Callosciurus_erythraeus", "Callosciurus_notatus",
-                         "Chalcophaps_indica","Copsychus_saularis",
-                         "Dremomys_rufigenis", "Garrulax_milleti",
-                         "Geokichla_citrina", "Lariscus_insignis",
-                         "Maxomys_sp", "Muridae_spp", "Rheithrosciurus_macrotis",
-                         "Rollulus_rouloul", "Rodentia",
-                         "Scincidae", "Sciuridae_spp")]
+length(keep) # 67 species after removing fluff. 
 
-## try and get this list to 32 MAX --> remove 20 more spieces
-keep = keep[!keep %in% c("Tupaia_sp", "Phasianidae_spp", "Gallus_gallus",
-                         "Argusianus_argus", "Leopoldamys_sabanus",
-                         "Lophura_bulweri","Lophura_diardi",
-                         "Lophura_ignita","Lophura_nycthemera",
-                         "Melogale_moschata", "Varanus_salvator",
-                         "Atherurus_macrourus", "Hystrix_sp", "Arctonyx_collaris",
-                         "Macaca_arctoides", "Trichys_fasciculata", 
-                         "Hystrix_crassispinis", "Echinosorex_gymnura")]
+# ## remove even more! 
+# keep = keep[!keep %in% c("Amaurornis_phoenicurus","Amaurornis_sp",
+#                          "Callosciurus_erythraeus", "Callosciurus_notatus",
+#                          "Chalcophaps_indica","Copsychus_saularis",
+#                          "Dremomys_rufigenis", "Garrulax_milleti",
+#                          "Geokichla_citrina", "Lariscus_insignis",
+#                          "Maxomys_sp", "Muridae_spp", "Rheithrosciurus_macrotis",
+#                          "Rollulus_rouloul", "Rodentia",
+#                          "Scincidae", "Sciuridae_spp")]
+# 
+# ## try and get this list to 32 MAX --> remove 20 more spieces
+# keep = keep[!keep %in% c("Tupaia_sp", "Phasianidae_spp", "Gallus_gallus",
+#                          "Argusianus_argus", "Leopoldamys_sabanus",
+#                          "Lophura_bulweri","Lophura_diardi",
+#                          "Lophura_ignita","Lophura_nycthemera",
+#                          "Melogale_moschata", "Varanus_salvator",
+#                          "Atherurus_macrourus", "Hystrix_sp", "Arctonyx_collaris",
+#                          "Macaca_arctoides", "Trichys_fasciculata", 
+#                          "Hystrix_crassispinis", "Echinosorex_gymnura")]
 
 
 ### I think these should be good to go! 
 keep
+
+```
+
+```{r generate species trait data, include=FALSE}
+
+### Goal is to ensure EVERY species has appropriate species trait data
+## and drop any species that does not 
+
+### COME HERE!!! This is all copy/pasted from old code. 
+## this needs to work for all 67 species!! 
+
+## Thin datasets to relevant info
+head(pantheria)
+names(pantheria)
+pan = select(pantheria, scientificNameStd, TrophicLevel, DietBreadth, AdultBodyMass_g)
+head(pan)
+rm(pantheria)
+
+head(mammal_diet2)
+names(mammal_diet2)
+mam = select(mammal_diet2, scientificNameStd, TrophicLevel)
+rm(mammal_diet2)
+
+names(mam)[2] = "TrophicName"
+mam = as.data.frame(mam) # remove silly tibble
+## remove NA species names 
+mam = mam[!is.na(mam$scientificNameStd),]
+
+## check which species I looked at are missing from this DB
+preform$sub_species = gsub("_", " ", preform$sub_species)
+
+setdiff(preform$sub_species, pan$scientificNameStd) # onlt the genera-level critters and Tapir typo 
+setdiff(preform$sub_species, mam$scientificNameStd) # the same 
+
+## fix species name typo 
+pan$scientificNameStd[pan$scientificNameStd == "Taperus indicus"] = "Tapirus indicus"
+mam$scientificNameStd[mam$scientificNameStd == "Taperus indicus"] = "Tapirus indicus"
+
+# and add misisng genera
+pan[5511:(5511+5), "scientificNameStd"] = setdiff(preform$sub_species, pan$scientificNameStd)
+mam[6716:(6716+5), "scientificNameStd"] = setdiff(preform$sub_species, mam$scientificNameStd)
+# and associated info
+pan[pan$scientificNameStd == "Capricornis sp", c("TrophicLevel","DietBreadth","AdultBodyMass_g")] = 
+  pan[pan$scientificNameStd == "Capricornis sumatraensis", c("TrophicLevel","DietBreadth","AdultBodyMass_g")]
+mam[mam$scientificNameStd == "Capricornis sp", "TrophicName"] = 
+  mam[mam$scientificNameStd == "Capricornis sumatraensis", "TrophicName"]
+
+pan[pan$scientificNameStd == "Herpestes sp", c("TrophicLevel","DietBreadth","AdultBodyMass_g")] = 
+  pan[pan$scientificNameStd == "Herpestes urva", c("TrophicLevel","DietBreadth","AdultBodyMass_g")]
+mam[mam$scientificNameStd == "Herpestes sp", "TrophicName"] = 
+  mam[mam$scientificNameStd == "Herpestes urva", "TrophicName"]
+
+pan[pan$scientificNameStd == "Muntiacus sp", c("TrophicLevel","DietBreadth","AdultBodyMass_g")] = 
+  pan[pan$scientificNameStd == "Muntiacus muntjak", c("TrophicLevel","DietBreadth","AdultBodyMass_g")]
+mam[mam$scientificNameStd =="Muntiacus sp", "TrophicName"] = 
+  unique(mam[mam$scientificNameStd == "Muntiacus muntjak", "TrophicName"])
+
+pan[pan$scientificNameStd == "Neofelis sp", c("TrophicLevel","DietBreadth","AdultBodyMass_g")] = 
+  pan[pan$scientificNameStd == "Neofelis nebulosa", c("TrophicLevel","DietBreadth","AdultBodyMass_g")]
+mam[mam$scientificNameStd == "Neofelis sp", "TrophicName"] = 
+  mam[mam$scientificNameStd == "Neofelis nebulosa", "TrophicName"]
+
+pan[pan$scientificNameStd == "Tragulus sp", c("TrophicLevel","DietBreadth","AdultBodyMass_g")] = 
+  pan[pan$scientificNameStd == "Tragulus napu", c("TrophicLevel","DietBreadth","AdultBodyMass_g")]
+mam[mam$scientificNameStd == "Tragulus sp", "TrophicName"] = 
+  mam[mam$scientificNameStd == "Tragulus napu", "TrophicName"]
+
+pan[pan$scientificNameStd == "Bos gaurus", c("TrophicLevel","DietBreadth","AdultBodyMass_g")] = 
+  pan[pan$scientificNameStd == "Bos javanicus", c("TrophicLevel","DietBreadth","AdultBodyMass_g")]
+mam[mam$scientificNameStd == "Bos gaurus", "TrophicName"] = 
+  mam[mam$scientificNameStd == "Bos javanicus", "TrophicName"]
+
+## double check
+setdiff(preform$sub_species, pan$scientificNameStd) # full match! 
+setdiff(preform$sub_species, mam$scientificNameStd) # full match! 
+
+
+## thin pan and mam to match relevant species
+pan = pan[pan$scientificNameStd %in% preform$sub_species,]
+mam = mam[mam$scientificNameStd %in% preform$sub_species,]
+mam = distinct(mam) # idk where repeats came in, but they did! 
+
+## merge them
+setdiff(pan$scientificNameStd, mam$scientificNameStd)
+setdiff(mam$scientificNameStd, pan$scientificNameStd)
+guilds = merge(pan, mam, by = "scientificNameStd")
+head(guilds) # looks good! 
+anyNA(guilds) # good! 
+rm(pan, mam)
+
+#### COME HERE! Examine trophic guilds closely and make sure to be explicit about adding an mesopredator guild. 
+
+## add small and large to trophic names 
+guilds$TrophicGuild = guilds$TrophicName
+
+# inspect omnivores first
+guilds$scientificNameStd[guilds$TrophicName == "Omnivore"] # thankfully not many, most are small
+guilds$TrophicGuild[guilds$TrophicName == "Omnivore"] = "Small_Omnivore"
+guilds$TrophicGuild[guilds$scientificNameStd %in% c("Helarctos malayanus",
+                                                    "Sus scrofa", 
+                                                    "Sus barbatus",
+                                                    "Ursus thibetanus")] = "Large_Omnivore"
+## "Ursus thibetanus" was classified as herbivore, but omnivore is more accurate. 
+
+## herbivores
+guilds$scientificNameStd[guilds$TrophicName == "Herbivore"] # almost all large
+guilds$TrophicGuild[guilds$TrophicName == "Herbivore"] = "Large_Herbivore"
+guilds$TrophicGuild[guilds$scientificNameStd %in% c("Muntiacus sp", 
+                                                    "Macaca nemestrina",
+                                                    "Macaca fascicularis",
+                                                    "Tragulus sp")] = "Small_Herbivore"
+## Carnivores
+guilds$scientificNameStd[guilds$TrophicName == "Carnivore"] # pretty even split
+guilds$TrophicGuild[guilds$scientificNameStd %in% c("Canis lupus", 
+                                                    "Cuon alpinus",
+                                                    "Neofelis sp",
+                                                    "Panthera pardus",
+                                                    "Panthera tigris")] = "Large_Carnivore"
+guilds$TrophicGuild[guilds$scientificNameStd %in% c("Catopuma temminckii", 
+                                                    "Hemigalus derbyanus",
+                                                    "Herpestes sp",
+                                                    "Manis javanica",
+                                                    "Pardofelis marmorata",
+                                                    "Prionailurus bengalensis",
+                                                    "Prionodon linsang")] = "Small_Carnivore"
+table(guilds$TrophicGuild) # looks good! 
+
+
+###### Combine species trait data w/ model performance. 
+head(preform)
+head(guilds)
+
+setdiff(preform$sub_species, guilds$scientificNameStd) # these match, add subordinate guild first
+
+add = select(guilds, scientificNameStd, TrophicGuild)
+names(add) = c("sub_species", "SUB_guild")
+
+preform = merge(preform, add, by = "sub_species")
+head(preform)
+
+## now do the same for dominant speices
+preform$dom_species = gsub("_", " ", preform$dom_species)
+setdiff(preform$dom_species, guilds$scientificNameStd) # these match
+add = select(guilds, scientificNameStd, TrophicGuild)
+names(add) = c("dom_species", "DOM_guild")
+
+preform = merge(preform, add, by = "dom_species")
+head(preform)
+
+## combine into a guild pair 
+preform$guild_pair = paste("SUB-", preform$SUB_guild[], "~",
+                           "DOM-", preform$DOM_guild[], sep = "")
+table(preform$guild_pair)
+## what can we actually work with rn
+table(preform$guild_pair[preform$mod_completion == "completed"]) # a lot!
+
+## Set factor levels for guilds for later re-ordering
+preform$SUB_guild = factor(preform$SUB_guild, levels = c("Large_Carnivore", "Small_Carnivore",
+                                                         "Large_Omnivore", "Small_Omnivore",
+                                                         "Large_Herbivore", "Small_Herbivore"))
+preform$DOM_guild = factor(preform$DOM_guild, levels = c("Large_Carnivore", "Small_Carnivore",
+                                                         "Large_Omnivore", "Small_Omnivore",
+                                                         "Large_Herbivore", "Small_Herbivore"))
+## set the order as the dom species
+preform = preform[order(preform$DOM_guild, preform$dom_species),]
+
+## add back the underscore to species names
+preform$dom_species = gsub(" ", "_", preform$dom_species)
+preform$sub_species = gsub(" ", "_", preform$sub_species)
+
+## clean up 
+rm(add)
 
 ```
 

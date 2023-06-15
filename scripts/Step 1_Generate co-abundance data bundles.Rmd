@@ -598,16 +598,15 @@ rm(t, s, s2, res)
 
 ```
 
-In the past, particularly the Eco & Evo co-abundance publication, I assigned "natural absences" as landscapes where the species was not found in either the Anthropocene or the Holocene by assigning NA values for landscapes based on 4 broad distributions: Borneo, Sumatra, and North/South Mainland (based on the Isthmus of Kra). However, I am not doing this anymore because we are interested in prey abundance with or without predators, regardless of historical distributions. Therefore, there is no longer any need to generate an "extirpation_DF" to assign landscapes as present, absent or NA because we are using data from ALL sites. 
+In the past, particularly the Eco & Evo co-abundance publication, I assigned "natural absences" as landscapes where the species was not found in either the Anthropocene or the Holocene by assigning NA values for landscapes based on 4 broad distributions: Borneo, Sumatra, and North/South Mainland (based on the Isthmus of Kra). However, I am not doing this anymore because we are interested in prey abundance with or without predators, regardless of historical distributions. Therefore, there is no longer any need to generate an "extirpation_DF" to assign landscapes as present, absent or NA because we are using data from ALL sites.
 
-
-Generating the data bundles on a regular computer will take hours, so instead I will send the information to the High Performance Computers (HPC) to run much faster. Before sending off the data, I will determine which species need to be analyzed as groups (because of very large group sizes, e.g. dholes and macaques). 
+Generating the data bundles on a regular computer will take hours, so instead I will send the information to the High Performance Computers (HPC) to run much faster. Before sending off the data, I will determine which species need to be analyzed as groups (because of very large group sizes, e.g. dholes and macaques).
 
 ```{r save data to send to HPC for bundling, echo=FALSE}
 
 ## first, determine which species will need to be analyzed as groups rather than individuals 
 # because of very large group sizes skewing results
-big = ddply(caps[caps$Species %in% species,], .(Species), summarize,
+big = ddply(caps[caps$Species %in% keep,], .(Species), summarize,
             max_count = max(total_indiv_records),
             mean_count = mean(total_indiv_records),
             mode_count = median(total_indiv_records))
@@ -642,17 +641,17 @@ rm(day, month, year, date)
 
 ### HPC matrix and covariate creation code
 
-The following code is set up to run on the HPC and lives as its own separate R script. The code will not run in this markdown document, but I am keeping it here for good measure. 
+The following code is set up to run on the HPC and lives as its own separate R script. The code will not run in this markdown document, but I am keeping it here for good measure.
 
-The separate R script is called: scripts/HPC_code/HPC_matrix_generator.R. 
+The separate R script is called: scripts/HPC_code/HPC_matrix_generator.R.
 
 To make that code run on the HPC, I use the SLURM script called: scripts/SLURM_code/SLURM_generate_matricies_20230615.txt
 
-To avoid any confusion, I will not include that code here (for now) because it will not run locally. 
+To avoid any confusion, I will not include that code here (for now) because it will not run locally.
 
-### Generate data bundles 
+### Generate data bundles
 
-Import matrix data that was formatted on the HPC via loop. Objects were saved as .RDS files because they were list(), and I will save all lists in a singular bigger list. A list of lists if you will. 
+Import matrix data that was formatted on the HPC via loop. Objects were saved as .RDS files because they were list(), and I will save all lists in a singular bigger list. A list of lists if you will.
 
 ```{r import HPC data via loop, echo=FALSE}
 
@@ -690,7 +689,7 @@ head(umfs$Ursus_thibetanus$y) #nice
 
 ```
 
-Now that the data is loaded in our environment, we will create co-abundance data bundles that will be ready to run on the HPC. Bundles will be generated for species pairs, where one species is explicitly assigned as a dominant species (predictor/independent variable), while the other is the subordinate species (response/dependent variable). Bundles will be generated based on spatial associations (i.e. the critters need to be present in at least one landscape together), and retained based on our preferred interactions we wish to examine. In particular, this means large carnivores acting as dominant over all other guilds, and large+small herbivores+ominivores acting as dominant to large carnivores. 
+Now that the data is loaded in our environment, we will create co-abundance data bundles that will be ready to run on the HPC. Bundles will be generated for species pairs, where one species is explicitly assigned as a dominant species (predictor/independent variable), while the other is the subordinate species (response/dependent variable). Bundles will be generated based on spatial associations (i.e. the critters need to be present in at least one landscape together), and retained based on our preferred interactions we wish to examine. In particular, this means large carnivores acting as dominant over all other guilds, and large+small herbivores+ominivores acting as dominant to large carnivores.
 
 ```{r Ultra-Loop to generate data bundles based on guild-pairs, echo=FALSE }
 
@@ -1029,7 +1028,7 @@ for(i in 1:length(umfs)){ # repeat for each first speices
                  nsource = length(unique(covs$source)),   # number of levels in source RE 
                  source = covs$source.num,                # Data source random effect (as.num)
                  nyear = length(unique(covs$year.num)),   # number of levels in year RE
-                 year = covs$year)                        # year random effect (as.num)
+                 year = covs$year.num)                    # year random effect (as.num)
     
     ## save the bundle 
     temp[[l]] = bdata
@@ -1048,19 +1047,18 @@ for(i in 1:length(umfs)){ # repeat for each first speices
 rm(i,l,sp_dom,sp_sub, sp_dom_dat, sp_sub_dat, obs, temp, z.dom, z.sub,
    bdata, all_else, data.dom, data.sub, covs, exp, non_det_SU, dom_tg, non_det_land)
 
-##inspect
-names(bdata_list[[1]])
 
-## attempt to flatten the list of lists into a single list
+## flatten the list of lists into a single list
 bdata_list = unlist(bdata_list, recursive = FALSE)
 length(bdata_list) #610 combos --> Nice! 
 names(bdata_list) # looks good! 
 
 ```
 
-### Save the final list of bundled data 
+### Save the final list of bundled data
 
 Now that all species pairs are established, the data is properly formatted, and everything is clean, its time to save the data! We will send it to the HPC to run on the R script called: data/HPC_code/HPC_co-abundance_model.R
+
 ```{r save bundled data!, echo=FALSE}
 
 ## grab today's date 
@@ -1070,8 +1068,7 @@ year<-str_sub(Sys.Date(),-10,-7)
 date = paste(year,month,day, sep = "")
 rm(day,month,year)
 
-# saveRDS(bdata_list, here::here(paste("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_", length(bdata_list), "_species_pairs_", date, ".RDS", sep = "")))
+saveRDS(bdata_list, here::here(paste("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_", length(bdata_list), "_species_pairs_", date, ".RDS", sep = "")))
 
 
 ```
-

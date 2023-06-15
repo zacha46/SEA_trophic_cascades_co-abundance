@@ -1,7 +1,7 @@
 ---
-title: "Step 1_Generate co-abundance data bundles"
+title: "Step 1_Prepare data for bundling"
 author: "Zachary Amir"
-date: "2023-05-24"
+date: "2023-06-15"
 output: html_document
 ---
 
@@ -13,11 +13,7 @@ Although it will not run effectively here, the code that runs on the HPC is incl
 
 This code works off the spatially re-sampled captures and covariates that are generated in the 4-step cam trap data standardization pipeline. See "Dropbox/CT capture histories database/R scripts CT data cleaning" for more info.
 
-## Code log & notes
-
-May 10th, 2023: Initalize R project and GitHub Repos. Migrate old code and make slight tweaks where needed.
-
-```{r clear environment & load libraries, include=FALSE}
+```{r setup, include=FALSE}
 
 ## start fresh
 rm(list = ls())
@@ -27,95 +23,166 @@ library(here)
 library(plyr)
 library(traitdata)
 
-
 ```
 
 ```{r import and inspect data, include=FALSE}
 
-## import the data
-caps= as.data.frame(read_csv(here::here("data/raw/ECL and Collaborator spatially resampled captures 3km_20221123.csv")))
-# head(caps) # not in Rmd
-str(caps) #classes are already formatted
+#### Resampled captures and metadata are saved per survey in a folder in the cap hist DB
 
-## Inspect survey_ids and landscapes
-# sort(unique(caps$survey_id)) # This has been updated, but wait to include full updates
+### captures first 
+
+## import and combine here
+files = list.files("/Users/zachary_amir/Dropbox/CT capture histories database/Asian ECL raw CT data/Step5_HPC_import_resampled_captures/")
+files = files[!grepl("OLD", files)] # remove old data folder
+
+## thin to the relevant scale were interested in -- 3km 
+files = files[grepl("3km", files)]
+
+
+## store caps here-
+caps = list()
+
+for(i in 1:length(files)){
+  
+  # select a file 
+  f = files[i]
+  
+  # make the path 
+  f_path = paste("/Users/zachary_amir/Dropbox/CT capture histories database/Asian ECL raw CT data/Step5_HPC_import_resampled_captures/", f, sep = "")
+  
+  # read it
+  d = read.csv(f_path)
+  
+  ## extract ID tag from file name
+  id = strsplit(f, "_spatially_resampled_captures")[[1]][1]
+  
+  # remove the number
+  id = gsub("^\\d+_", "", id)
+  
+  ## save it! 
+  caps[[i]] = d
+  names(caps)[i] = id
+  
+  ## let us know if there are any duplicate files in our repo
+  if(any(duplicated(names(caps)))){
+    print(paste("There are repeated files from the same survey with the tag:", id,
+                "Make sure to remove it before importing!"))
+  }# end conditional
+  
+} # end per file 
+rm(f,f_path, d, id, i, files)
+
+## combine list into a df
+caps = do.call(rbind, caps)
+rownames(caps) = NULL
+
+
+### metadata next
+
+## import and combine here
+files = list.files("/Users/zachary_amir/Dropbox/CT capture histories database/Asian ECL raw CT data/Step5_HPC_import_resampled_metadata/")
+files = files[!grepl("OLD", files)] # remove old data folder
+
+## thin to the relevant scale were interested in -- 3km 
+files = files[grepl("3km", files)]
+
+
+## store caps here-
+meta = list()
+
+for(i in 1:length(files)){
+  
+  # select a file 
+  f = files[i]
+  
+  # make the path 
+  f_path = paste("/Users/zachary_amir/Dropbox/CT capture histories database/Asian ECL raw CT data/Step5_HPC_import_resampled_metadata/", f, sep = "")
+  
+  # read it
+  d = read.csv(f_path)
+  
+  ## extract ID tag from file name
+  id = strsplit(f, "_spatially_resampled_metadata")[[1]][1]
+  
+  # remove the number
+  id = gsub("^\\d+_", "", id)
+  
+  ## save it! 
+  meta[[i]] = d
+  names(meta)[i] = id
+  
+  ## let us know if there are any duplicate files in our repo
+  if(any(duplicated(names(meta)))){
+    print(paste("There are repeated files from the same survey with the tag:", id,
+                "Make sure to remove it before importing!"))
+  }# end conditional
+  
+} # end per file 
+rm(f,f_path, d, id, i, files)
+
+## combine list into a df
+meta = do.call(rbind, meta)
+rownames(meta) = NULL
+
+
+## ensure all cell_ids match!
+setdiff(meta$cell_id_3km, caps$cell_id_3km)
+setdiff(caps$cell_id_3km, meta$cell_id_3km) # good to go! 
+
+## format classes
+caps$Date = as.Date(caps$Date, format = "%Y-%m-%d")
+meta$Sampling_begin = as.Date(meta$Sampling_begin, format = "%Y-%m-%d")
+meta$Sampling_end = as.Date(meta$Sampling_end, format = "%Y-%m-%d")
+
+
+
+
+#### Remove data that does not meet inclusion criteria
 
 ## Remove Brodie's data W of wallace line --> doesnt have relevant species
-caps = caps[!caps$survey_id %in% c("Brodie-New_Guinea-Arfak Mts_2015",
-                                   "Brodie-New_Guinea-Nimbokrang_2015",
-                                   "Brodie-Halmahera-Weda_2013",
-                                   "Brodie-Sulawesi-Buton_south_2013",
-                                   "Brodie-Sulawesi-Buton_north_2013",
-                                   "Brodie-Sulawesi-Tangkoko_2013"),]
+meta = meta[! grepl("E_Indonesia", meta$Landscape),]
 
-## I found a bug below where Brodie and Jaysilan provided ~almost~ the exact same datasets
-## so remove Jaysilan's in favor of brodie's --> cleaner w/ more data 
-caps = caps[!caps$survey_id %in% c("Gunung Mulu National Park_2010",
-                                   "Hose Mountain_2012",
-                                   "Pulong Tau National Park_2010",
-                                   "Ulu Baram_2012_a"),]
-
-## For some reason there are duplicated rows... remove for now, but this shouldnt be an issue in the future
-caps = distinct(caps)
+# and thin caps to match
+caps = caps[caps$survey_id %in% meta$survey_id,]
 
 
-#### To be conservative, lets thin the data to big surveys
+#### To be conservative, lets thin the data surveys with more than 100 trap nights and more than 5 cams per survey. 
 
-# Remove surveys w/ less than or equal to 5 sampling units and less than 20 trap nights
-### WILL UPDATE THIS to 10 cameras and less than 100 trapnights w/ update! COME HERE! 
-surv_sum = ddply(caps, .(survey_id), summarize,
-                 num_cam = length(unique(cell_id_3km)),
-                 effort = as.numeric(difftime(max(Date), min(Date), unit = "days")))
-keep = surv_sum$survey_id[surv_sum$num_cam >= 5 &
-                            surv_sum$effort > 19]
-length(keep) #262 surveys
+## import NON-resampled data to determine which surveys dont fit
+dat = read_csv("/Users/zachary_amir/Dropbox/CT capture histories database/Asian ECL raw CT data/Step4_output_pre-resampling/Clean_independent_captures_20230610.csv")
 
-caps2 = caps[caps$survey_id %in% keep,]
-dim(caps)[1]-dim(caps2)[1] #removed almost 40,843 records, which is 20% of the data  
+## summarize info about new surveys
+surv_summary = ddply(dat, .(survey_id), summarize,
+                     num_cam = length(unique(deployment_id)),
+                     dur = difftime(max(Photo.Date), min(Photo.Date), units= "days"))
+surv_summary$trap_nights = surv_summary$num_cam * surv_summary$dur
 
-## save and move forward
-caps = caps2
-rm(caps2, keep, surv_sum)
+## Extract surveys that do not meet inclusion criteria. 
+rm = surv_summary$survey_id[as.numeric(surv_summary$trap_nights) < 100] # less than 100 trap nights 
+rm2 = surv_summary$survey_id[(surv_summary$num_cam) < 5] # less than 5 cams in a survey 
+rm = unique(c(rm,rm2))
 
+## make a statement about it! 
+print(paste("The number of rows that will be excluded from analysis because it is a survey w/ less than 100 trap nights or less than 5 cameras in a survey are:", 
+            dim(caps[caps$survey_id %in% rm,])[1],
+            "and this represents:", 
+            round(dim(caps[caps$survey_id %in% rm,])[1]  / dim(caps)[1] * 100, 3),
+            "% of the full data."))
+# nice! minimal losses. 
 
+## remove the data from caps
+caps = caps[!caps$survey_id %in% rm,]
 
-### Import metadata as well
-###### Import the metadata 
-meta = as.data.frame(read_csv(here::here("data/raw/ECL and Collaborator spatially resampled metadata 3km_20221123.csv")))
-names(meta) ## way too much info, thin to relevant cols 
+## and metadata
+meta = meta[meta$survey_id %in% caps$survey_id,]
 
-## COME HERE, make sure to save country with clean dataset too! 
-meta = select(meta, cell_id_3km, landscape, survey_id, source, #location vars
-              Sampling_begin, Sampling_end, Cell_Effort, #temporal vars
-              Avg_altitude_3km, Avg_FLLI_3km, Avg_human_footprint_3km) #environmental vars
+## keep environment clean
+rm(dat,surv_summary, rm,rm2)
 
-str(meta) # classes are already good! 
-
-## thin meta to match caps surveys
-meta2 = meta[meta$survey_id %in% caps$survey_id,]
-dim(meta)[1]-dim(meta2)[1] #482 sampling units, or 10% of SUs. 
-
-## save and move forward
-meta = meta2
-rm(meta2)
 
 ## need survey year in covariates 
-meta$year = str_extract(meta$survey_id, stringr::regex("(\\d+)(?!.*\\d)")) # this would work if 
-sort(unique(meta$year)) #looks good! 
-
-
-#### COME HERE, this shouldnt be a problem with properly updated data! 
-
-### Noticed a typo from step1, not major and easy enough to fix here
-meta$landscape[grepl("Leuser", meta$survey_id)] = "Gunung_Leuser_National_Park"
-meta$landscape[grepl("Kerinci", meta$survey_id)] = "Kerinci_Seblat_National_Park"
-
-### Need to standardize landscape name for Ulu Baram due to repeated data from collaborators
-## dont need to spatially resample tho, I removed overlapping surveys from records
-## and overlap was years apart from more recent data from Jaysialan 
-unique(meta$landscape[grepl("Baram", meta$survey_id)]) # Baram NP is seperate tho 
-meta$landscape[meta$landscape == "Sarawak_Ulu_Baram"] = "Ulu_Baram"
-
+meta$year = str_extract(meta$survey_id, stringr::regex("(\\d+)(?!.*\\d)"))
+sort(table(meta$year)) #looks good! 
 
 
 ```
@@ -128,142 +195,110 @@ Here I will determine which species have sufficient detections (n = 100), standa
 
 ##### Which species will be included and how to standardize species?
 
+## replace space with underscore to facilitate clean code/data
+caps$Species = gsub(" ", "_", caps$Species)
+
 # which species have sufficent (n=100) detections?
 sp_count = ddply(caps, .(Species), summarize,
                  num_cap = length(Species))
 keep = sp_count[sp_count$num_cap >= 100,]
 
-keep[order(keep$num_cap),]
-
-## where are leopards?
-#### UPDATE --> We should have 100+ detections, make sure to find them!!! 
-sp_count[sp_count$Species == "Panthera_pardus",] # suprisinging! only 74 detections after thinning data. only 84 without thinning either.  
-unique(caps$Species[grepl("Panth", caps$Species)]) # no missing species... just add for later. 
-
-## manually add them
-keep = add_row(keep, sp_count[sp_count$Species == "Panthera_pardus",])
-
-length(keep$Species) # 110 species before any cleaning 
+## what did we get?
+keep[order(keep$num_cap),] ## Awesome!! 
+length(keep$Species) # 106 species before any cleaning 
 
 
 ## Standardize muntjacs, tragulus, Hystrix (?), Neofelis, Capricornis, Tupaia, maybe Canis_lupus
 ## remove from analysis: Ghost Homo_sapiens, unID'd, remove, Aves, bird, unkown, bird_pheasent, etc
 
-# Hystrix_brachyura & Hystirix_brachyura need to match but dont! 
-
 
 ### Clean up and combine some speices names
 
 # Hystrix
-unique(caps$Species[grepl("brachy", caps$Species)]) #typo!
-caps$Species[caps$Species == "Hystirix_brachyura"] = "Hystrix_sp"
-unique(caps$Species[grepl("Hystrix", caps$Species)])
-nrow(caps[caps$Species == "Hystrix_crassispinis",]) ## dont change this one! 
-caps$Species[caps$Species %in% c("Hystrix_brachyura","Hystrix_sp", "Hystrix")] = "Hystrix_sp"
+sort(table(caps$Species[grepl("Hystrix", caps$Species)])) ## dont change crassispinis b/c we have enough! 
+caps$Species[caps$Species %in% c("Hystrix_brachyura", "Hystrix")] = "Hystrix_genus"
 
 # Muntjac
-unique(caps$Species[grepl("Munt", caps$Species)]) # ecologically very similar species, just combine
-caps$Species[grepl("Munt", caps$Species)] = "Muntiacus_sp"
+sort(table(caps$Species[grepl("Munt", caps$Species)])) # ecologically very similar species, just combine, but maybe this is good supplementary information
+caps$Species[grepl("Munt", caps$Species)] = "Muntiacus_genus"
 
 # clouded leopards
-unique(caps$Species[grepl("Neof", caps$Species)]) #just geographical differences
-caps$Species[grepl("Neof", caps$Species)] = "Neofelis_sp"
+sort(table(caps$Species[grepl("Neof", caps$Species)])) #just geographical differences
+caps$Species[grepl("Neof", caps$Species)] = "Neofelis_genus"
 
 # mousedeer
-unique(caps$Species[grepl("Trag", caps$Species)]) #Amazed that these are even differentiated 
-caps$Species[grepl("Trag", caps$Species)] = "Tragulus_sp"
+sort(table(caps$Species[grepl("Trag", caps$Species)])) #Amazed that these are even differentiated 
+caps$Species[grepl("Trag", caps$Species)] = "Tragulus_genus"
 
 # serow
-unique(caps$Species[grepl("Capric", caps$Species)]) #I think these were recently combined anyway 
-caps$Species[grepl("Capric", caps$Species)] = "Capricornis_sp"
+sort(table(caps$Species[grepl("Capric", caps$Species)])) #I think these were recently combined by taxonomists anyway 
+caps$Species[grepl("Capric", caps$Species)] = "Capricornis_genus"
 
 # treeshrew
-unique(caps$Species[grepl("Tupai", caps$Species)]) #Amazed that these are even differentiated 
-caps$Species[grepl("Tupai", caps$Species)] = "Tupaia_sp"
-caps$Species[caps$Species == "Scandentia"] = "Tupaia_sp" #standardize the order as well. 
+sort(table(caps$Species[grepl("Tupai", caps$Species)])) #Amazed that these are even differentiated 
+caps$Species[grepl("Tupai", caps$Species)] = "Tupaia_genus"
 
 #dogs
-unique(caps$Species[grepl("Canis_lup", caps$Species)]) #Just call these dogs, we dont have pics to know if domestic or not 
-caps$Species[grepl("Canis_lup", caps$Species)] = "Canis_lupus"
+sort(table(caps$Species[grepl("Canis_lup", caps$Species)])) #Just call these dogs, we dont have pics to know if domestic or not 
+caps$Species[grepl("Canis_lup", caps$Species)] = "Canis_lupus_familiaris"
 
 # mongoose
-unique(caps$Species[grepl("Herpe", caps$Species)]) #Maybe a stretch, but I think we can combine here. 
-caps$Species[grepl("Herpe", caps$Species)] = "Herpestes_sp"
+sort(table(caps$Species[grepl("Herpe", caps$Species)])) # Combine all species except for brachyurus b/c we have enough detections
+caps$Species[caps$Species %in% c("Herpestes", "Herpestes_semitorquatus",
+                                 "Herpestes_urva")] = "Herpestes_genus"
 
 # Murids
-unique(caps$Species[grepl("Muri", caps$Species)]) #exactly the same 
+unique(caps$Species[grepl("Muri", caps$Species)]) #only the family muridae
 caps$Species[grepl("Muri", caps$Species)] = "Muridae_spp" #spp denotes family here. 
 
 #squirells 
-unique(caps$Species[grepl("Sciur", caps$Species)]) #exactly the same 
+unique(caps$Species[grepl("Sciur", caps$Species)]) #only the family sciuridae
 caps$Species[grepl("Sciur", caps$Species)] = "Sciuridae_spp"
-caps$Species[caps$Species == "Squirrel_ssp"] = "Sciuridae_spp"
 
-#Argus pheasent
-unique(caps$Species[grepl("Arg", caps$Species)]) #exactly the same 
-caps$Species[grepl("Arg", caps$Species)] = "Argusianus_argus"
 
 #Combine northern and southern pig tail macaques into one species Macaca_leonina Macaca_nemestrina 
+sort(table(caps$Species[grepl("Macaca_", caps$Species)]))
 caps$Species[caps$Species %in% c("Macaca_leonina", "Macaca_nemestrina" )] = "Macaca_nemestrina"
 
 #chickens
-unique(caps$Species[grepl("Gallu", caps$Species)]) #Just dont want domestic chooks 
-caps$Species[startsWith(caps$Species, "Gallus")] = "Gallus_gallus"
+unique(caps$Species[grepl("Gallu", caps$Species)]) #analyze at genus level. 
+caps$Species[startsWith(caps$Species, "Gallus")] = "Gallus_genus"
 
-#palm civet 
-caps$Species[caps$Species == "Paradoxurus_musangus_or_hermaphroditus"] =  "Paradoxurus_hermaphroditus"
+## attach genus to the other Genera names that need it to stay consistent
+caps$Species[caps$Species %in% c("Amaurornis", "Macaca", 
+                                 "Maxomys","Melogale", "Varanus")] = paste(caps$Species[caps$Species %in% c("Amaurornis", "Macaca", 
+                                 "Maxomys","Melogale", "Varanus")], "genus", sep = "_")
 
 
-### Save a vector of species names we want to analyze 
-# which species have sufficent (n=100) detections?
+### Make a new species count w/ updated species names
 sp_count = ddply(caps, .(Species), summarize,
                  num_cap = length(Species))
-keep = sp_count$Species[sp_count$num_cap >= 100]
+keep = sp_count[sp_count$num_cap >= 100,]
 
-length(keep) # 85 after combining genera
+## what did we get?
+sort(keep$Species) #reduced to 90 species
 
 # remove some of the not useful fluff
-keep = keep[!keep %in% c("Aves","bird","Bird_Phesant",
-                         "Camera", "Camera_Trapper", "Dirt_bike",
-                         "Mammalia", "remove", "Reptile",
-                         "Rodent","Unknown","Unkown",
-                         "Vehicle", "unidentified", "Ghost")] 
-keep = keep[!grepl("Homo_", keep)] #remove all people
+keep = keep[!keep$Species %in% c("Aves", "Ghost", "Mammalia",
+                                 "Unknown","Vehicle"),] 
+
+#remove all  people 
+keep = keep[!grepl("Homo", keep$Species ),] 
 
 # remove species not ID to the species or genus level 
-keep = keep[! keep %in% c("Scincidae","Sciuridae_spp",
-                          "Muridae_spp","Phasianidae_spp",
-                          "Rodentia")]
+keep = keep[!endsWith(keep$Species, "_spp"),]
+# and the others. 
+keep = keep[! keep$Species %in% c("Scincidae","Small_mammal", "Herpestidae",
+                                  "Phasianidae", "Rodentia","Scandentia"),]
 
-## dont forget those leopards! 
-keep = c(keep, "Panthera_pardus")
-
-length(keep) # 62 species after removing fluff. 
+length(keep$Species) # 72 species after removing fluff. 
 rm(sp_count)
 
-# ## remove even more! 
-# keep = keep[!keep %in% c("Amaurornis_phoenicurus","Amaurornis_sp",
-#                          "Callosciurus_erythraeus", "Callosciurus_notatus",
-#                          "Chalcophaps_indica","Copsychus_saularis",
-#                          "Dremomys_rufigenis", "Garrulax_milleti",
-#                          "Geokichla_citrina", "Lariscus_insignis",
-#                          "Maxomys_sp", "Muridae_spp", "Rheithrosciurus_macrotis",
-#                          "Rollulus_rouloul", "Rodentia",
-#                          "Scincidae", "Sciuridae_spp")]
-# 
-# ## try and get this list to 32 MAX --> remove 20 more spieces
-# keep = keep[!keep %in% c("Tupaia_sp", "Phasianidae_spp", "Gallus_gallus",
-#                          "Argusianus_argus", "Leopoldamys_sabanus",
-#                          "Lophura_bulweri","Lophura_diardi",
-#                          "Lophura_ignita","Lophura_nycthemera",
-#                          "Melogale_moschata", "Varanus_salvator",
-#                          "Atherurus_macrourus", "Hystrix_sp", "Arctonyx_collaris",
-#                          "Macaca_arctoides", "Trichys_fasciculata", 
-#                          "Hystrix_crassispinis", "Echinosorex_gymnura")]
-
-
 ### I think these should be good to go! 
-sort(keep)
+sort(keep$Species)
+
+## save it as a vector, not dataframe
+keep = keep$Species
 
 ```
 
@@ -288,7 +323,7 @@ mam = mam[!is.na(mam$scientificNameStd),]
 
 
 ## import Sam Lee's cleaned avonet dataframe
-bird = read.csv(here::here("data/bird_guild_information_20221102.csv"))
+bird = read.csv(here::here("data/species_traits/bird_guild_information_20221102.csv"))
 
 # replace space with underscore for bird species names
 bird$Species = gsub(" ", "_", bird$Species)
@@ -296,8 +331,14 @@ bird$Species = gsub(" ", "_", bird$Species)
 ## check which species we have matches for 
 intersect(bird$Species, keep) # 12 matches and all birds, great! 
 # thin bird to relevant species
-bird = bird[bird$Species %in% keep,]
+bird = bird[bird$Species %in% c(keep, "Gallus_gallus"),]
+bird$Species[bird$Species == "Gallus_gallus"] = "Gallus_genus" #std to match
 
+## copy "Amaurornis_phoenicurus" and provide for genus Amaurornis catch-all
+am = bird[bird$Species == "Amaurornis_phoenicurus",]
+am$Species = "Amaurornis_genus" 
+bird = rbind(bird,am)
+rm(am)
 
 ## access a dataset for varanus salvator 
 rep = lizard_traits
@@ -313,6 +354,10 @@ rep = select(rep, scientificNameStd, diet) # missing body wieght
 rep$Body_mass = 3.24
 names(rep)[2] = "TrophicLevel"
 
+## add a second row of rep for Varanus catch-all genus
+rep = rbind(rep,rep)
+rep$scientificNameStd[2] = "Varanus_genus"
+
 ## rbind w/ our birds
 names(bird)[1:2] = c("scientificNameStd","TrophicLevel")
 rep_bird = rbind(rep, bird)
@@ -322,8 +367,10 @@ rep_bird$Body_mass = rep_bird$Body_mass * 1000
 names(rep_bird)[3] = "AdultBodyMass_g"
 
 ## thin mam and pan to relevant info while incorporating known typo
-mam = select(mam[mam$scientificNameStd %in% c(keep, "Taperus_indicus"),], scientificNameStd, TrophicLevel) # diet from here
-pan = select(pan[pan$scientificNameStd %in% c(keep, "Taperus_indicus"),], scientificNameStd, AdultBodyMass_g) # mass from here
+mam = select(mam[mam$scientificNameStd %in% c(keep, "Taperus_indicus", 
+                                              "Canis_lupus"),], scientificNameStd, TrophicLevel) # diet from here
+pan = select(pan[pan$scientificNameStd %in% c(keep, "Taperus_indicus", 
+                                              "Canis_lupus"),], scientificNameStd, AdultBodyMass_g) # mass from here
 
 # and merge together
 mam_pan = distinct(merge(mam, pan, by = "scientificNameStd"))
@@ -344,13 +391,14 @@ rm(a,b,c)
 traits = rbind(mam_pan, rep_bird)
 
 ## check which species are missing 
-setdiff(keep, traits$scientificNameStd) # 11, though mostly genera or a few typos 
+setdiff(keep, traits$scientificNameStd) # 13, though mostly genera or a few typos 
 
-## fix obvious typo first
+## fix obvious typos first
 traits$scientificNameStd[traits$scientificNameStd == "Taperus_indicus"] = "Tapirus_indicus"
+traits$scientificNameStd[traits$scientificNameStd == "Canis_lupus"] = "Canis_lupus_familiaris"
 
-## add 10 missing species to traits object
-traits[52:(52+9), "scientificNameStd"] = setdiff(keep, traits$scientificNameStd)
+## add 12 missing species to traits object
+traits[62:(62+10), "scientificNameStd"] = setdiff(keep, traits$scientificNameStd)
 
 ### re-load mam and pam to include other species
 # pan
@@ -367,46 +415,59 @@ mam = select(mam, scientificNameStd, TrophicLevel)
 
 ## add info per species/guild
 #serow
-traits[traits$scientificNameStd == "Capricornis_sp", "TrophicLevel"] = mam$TrophicLevel[mam$scientificNameStd == "Capricornis_sumatraensis"]
-traits[traits$scientificNameStd == "Capricornis_sp", "AdultBodyMass_g"] = pan$AdultBodyMass_g[pan$scientificNameStd == "Capricornis_sumatraensis"]
+traits[traits$scientificNameStd == "Capricornis_genus", "TrophicLevel"] = mam$TrophicLevel[mam$scientificNameStd == "Capricornis_sumatraensis"]
+traits[traits$scientificNameStd == "Capricornis_genus", "AdultBodyMass_g"] = pan$AdultBodyMass_g[pan$scientificNameStd == "Capricornis_sumatraensis"]
 
 # mongooses 
-traits[traits$scientificNameStd == "Herpestes_sp", "TrophicLevel"] = mam$TrophicLevel[mam$scientificNameStd == "Herpestes_urva"]
-traits[traits$scientificNameStd == "Herpestes_sp", "AdultBodyMass_g"] = pan$AdultBodyMass_g[pan$scientificNameStd == "Herpestes_urva"]
+traits[traits$scientificNameStd == "Herpestes_genus", "TrophicLevel"] = mam$TrophicLevel[mam$scientificNameStd == "Herpestes_urva"]
+traits[traits$scientificNameStd == "Herpestes_genus", "AdultBodyMass_g"] = pan$AdultBodyMass_g[pan$scientificNameStd == "Herpestes_urva"]
 
 #muntjacs
-traits[traits$scientificNameStd == "Muntiacus_sp", "TrophicLevel"] = unique(mam$TrophicLevel[mam$scientificNameStd == "Muntiacus_muntjak"])
-traits[traits$scientificNameStd == "Muntiacus_sp", "AdultBodyMass_g"] = pan$AdultBodyMass_g[pan$scientificNameStd == "Muntiacus_muntjak"]
+traits[traits$scientificNameStd == "Muntiacus_genus", "TrophicLevel"] = unique(mam$TrophicLevel[mam$scientificNameStd == "Muntiacus_muntjak"])
+traits[traits$scientificNameStd == "Muntiacus_genus", "AdultBodyMass_g"] = pan$AdultBodyMass_g[pan$scientificNameStd == "Muntiacus_muntjak"]
 
 #clouded leopards
-traits[traits$scientificNameStd == "Neofelis_sp", "TrophicLevel"] = mam$TrophicLevel[mam$scientificNameStd == "Neofelis_nebulosa"]
-traits[traits$scientificNameStd == "Neofelis_sp", "AdultBodyMass_g"] = pan$AdultBodyMass_g[pan$scientificNameStd == "Neofelis_nebulosa"]
+traits[traits$scientificNameStd == "Neofelis_genus", "TrophicLevel"] = mam$TrophicLevel[mam$scientificNameStd == "Neofelis_nebulosa"]
+traits[traits$scientificNameStd == "Neofelis_genus", "AdultBodyMass_g"] = pan$AdultBodyMass_g[pan$scientificNameStd == "Neofelis_nebulosa"]
 
 #mousedeer
-traits[traits$scientificNameStd == "Tragulus_sp", "TrophicLevel"] = mam$TrophicLevel[mam$scientificNameStd == "Tragulus_napu"]
-traits[traits$scientificNameStd == "Tragulus_sp", "AdultBodyMass_g"] = pan$AdultBodyMass_g[pan$scientificNameStd == "Tragulus_napu"]
+traits[traits$scientificNameStd == "Tragulus_genus", "TrophicLevel"] = mam$TrophicLevel[mam$scientificNameStd == "Tragulus_napu"]
+traits[traits$scientificNameStd == "Tragulus_genus", "AdultBodyMass_g"] = pan$AdultBodyMass_g[pan$scientificNameStd == "Tragulus_napu"]
 
 #gaur
 traits[traits$scientificNameStd == "Bos_gaurus", "TrophicLevel"] = mam$TrophicLevel[mam$scientificNameStd == "Bos_javanicus"]
 traits[traits$scientificNameStd == "Bos_gaurus", "AdultBodyMass_g"] = pan$AdultBodyMass_g[pan$scientificNameStd == "Bos_javanicus"]
 
 #porcupines
-traits[traits$scientificNameStd == "Hystrix_sp", "TrophicLevel"] = unique(mam$TrophicLevel[mam$scientificNameStd == "Hystrix_brachyura"])
-traits[traits$scientificNameStd == "Hystrix_sp", "AdultBodyMass_g"] = pan$AdultBodyMass_g[pan$scientificNameStd == "Hystrix_brachyura"]
+traits[traits$scientificNameStd == "Hystrix_genus", "TrophicLevel"] = unique(mam$TrophicLevel[mam$scientificNameStd == "Hystrix_brachyura"])
+traits[traits$scientificNameStd == "Hystrix_genus", "AdultBodyMass_g"] = pan$AdultBodyMass_g[pan$scientificNameStd == "Hystrix_brachyura"]
 
 #maxomys
-traits[traits$scientificNameStd == "Maxomys_sp", "TrophicLevel"] = mam$TrophicLevel[mam$scientificNameStd == "Maxomys_rajah"] # widespread in Sundaland
-traits[traits$scientificNameStd == "Maxomys_sp", "AdultBodyMass_g"] = pan$AdultBodyMass_g[pan$scientificNameStd == "Maxomys_rajah"]
+traits[traits$scientificNameStd == "Maxomys_genus", "TrophicLevel"] = mam$TrophicLevel[mam$scientificNameStd == "Maxomys_rajah"] # widespread in Sundaland
+traits[traits$scientificNameStd == "Maxomys_genus", "AdultBodyMass_g"] = pan$AdultBodyMass_g[pan$scientificNameStd == "Maxomys_rajah"]
 
-#Tupaia_sp
-traits[traits$scientificNameStd == "Tupaia_sp", "TrophicLevel"] = unique(mam$TrophicLevel[mam$scientificNameStd == "Tupaia_glis"])
-traits[traits$scientificNameStd == "Tupaia_sp", "AdultBodyMass_g"] = pan$AdultBodyMass_g[pan$scientificNameStd == "Tupaia_glis"]
+#Tupaia_genus
+traits[traits$scientificNameStd == "Tupaia_genus", "TrophicLevel"] = unique(mam$TrophicLevel[mam$scientificNameStd == "Tupaia_glis"])
+traits[traits$scientificNameStd == "Tupaia_genus", "AdultBodyMass_g"] = pan$AdultBodyMass_g[pan$scientificNameStd == "Tupaia_glis"]
 
-# for some reason, Geokichla_citrina didnt get included, so add here
-traits[62, c("scientificNameStd","TrophicLevel","AdultBodyMass_g")] = c("Geokichla_citrina", bird$TrophicLevel[bird$scientificNameStd == "Geokichla_citrina"], bird$Body_mass[bird$scientificNameStd == "Geokichla_citrina"])
+#Macaca
+traits[traits$scientificNameStd == "Macaca_genus", "TrophicLevel"] = unique(mam$TrophicLevel[mam$scientificNameStd == "Macaca_nemestrina"]) # maybe silly b/c already present?
+traits[traits$scientificNameStd == "Macaca_genus", "AdultBodyMass_g"] = pan$AdultBodyMass_g[pan$scientificNameStd == "Macaca_nemestrina"]
+
+#Melogale
+traits[traits$scientificNameStd == "Melogale_genus", "TrophicLevel"] = unique(mam$TrophicLevel[mam$scientificNameStd == "Melogale_moschata"]) 
+traits[traits$scientificNameStd == "Melogale_genus", "AdultBodyMass_g"] = pan$AdultBodyMass_g[pan$scientificNameStd == "Melogale_moschata"]
+
+### two civets are missing weights!! 
+# Hose civet
+traits$AdultBodyMass_g[traits$scientificNameStd == "Diplogale_hosei"] = 2500 #https://www.ecologyasia.com/verts/mammals/hose's-civet.htm
+# large spotted civet
+traits$AdultBodyMass_g[traits$scientificNameStd == "Viverra_megaspila"] = 6600 #https://en.wikipedia.org/wiki/Large-spotted_civet
 
 ### Inspect
 anyNA(traits) # must be F
+# traits[is.na(traits$AdultBodyMass_g),]
+
 
 ## double check
 setdiff(keep, traits$scientificNameStd) # full match! 
@@ -425,6 +486,8 @@ traits$TrophicLevel[traits$scientificNameStd %in% c("Helarctos_malayanus", "Ursu
 traits$TrophicLevel[grepl("Lophura", traits$scientificNameStd)] = "Herbivore"
 ## caught a typo from the rep data base to be corrected here
 traits$TrophicLevel[traits$TrophicLevel == "Carnivorous"] = "Carnivore"
+## Orangutans should be herbivores, not omnivores
+traits$TrophicLevel[traits$scientificNameStd == "Pongo_pygmaeus"] = "Herbivore"
 
 # make body mass numeric 
 traits$AdultBodyMass_g = as.numeric(traits$AdultBodyMass_g)
@@ -433,13 +496,13 @@ traits$AdultBodyMass_g = as.numeric(traits$AdultBodyMass_g)
 traits$TrophicGuild = traits$TrophicLevel
 
 # inspect omnivores first --> 50 kg cut off for omnivores
-traits$scientificNameStd[traits$TrophicLevel == "Omnivore"] # thankfully not many, most are small
+traits$scientificNameStd[traits$TrophicLevel == "Omnivore"] 
 traits$TrophicGuild[traits$TrophicLevel == "Omnivore" & 
                       traits$AdultBodyMass_g < 50000] = "Small_Omnivore"
 traits$TrophicGuild[traits$TrophicLevel == "Omnivore" & 
                       traits$AdultBodyMass_g > 50000] = "Large_Omnivore"
 # inspect
-# traits[traits$TrophicLevel == "Omnivore",]
+sort(table(traits$TrophicGuild[traits$TrophicLevel == "Omnivore"]))
 
 
 ## herbivores --> 100 kg cut off
@@ -449,16 +512,16 @@ traits$TrophicGuild[traits$TrophicLevel == "Herbivore" &
 traits$TrophicGuild[traits$TrophicLevel == "Herbivore" & 
                       traits$AdultBodyMass_g > 100000] = "Large_Herbivore"
 # inspect
-# traits[traits$TrophicLevel == "Herbivore",]
+sort(table(traits$TrophicGuild[traits$TrophicLevel == "Herbivore"]))
 
-## Carnivores --> 15kg cut off 
-traits$scientificNameStd[traits$TrophicLevel == "Carnivore"] # pretty even split
+## Carnivores --> 15kg cut off (but just less than 15 to accomodate clouded leopards)
+traits$scientificNameStd[traits$TrophicLevel == "Carnivore"] # 
 traits$TrophicGuild[traits$TrophicLevel == "Carnivore" & 
-                      traits$AdultBodyMass_g < 15000] = "Small_Carnivore"
+                      traits$AdultBodyMass_g < 14940] = "Small_Carnivore"
 traits$TrophicGuild[traits$TrophicLevel == "Carnivore" & 
-                      traits$AdultBodyMass_g > 15000] = "Large_Carnivore"
+                      traits$AdultBodyMass_g > 14940] = "Large_Carnivore"
 # inspect
-# traits[traits$TrophicLevel == "Carnivore",]
+sort(table(traits$TrophicGuild[traits$TrophicLevel == "Carnivore"]))
 
 
 table(traits$TrophicGuild) # looks good! 
@@ -473,7 +536,7 @@ Now that relevant species have been determined and species traits are sorted out
 
 First, I will generate a sampling occasion index in the captures. Instead of creating a detection history matrix based on the date a photo was taken, I make all cameras start on the same 'day' (based around start/end dates) to increase model speed and efficiency.
 
-```{r First, generate a sampling occasion index in the captues, echo=F, include=FALSE}
+```{r Generate a sampling occasion index in the captues, echo=F, include=FALSE}
 
 ## Instead of creating a detection history matrix based on the date a photo was taken
 ## make all cameras start on the same 'day' to increase model speed and efficiency. 
@@ -487,9 +550,9 @@ s2 = ddply(s, .(cell_id_3km), summarize,
 
 
 #That worked, now bring back the start and stops. Make sure you dont loose records
-dim(s2) #205090
+dim(s2) #266192
 t = merge(s2, s, by = "cell_id_3km")
-dim(t) #205090, good! 
+dim(t) #266192, good! 
 
 
 ## Add sequence from 1-n for each sampling unit
@@ -510,17 +573,21 @@ rm(d,i)
 
 #inspect
 str(res)
-dim(res) #205090, same as before! Good! 
+dim(res) #266192, same as before! Good! 
 
 ## Make sure all cams got accounted for
 setdiff(res$cell_id_3km, unique(caps$cell_id_3km))
 setdiff(unique(caps$cell_id_3km), res$cell_id_3km) # no difference
 
 ## merge the sequence with the captures
-t = distinct(merge(caps, res, by = c("cell_id_3km", "Date")))
-dim(caps) #168078
-dim(t) # RUN THRU ON May 25th,2023 (pre-clean data), produced different results! 
-## Make sure this doenst happen with clean data, come here!! 
+t = merge(caps, res, by = c("cell_id_3km", "Date"))
+dim(caps) #258218
+dim(t) #258218, not exactly the same...
+
+## How much did we lose?
+print(paste("By adding the observation sequence to the captures, we lost ", 
+             round((nrow(caps) - nrow(t))/nrow(caps) * 100, 2), "% of the data", sep = ""))
+## this is an acceptable amount 
 
 ## Captures are all good with updated observation sequence! 
 # head(t)
@@ -531,163 +598,12 @@ rm(t, s, s2, res)
 
 ```
 
-Next, I will create a new dataframe that shows where species are present, extirpated, or naturally absent. This is needed for the informed ZIP parameter to classify the processes that generate zeros. Currently, natural absences are into 3 broad distributions: Borneo, Sumatra, and Mainland. COME HERE: Future rendition will split Mainland into N or S Mainland based around Malay Peninsula.
+In the past, particularly the Eco & Evo co-abundance publication, I assigned "natural absences" as landscapes where the species was not found in either the Anthropocene or the Holocene by assigning NA values for landscapes based on 4 broad distributions: Borneo, Sumatra, and North/South Mainland (based on the Isthmus of Kra). However, I am not doing this anymore because we are interested in prey abundance with or without predators, regardless of historical distributions. Therefore, there is no longer any need to generate an "extirpation_DF" to assign landscapes as present, absent or NA because we are using data from ALL sites. 
 
-```{r Second, determine natural absenses, echo=FALSE, include=FALSE}
-
-## lets examine EVERY species. 
-species = keep
-rm(keep)
-
-## bind landscapes to captures-
-l = distinct(select(meta, survey_id, landscape))
-caps = merge(caps, l, by = "survey_id")
-rm(l)
-
-## First, determine which landscapes Species are extirpated in
-exp = distinct(select(caps[caps$Species %in% species,], landscape, Species))
-exp$presence = "yes"
-
-## need to add landscapes where Species was NOT detected via loop 
-exp2 = list()
-# i = unique(exp$Species)[1]
-for(i in unique(exp$Species)){ # repeat for each species
-  
-  # select the relevant landscapes
-  b = unique(caps$landscape[caps$Species == i])
-  #and make it a dataframe
-  a = data.frame("landscape" = unique(caps$landscape[!caps$landscape %in% b]))
-  
-  
-  if(nrow(a)==0){ #bypass Species that occur in all landscapes 
-    
-    a[1,1]= 'remove'
-    a$presence = NA
-    
-  }
-  
-  a$Species = i
-  a$presence = "no"
-  
-  exp2[[i]] = a
-  
-}
-rm(a, i, b)
-
-t = do.call(rbind, exp2)
-rownames(t)= NULL
-
-## remove records where Species are everywhere
-t = t[t$landscape != "remove",] #nothing is found everywhere anymore! 
-
-## for 62 species at 41 landscapes,
-length(species) * length(unique(caps$landscape)) #2542 landscape species IDs!
-dim(t) #1557 absences
-dim(exp) #985 presences
-exp3 = rbind(t, exp)
-dim(exp3) #2542--> good! 
-
-exp = exp3
-rm(t, exp3, exp2)
-
-## need to add NA to presence where Species is naturally absent from a landscape
-sort(unique(caps$landscape))
-
-# create a dataframe with broad regions for all landscapes
-reg = data.frame("landscape" = unique(meta$landscape),
-                 "region" = as.character(NA))
-# grab source from metadata to change IDs
-add = distinct(select(meta[meta$landscape %in% reg$landscape,], landscape, source))
-head(add) # a few landscapes have multiple sources, its ok. 
-
-# merge data provider as that will make it easier
-reg = merge(reg, distinct(select(meta, landscape, source)), by = "landscape")
-## COME HERE, this will change w/ updated clean dataset that has country saved. 
-
-## Start w/ mainland
-reg$region = "Mainland" 
-## COME HERE! This should be split between N. & S. Mainland based on Isthmus of Kra
-
-### S. SEA 
-## Echinosorex_gymnura (Moonrat) is not found N of Malay peninsula. 
-## and Prionodon_linsang is not found N of Malay peninsula 
-
-
-### N. SEA
-## and Lophura_diardi (Siamese fireback) is only found N of Malay peninsula 
-## and Melogale_moschata (chinese ferret) is only found N of Malay P
-## and...
-
-## Borneo
-reg$region[startsWith(reg$landscape, "Sarawak")] = "Borneo"
-reg$region[startsWith(reg$landscape,"Sabah")] = "Borneo"
-reg$region[endsWith(reg$source,"_Sarawak")] = "Borneo"
-reg$region[startsWith(reg$landscape,"Danum")] = "Borneo"
-reg$region[endsWith(reg$landscape,"Baram")] = "Borneo"
-
-
-## Sumatra
-reg$region[reg$landscape %in% c("Gunung_Leuser_National_Park",
-                                "Kerinci_Seblat_National_Park",
-                                "Bukit_Barisan_Selatan_National_Park")] = "Sumatra"
-## No Java yet
-# View(reg) #highly reccomended to verify! 
-
-# remove source and make distinct to avoid extra rows in exp 
-reg$source = NULL
-reg = distinct(reg) 
-
-## merge w/ exp 
-exp2= merge(exp, reg, by = "landscape")
-#inspect in consol
-# head(exp2) # seems good! 
-exp = exp2
-#clean it up 
-rm(reg, exp2, add)
-
-
-### Now its time to add NAs
-sort(unique(species)) #answer via wikipedia and google and IUCN
-
-# were gallus detected in borneo? They are recent (last decade) arrivals 
-caps[caps$Species == "Gallus_gallus" &
-       caps$landscape %in% exp$landscape[exp$region == "Borneo"],]
-## INTERESTING! 1 chook in a palm oil plantation in 2019. 
-# a lot to unpack there, but settle for removing it form borneo compeltely. 
-
-## Species classically not in Borneo 
-exp$presence[exp$Species %in% c("Panthera_tigris", "Sus_scrofa", 
-                                "Panthera_pardus","Ursus_thibetanus",
-                                "Capricornis_sp","Tapirus_indicus",
-                                "Lophura_nycthemera", "Callosciurus_erythraeus",
-                                "Atherurus_macrourus", "Arctonyx_collaris",
-                                "Bos_gaurus", "Catopuma_temminckii",
-                                "Cuon_alpinus", "Lophura_diardi", 
-                                "Melogale_moschata", "Gallus_gallus") &
-               exp$region == "Borneo"] = NA
-
-## Borneo endemics
-exp$presence[exp$Species %in% c("Hystrix_crassispinis",
-                                "Rheithrosciurus_macrotis",
-                                "Lophura_bulweri") &
-  exp$region != "Borneo"] = NA
-
-## Species not in Sumatra 
-exp$presence[exp$Species %in% c("Trichys_fasciculata", "Panthera_pardus",
-                                "Lophura_nycthemera", "Callosciurus_erythraeus",
-                                "Atherurus_macrourus", "Bos_gaurus", 
-                                "Lophura_diardi", "Melogale_moschata", 
-                                "Ursus_thibetanus") &
-               exp$region == "Sumatra"] = NA
-
-## I think this is sufficient for now, but probably revisit in the future
-## and add N vs S mainland... 
-## Especially since reviewers gave us flack about including KY in megafauna MS. 
-
-```
 
 Generating the data bundles on a regular computer will take hours, so instead I will send the information to the High Performance Computers (HPC) to run much faster. Before sending off the data, I will determine which species need to be analyzed as groups (because of very large group sizes, e.g. dholes and macaques). 
-```{r save data to send to HPC for bundling, echo=FALSE, include=FALSE}
+
+```{r save data to send to HPC for bundling, echo=FALSE}
 
 ## first, determine which species will need to be analyzed as groups rather than individuals 
 # because of very large group sizes skewing results
@@ -702,33 +618,460 @@ big$Species[big$mean_count >= 2] #this is probably it...
 ## go w/ mean >= 2 for now and inspect for later
 group_sp = big$Species[big$mean_count >= 2]
 # adding muntjacs and ALL macaque species because they were probelmatic in the past 
-group_sp = c(group_sp, "Muntiacus_sp", "Macaca_fascicularis" )
+group_sp = c(group_sp, "Muntiacus_genus", "Macaca_fascicularis" )
 rm(big)
 
+## grab today's date 
+day<-str_sub(Sys.Date(),-2)
+month<-str_sub(Sys.Date(),-5,-4)
+year<-str_sub(Sys.Date(),-10,-7)
+date = paste(year,month,day, sep = "")
 
-# saveRDS(species,"species_vector_32_species_20230311.RDS")
-# saveRDS(group_sp, "group_living_species_vector_20230311.RDS")
-# write.csv(exp, "extirpation_DF_20230311.csv", row.names = F)
-# write.csv(caps, "clean_captures_to_make_UMFs_20230311.csv", row.names = F)
-# write.csv(meta, "clean_metadata_to_make_UMFs_20230311.csv", row.names = F)
-
+### Save all relevant files 
+# saveRDS(species, paste("/Users/zachary_amir/Dropbox/Zach PhD/Trophic release project/SEA_trophic_cascades_co-abundance/data/send_to_HPC/species_vector_", length(species), "_species_", date, ".RDS", sep = ""))
+# 
+# saveRDS(group_sp, paste("/Users/zachary_amir/Dropbox/Zach PhD/Trophic release project/SEA_trophic_cascades_co-abundance/data/send_to_HPC/group_living_", length(group_sp), "_species_vector_", date, ".RDS", sep = ""))
+# 
+# write.csv(caps, paste("/Users/zachary_amir/Dropbox/Zach PhD/Trophic release project/SEA_trophic_cascades_co-abundance/data/send_to_HPC/clean_captures_to_make_UMFs_", date,".csv", sep = ""), row.names = F)
+# 
+# write.csv(meta, paste("/Users/zachary_amir/Dropbox/Zach PhD/Trophic release project/SEA_trophic_cascades_co-abundance/data/send_to_HPC/clean_metadata_to_make_UMFs_", date,".csv", sep = ""), row.names = F)
+rm(day, month, year, date)
 
 
 ```
 
 ### HPC matrix and covariate creation code
 
-The following code is set up to run on the HPC and lives as its own seperate R script. The code will not run in this markdown document, but I am keeping it here for good measure. The seperate R script is called: XXX
-```{r HPC UMF generation, include=FALSE, echo=FALSE, eval=FALSE}
+The following code is set up to run on the HPC and lives as its own separate R script. The code will not run in this markdown document, but I am keeping it here for good measure. 
+
+The separate R script is called: scripts/HPC_code/HPC_matrix_generator.R. 
+
+To make that code run on the HPC, I use the SLURM script called: scripts/SLURM_code/SLURM_generate_matricies_20230615.txt
+
+To avoid any confusion, I will not include that code here (for now) because it will not run locally. 
+
+### Generate data bundles 
+
+Import matrix data that was formatted on the HPC via loop. Objects were saved as .RDS files because they were list(), and I will save all lists in a singular bigger list. A list of lists if you will. 
+
+```{r import HPC data via loop, echo=FALSE}
+
+## Store imported data here
+umfs = list()
+
+## list all files that should be imported 
+files = list.files(here::here("data/import_UMF_from_HPC"))
+
+for(i in 1:length(files)){
+  
+  #import the file
+  f = files[i]
+  path = paste("data/import_UMF_from_HPC/", f, sep = "")
+  u = readRDS(here::here(path))
+  
+  #save it in a list 
+  umfs[[i]] = u
+  names(umfs)[i] = paste0(str_split(f, "_")[[1]][2:3], collapse = "_")
+  
+}
+rm(i,u,f,path, files)
+
+names(umfs) # looks good, except one typo b/c long species name
+names(umfs)[grepl("Canis_lupus", names(umfs))] = "Canis_lupus_familiaris"
+
+## check if all species are present by importing old species vector
+setdiff(keep, names(umfs)) # present and accounted for! 
+
+### inspect present data
+head(umfs$Panthera_pardus$siteCovs) #nice
+head(umfs$Sus_barbatus$ObsCovs) #nice
+head(umfs$Ursus_thibetanus$y) #nice
+## should be good to go! 
 
 ```
 
-Import completed data via loop, and create co-abundance data bundles based on established interactions we want to examine. In particular, this means large carnivores acting as dominant over all other guilds, and large+small herbivores+ominivores acting as dominant to large carnivores. 
-```{r import HPC data via loop, include=FALSE, echo=FALSE}
+Now that the data is loaded in our environment, we will create co-abundance data bundles that will be ready to run on the HPC. Bundles will be generated for species pairs, where one species is explicitly assigned as a dominant species (predictor/independent variable), while the other is the subordinate species (response/dependent variable). Bundles will be generated based on spatial associations (i.e. the critters need to be present in at least one landscape together), and retained based on our preferred interactions we wish to examine. In particular, this means large carnivores acting as dominant over all other guilds, and large+small herbivores+ominivores acting as dominant to large carnivores. 
+
+```{r Ultra-Loop to generate data bundles based on guild-pairs, echo=FALSE }
+
+## bind landscapes to captures to facilitate finding where critters are detected
+l = distinct(select(meta, survey_id, Landscape))
+caps = merge(caps, l, by = "survey_id")
+rm(l)
+
+#create a list to store results
+bdata_list = list()
+
+for(i in 1:length(umfs)){ # repeat for each first speices
+  
+  ## select a single species and thier data 
+  # 1st species is the dominant! 
+  sp_dom = names(umfs)[i]
+  sp_dom_dat = umfs[[i]]
+  
+  ## grab the trophic guild of the dom species
+  dom_tg = traits$TrophicGuild[traits$scientificNameStd == sp_dom]
+  
+  ## subset all other species
+  all_else = names(umfs)
+  all_else = all_else[all_else != sp_dom] # remove first species
+  
+  ### Thin all_else based upon the dominant species traits to avoid making too many models
+  
+  # if the dominant species is large+small herbivores+ominivores,
+  if(dom_tg %in%  c("Small_Omnivore", "Large_Omnivore",
+                    "Small_Herbivore","Large_Herbivore")){
+    
+    ## Then sub_species should only be large carnivores
+    all_else = all_else[all_else %in%
+                          traits$scientificNameStd[traits$TrophicGuild == "Large_Carnivore"]]
+
+  } # end sub large carnivore conditional 
+  
+  # if the dominant species is a small carnivore,
+  if(dom_tg == "Small_Carnivore"){
+    
+    ## skip it! 
+    next
+  }
+  
+  temp = list() # store results per sp1 here 
+  for(l in 1:length(all_else)){ # repeat for each second species
+    
+    ## select a second species and their data
+    # 2nd species is the subordinate! 
+    sp_sub = all_else[l]
+    sp_sub_dat = umfs[[sp_sub]]
+    
+    #
+    ##
+    ###
+    #### Remove landscapes where neither species was detected and convert to matrix
+    ###
+    ##
+    #
+    
+    ## First, determine which landscapes species are extirpated in
+    exp = distinct(select(caps[caps$Species %in% c(sp_sub, sp_dom),], Landscape, Species))
+    exp$presence = "yes"
+    
+    ## need to add landscapes where Species was NOT detected via loop 
+    exp2 = list()
+    # e = unique(exp$Species)[1]
+    for(e in unique(exp$Species)){ # repeat for each species
+      
+      # select the relevant landscapes
+      b = unique(caps$Landscape[caps$Species == e])
+      #and make it a dataframe
+      a = data.frame("Landscape" = unique(caps$Landscape[!caps$Landscape %in% b]))
+      
+      # save species name and make it a no
+      a$Species = e
+      a$presence = "no"
+      
+      exp2[[e]] = a
+      
+    }
+    rm(a, b, e)
+    
+    # combine list into a df
+    exp2 = do.call(rbind, exp2)
+    rownames(exp2)= NULL
+    
+    # rbind presence w/ absences
+    exp = rbind(exp, exp2)
+    rm(exp2)
+    
+    ## grab all landscapes where neither species was detected
+    non_det_land <- exp %>%
+      group_by(Landscape) %>%
+      filter(all(presence == "no"))
+    
+    ## extract all the sampling unit names from these landscapes
+    non_det_SU = meta$cell_id_3km[meta$Landscape %in% unique(non_det_land$Landscape)]
+    
+    ## extract both count matricies
+    data.dom<- sp_dom_dat$y #dominant
+    data.sub<- sp_sub_dat$y #subordinate
+    
+    ## and thin both to remove empty SUs
+    data.dom = data.dom[!data.dom$SU %in% non_det_SU,]
+    data.sub = data.sub[!data.sub$SU %in% non_det_SU,]
+    
+    ## make sure we match! 
+    if(nrow(data.dom) != nrow(data.sub)){
+      
+      # if we dont, let us know
+      print(paste("The species combo of", sp_sub, "~", sp_dom, 
+                  "have different sized matricies! This pair was skipped."))
+      # and skip the probelmatic one
+      next
+      
+    } # end exact matrix size validation
+    
+    ## convert matrix dataframes back to matrix 
+    rownames(data.dom)=data.dom[,1] #set rownames as sampling units
+    data.dom=data.dom[,-1] #remove sampling unit col
+    data.dom=as.matrix(data.dom) #turn into a matrix
+    # repeat for spp 2
+    rownames(data.sub)=data.sub[,1]
+    data.sub=data.sub[,-1]
+    data.sub=as.matrix(data.sub)
+    
+    #
+    ##
+    ###
+    #### Site-level covairtes
+    ###
+    ##
+    #
+
+    # Make sure we have the same number of sampling units
+    if(dim(sp_dom_dat$siteCovs)[1] != dim(sp_sub_dat$siteCovs)[1]){
+      
+       # if we dont, let us know
+      print(paste("The species combo of", sp_sub, "~", sp_dom, 
+                  "have a different number of sampling units! This pair was skipped."))
+      # and skip the probelmatic one
+      next
+     
+    }else{
+      
+      # thin to match relevant sampling units
+      covs = sp_dom_dat$siteCovs[sp_dom_dat$siteCovs$cell_id_3km %in% rownames(data.dom),]
+      
+    } # end cov size conditional 
+
+    
+    ### Add conditional if no sites match each other
+    if(dim(covs)[1] == 0){
+      print(paste0(sp_dom, " & ", sp_sub, " dont spatially overlap, no combo created."))
+      next
+    }# end lack of spatial overlap bypass  
+    
+    
+    #Extract Landscape for random effect, stored as a number
+    d = data.frame("Landscape"= sort(unique(covs$Landscape)),
+                   "land.num" = seq(from = 1, to = length(unique(covs$Landscape))))
+    covs = merge(covs, d, by = "Landscape")
+
+    #Extract years for random effect, stored as a number
+    d = data.frame("year"= sort(unique(covs$year)),
+                   "year.num" = seq(from = 1, to = length(unique(covs$year))))
+    covs = merge(covs, d, by = "year")
+
+     #Extract data source for random effect, stored as a number
+    d = data.frame("source"= sort(unique(covs$source)),
+                   "source.num" = seq(from = 1, to = length(unique(covs$source))))
+    covs = merge(covs, d, by = "source")
+    rm(d)
+    
+    
+    ## Make sure covs match order of matrix
+    covs = covs[order(match(covs$cell_id_3km, rownames(data.dom))),]
+    
+    #verify
+    # match(covs$cell_id_3km, rownames(data.dom))
+    
+    #
+    ##
+    ###
+    #### Observation-level covariates
+    ###
+    ##
+    #
+    
+    # Make sure we have the same sampling units!
+    if(length(setdiff(sp_dom_dat$ObsCovs$SU, sp_sub_dat$ObsCovs$SU)) == 0 &
+       length(setdiff(sp_sub_dat$ObsCovs$SU, sp_dom_dat$ObsCovs$SU)) == 0){
+      
+      ## thin obs down to relevant SUs
+      obs = sp_dom_dat$ObsCovs[sp_dom_dat$ObsCovs$SU %in% rownames(data.dom),]
+      
+      ## and convert to a matrix 
+      rownames(obs)=obs[,1] #set rownames as sampling units
+      obs=obs[,-1] #remove sampling unit col
+      obs=as.matrix(obs) #turn into a matrix, but only keep one 
+      
+    }else{
+      
+      ## if obs SUs dont match, let us know! 
+      print(paste("The species combo of", sp_sub, "~", sp_dom, 
+                "have a different number of sampling units in ObsCovs! This pair was skipped."))
+      # and skip the probelmatic one
+      next
+    }
+    
+    ## Ensure obs matches the order of matrix 
+    obs = obs[order(match(rownames(obs), rownames(data.dom))),]
+    # #verify
+    # match(rownames(obs), rownames(data.dom))
+    
+    #
+    ##
+    ###
+    ####
+    ##### Prepare the informed ZIP parameters
+    ####
+    ###
+    ##
+    #
+    
+    ## Establish which sites have extirpated dominant species
+    
+    # first get max number of counts per row
+    p = apply(data.dom, 1, max, na.rm = TRUE)
+    
+    # subset for only sampling units with detections
+    p = names(p[p >= 1])
+    
+    ### Add conditional if no sites match each other
+    if(length(p) == 0){
+      print(paste0(sp1, " & ", sp2, " may spatially overlap, but were never detected in the same landscape"))
+      next
+    }# end lack of spatial overlap bypass  
+    
+    # gather all sampling units in the Landscapes where there were detections
+    c = select(covs, cell_id_3km, Landscape)
+    d = c[c$cell_id_3km %in% p,]
+    d = c[c$Landscape %in% d$Landscape, ]
+    
+    # gather all sites in landscapes without ANY detections
+    e = c[!c$Landscape %in% d$Landscape,]
+    
+    # this should match number of rows in matrix 
+    if((length(e$cell_id_3km) + length(d$cell_id_3km)) != dim(data.dom)[1] &
+      (length(e$cell_id_3km) + length(d$cell_id_3km)) != dim(data.sub)[1]){
+      
+      print(paste0("problem with ", sp_dom, " & ", sp_sub))
+      
+    } # end data check 
+    
+    ## Add if-else statment for dominant species not extirpated anywhere. 
+    if(length(e$cell_id_3km) > 0){
+      
+      # combine, where 0 = extirpated, and 1 = present. 
+      z.dom = rbind(data.frame("occu" = 0, "cell_id_3km" = e$cell_id_3km),
+                    data.frame("occu" = 1, "cell_id_3km" = d$cell_id_3km))
+      
+    }else{
+      
+      z.dom = data.frame("occu" = 1, "cell_id_3km" = d$cell_id_3km)
+      
+    } # end no extirpation conditional 
+    
+    # make sure its in the same order as the matrix
+    z.dom = z.dom[order(match(z.dom$cell_id_3km, rownames(data.dom))),]
+    
+    
+    ## Establish which sites have extirpated subordianate species-
+    
+    # first get max number of counts per row
+    p = apply(data.sub, 1, max, na.rm = TRUE)
+    
+    # subset for only sites with detections
+    p = names(p[p >= 1])
+    
+    ### Add conditional if no sites match each other
+    if(length(p) == 0){
+      print(paste0(sp1, " & ", sp2, " may spatially overlap, but were never detected in the same landscape"))
+      next
+    }# end lack of spatial overlap bypass  
+    
+    # gather all sites in the landscapes where there were detections
+    c = select(covs, cell_id_3km, Landscape)
+    d = c[c$cell_id_3km %in% p,]
+    d = c[c$Landscape %in% d$Landscape, ]
+    
+    # gather all sites in landscapes without ANY detections
+    e = c[!c$Landscape %in% d$Landscape,]
+
+    # this should match number of rows in matrix 
+    if((length(e$cell_id_3km) + length(d$cell_id_3km)) != dim(data.dom)[1] &
+       (length(e$cell_id_3km) + length(d$cell_id_3km)) != dim(data.sub)[1]){
+      
+      print(paste0("problem with ", sp1, " & ", sp2))
+      
+    } # end data check 
+    
+    # combine, where 0 = extirpated, and 1 = present. 
+    ## Add if-else statment for subordinate species not extirpated anywhere. 
+    if(length(e$cell_id_3km) > 0){
+      
+      z.sub = rbind(data.frame("occu" = 0, "cell_id_3km" = e$cell_id_3km),
+                    data.frame("occu" = 1, "cell_id_3km" = d$cell_id_3km))
+      
+    }else{
+      
+      z.sub = data.frame("occu" = 1, "cell_id_3km" = d$cell_id_3km)
+    } # end no extirpation conditional 
+    
+    # make sure its in the same order as the matrix
+    z.sub = z.sub[order(match(z.sub$cell_id_3km, rownames(data.sub))),]
+    
+    rm(c,d,e,p)
+    
+    ####### BUNDLE all the data for the bayesian model 
+    
+    #these are the variable names used in the bayes mod! 
+    bdata = list(y.dom = data.dom,                        # Count history matrix for dominant spp
+                 y.sub = data.sub,                        # Count history matrix for subordinate spp
+                 Z.dom = z.dom$occu,                      # Dominant presence/absence for all sites
+                 Z.sub = z.sub$occu,                      # Subordinate presence/absence for all sites 
+                 nsites = dim(data.dom)[1],               # Number of sampling locations (i.e. rows in matrix)
+                 nreps = dim(data.dom)[2],                # Number of sampling occasions (i.e. cols in matrix)
+                 flii = covs$Avg_FLLI_3km,                # Site covaraite 1
+                 hfp = covs$Avg_human_footprint_3km,      # Site covaraite 2
+                 elev = covs$Avg_altitude_3km,            # Site covaraite 3
+                 cams = obs,                              # Observation covaraite 1
+                 narea = length(unique(covs$land.num)),   # number of levels in landscape RE
+                 area = covs$land.num,                    # Landscape random effect (as.num)
+                 nsource = length(unique(covs$source)),   # number of levels in source RE 
+                 source = covs$source.num,                # Data source random effect (as.num)
+                 nyear = length(unique(covs$year.num)),   # number of levels in year RE
+                 year = covs$year)                        # year random effect (as.num)
+    
+    ## save the bundle 
+    temp[[l]] = bdata
+    names(temp)[l] = paste("SUB-", sp_sub, "~DOM-",sp_dom, sep = "" )
+    
+  } # end 2nd species
+  
+  ## remove null values in list for species combos that dont overlap 
+  temp[sapply(temp, is.null)] <- NULL
+  
+  ## save all results for all species
+  bdata_list[[i]] = temp
+  
+  
+} # end 1st species
+rm(i,l,sp_dom,sp_sub, sp_dom_dat, sp_sub_dat, obs, temp, z.dom, z.sub,
+   bdata, all_else, data.dom, data.sub, covs, exp, non_det_SU, dom_tg, non_det_land)
+
+##inspect
+names(bdata_list[[1]])
+
+## attempt to flatten the list of lists into a single list
+bdata_list = unlist(bdata_list, recursive = FALSE)
+length(bdata_list) #610 combos --> Nice! 
+names(bdata_list) # looks good! 
 
 ```
 
-```{r loop to generate data bundles based on guild-pairs }
+### Save the final list of bundled data 
+
+Now that all species pairs are established, the data is properly formatted, and everything is clean, its time to save the data! We will send it to the HPC to run on the R script called: data/HPC_code/HPC_co-abundance_model.R
+```{r save bundled data!, echo=FALSE}
+
+## grab today's date 
+day<-str_sub(Sys.Date(),-2)
+month<-str_sub(Sys.Date(),-5,-4)
+year<-str_sub(Sys.Date(),-10,-7)
+date = paste(year,month,day, sep = "")
+rm(day,month,year)
+
+# saveRDS(bdata_list, here::here(paste("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_", length(bdata_list), "_species_pairs_", date, ".RDS", sep = "")))
+
 
 ```
 

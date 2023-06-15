@@ -1,0 +1,44 @@
+#!/bin/bash
+# SPECIFY YOUR GROUP NAME
+#SBATCH --account=a_luskin_ecl
+
+## SPECIFY YOUR COMPUTATIONAL REQUIREMENTS 
+
+# Select 1 node per job
+#SBATCH --nodes=1
+
+# Select 1 CPUS per node 
+#SBATCH --ntasks=1
+
+# Select 24,000 MB (24 GB) of memory per node 
+#SBATCH --mem=24000
+
+# Ensure we are in the general queue, not AI, debug, or GPU
+#SBATCH --partition=general
+
+# Select 1 hours (h:m:s format) of walltime, should be plenty
+#SBATCH --time=1:00:00
+
+# SPECIFY THE JOB ARRAY-
+#SBATCH --array=1-72
+
+# SPECIFY THE JOB NAME
+#SBATCH --job-name=UMFs
+
+# SPECIFY .err AND .out FILE LOCATIONS
+#SBATCH --output=OE/ZDA_UMF/slurm-%A_%a.out
+#SBATCH --error=OE/ZDA_UMF/slurm-%A_%a.err
+
+# LOAD THE RELEVANT MODULE
+module load rjags/4-10-foss-2021a-r-4.1.0 
+if [ $? -ne 0 ]; then 
+  echo "Module load failed"
+  exit 3
+fi
+
+# SPECIFY THE PBS WORKING DIRECTORY AND PRINT TO VERIFY
+cd $SLURM_SUBMIT_DIR
+pwd
+
+# LOAD THE R SCRIPT, SUBMIT JOB FROM /scratch/user/uqzamir/, AND SPECIFY THE ARRAY INDEX 
+Rscript code/ZDA_UMF/HPC_matrix_generator.R $SLURM_ARRAY_TASK_ID

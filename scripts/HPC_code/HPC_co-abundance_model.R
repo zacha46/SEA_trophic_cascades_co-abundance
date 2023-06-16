@@ -20,8 +20,14 @@ options(mc.cores = 3)
 slurm = Sys.getenv("SLURM_ARRAY_TASK_ID")
 slurm = as.numeric(slurm) #imports as character var, not numeric
 
+### Determine what MCMC settings you want to run here-
+setting = "SHORT"           #~30 min
+# setting = "MIDDLE"        # ~13 hrs
+# setting = "LONG"          # ?? hrs 
+# setting = "PUBLICATION"   # ~6000+ min
+
 #### Import the already formatted data
-dat = readRDS("data/co-abundance/Bundled_data_for_Bayes_co-abundance_mods_610_species_pairs_20230615.RDS")
+dat = readRDS("data/co-abundance/Bundled_data_for_Bayes_co-abundance_mods_610_species_pairs_20230616.RDS")
 
 ## Thin to a single species pair
 bdata = dat[[slurm]]
@@ -31,13 +37,10 @@ bdata$y.dom = apply(bdata$y.dom, 2, as.numeric)
 bdata$y.sub = apply(bdata$y.sub, 2, as.numeric)
 bdata$cams = apply(bdata$cams, 2, as.numeric)
 
-## and year needs to be numeric, not char
-bdata$year = as.numeric(bdata$year)
-
 ## and save the name of the species pair 
 n = names(dat)[slurm]
 
-print(paste("Running co-abundance model for: ", n, sep = ""))
+print(paste("Begining to run co-abundance model for: ", n, " starting at ", Sys.time(), sep = ""))
 
 
 ####### Make the model in BUGS language and run it ####
@@ -243,19 +246,29 @@ inits = function() {
   )  # Royle recommends leaving Z as NA, and JAGS says it needs to be numeric          
 }
 
-# MCMC settings (choose one)
-ni <- 3000; nt <- 20; nb <- 1000; nc <- 3; setting = "SHORT" # quick test to make sure code works, ~26 min
-# ni = 30000; nt = 30; nb = 7000 ; nc = 3; setting = "MIDDLE" # ~13 hours, examine parameter values--> use this for prelim testing.
-## low Rhat scores: almost all at 1, most below 2, some around 6
-
-# ni <- 100000; nt <- 400; nb <- 15000; nc <- 3; setting = "LONG" # examine parameter values, ~?? minutes
-# ni <- 1000000; nt <- 80; nb <- 200000; nc <- 3 ; setting = "PUBLICATION" # publication-quality run, recommended by K&R, ~6000+ min
+# MCMC settings, based on assignment above
+if(setting == "SHORT"){
+  ni <- 3000; nt <- 20; nb <- 1000; nc <- 3 # quick test to make sure code works, ~26 min
+}
+if(setting == "MIDDLE"){
+  ni = 30000; nt = 30; nb = 7000 ; nc = 3 # ~13 hours, examine parameter values--> use this for prelim testing.
+}
+if(setting == "LONG"){
+  ni <- 100000; nt <- 400; nb <- 15000; nc <- 3 # examine parameter values, ~?? minutes
+}
+if(setting == "PUBLICATION"){
+  ni <- 1000000; nt <- 80; nb <- 200000; nc <- 3 # publication-quality run, recommended by K&R, ~6000+ min
+}
 
 ### Run the model 
 mod = jags(bdata, inits, params, "ZDA_Co_Abundance_Model_20230615.jags",
             n.chains = nc, n.thin = nt, n.iter = ni, n.burnin = nb, parallel = T)
 
 ### DONT SAVE THE MODEL, they are too big 
+
+print(paste("Finished running co-abundance model for: ", n, " at ", Sys.time(),
+            ". Beginning dataframe extractions now.", sep = ""))
+
 
 
 ####### Generate dataframe for coefficent bar plots ######
@@ -324,8 +337,10 @@ month<-substr(Sys.Date(),6,7)
 year<-substr(Sys.Date(),1,4)
 
 path = paste(paste(paste(paste("results/co-abundance/coefficent_dataframes/", slurm, "_", setting, "_co-abundance_coefficents_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
-write.csv(s, path)
+write.csv(s, path, row.names = F)
 
+print(paste("Finished generating coefficent dataframe for: ", n, " at ", Sys.time(),
+            ". Beginning prediction dataframes now.", sep = ""))
 
 
 ####### Generate dataframe for prediction plots ######
@@ -334,7 +349,7 @@ write.csv(s, path)
 bdata = dat[[slurm]]
 
 ## We will need the metadata here to grab accurate landscape ID's 
-covars = read.csv("data/ZDA_UMF/clean_metadata_to_make_UMFs_20230615.csv")
+covars = read.csv("data/ZDA_UMF/clean_metadata_to_make_UMFs_20230616.csv")
 
 ## Thin covars to match sampling units in species matrixs
 covars = covars[covars$cell_id_3km %in% rownames(bdata$y.dom),]
@@ -357,7 +372,7 @@ est.dat[1:length(colMeans(mod$sims.list$N.sub)), 4] = apply(mod$sims.list$N.sub,
 est.dat[1:length(colMeans(mod$sims.list$N.dom)), 5] = apply(mod$sims.list$N.dom, 2, quantile, probs = 0.025)
 est.dat[1:length(colMeans(mod$sims.list$N.dom)), 6] = apply(mod$sims.list$N.dom, 2, quantile, probs = 0.975)
 est.dat[1:length(colMeans(mod$sims.list$N.sub)), 7] = covars$cell_id_3km
-est.dat[1:length(colMeans(mod$sims.list$N.sub)), 8] = covars$landscape
+est.dat[1:length(colMeans(mod$sims.list$N.sub)), 8] = covars$Landscape
 est.dat[1:length(colMeans(mod$sims.list$N.sub)), 9] = n
 
 
@@ -426,6 +441,9 @@ write.csv(pred.dat, path)
 path = paste(paste(paste(paste("results/co-abundance/prediction_dataframes/", slurm, "_", setting, "_estimated_abundance_per_SU_plotdata_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
 write.csv(est.dat, path)
 
+print(paste("Finished generating prediction dataframes for: ", n, " at ", Sys.time(),
+            ". Beginning PPC dataframes now.", sep = ""))
+
 
 ####### Generate dataframe for PPC plots ########
 
@@ -449,8 +467,12 @@ ppc.dat$Species_Pair = n
 day<-substr(Sys.Date(),9, 10)
 month<-substr(Sys.Date(),6,7)
 year<-substr(Sys.Date(),1,4)
+
 path = paste(paste(paste(paste("results/co-abundance/PPC_dataframes/", slurm, "_", setting, "_PPC_plotdata_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
 write.csv(ppc.dat, path)
+
+print(paste("Finished generating PPC plotdata dataframe for: ", n, " at ", Sys.time(),
+            ". Beginning PPC values dataframe now.", sep = ""))
 
 
 ##### Generate dataframe w/ only BPV and C-hat values
@@ -492,8 +514,12 @@ da[1, 11] = n
 day<-substr(Sys.Date(),9, 10)
 month<-substr(Sys.Date(),6,7)
 year<-substr(Sys.Date(),1,4)
+
 path = paste(paste(paste(paste("results/co-abundance/PPC_dataframes/", slurm, "_", setting, "_BPV_and_Chat_values_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
 write.csv(da, path)
+
+print(paste("Finished generating PPC plotdata dataframe for: ", n, " at ", Sys.time(),
+            ". All dataframe extractions are now complete.", sep = ""))
 
 
 

@@ -1,8 +1,8 @@
 ##### Format camera trap data into almost UMFs via HPC
 #### it just takes too long on a regular comp,
-### when I know itll work on the HPC 
+### when I know it'll work on the HPC 
 
-## Submitted June 15th, 2023
+## Submitted June 16th, 2023
 # Z.amir@uq.edu.au
 
 library(tidyverse)
@@ -12,7 +12,13 @@ library(vegan)
 species = readRDS("data/ZDA_UMF/species_vector_72_species_20230615.RDS")
 group_sp = readRDS("data/ZDA_UMF/group_living_13_species_vector_20230615.RDS")
 caps = read.csv("data/ZDA_UMF/clean_captures_to_make_UMFs_20230615.csv")
-meta = read.csv("data/ZDA_UMF/clean_metadata_to_make_UMFs_20230615.csv")
+meta = read.csv("data/ZDA_UMF/clean_metadata_to_make_UMFs_20230616.csv")
+
+# ### Local testing
+# species = readRDS("data/send_to_HPC/species_vector_72_species_20230615.RDS")
+# group_sp = readRDS("data/send_to_HPC/group_living_13_species_vector_20230615.RDS")
+# caps = read.csv("data/send_to_HPC/clean_captures_to_make_UMFs_20230615.csv")
+# meta = read.csv("data/send_to_HPC/clean_metadata_to_make_UMFs_20230616.csv")
 
 ### Assign key variables a value
 
@@ -43,6 +49,12 @@ if(any(grepl(sp, list.files("results/ZDA_UMF")))) {
   ## Terminate the R script fully
   stop("Terminating the script.")
 }
+
+#### Right away, remove any SU's w/ 14 or more active cameras because it created problems in the model
+meta = meta[meta$cams_included_count < 14,]
+
+## and then thin the caps also! 
+caps = caps[caps$cell_id_3km %in% meta$cell_id_3km, ]
 
 ## rename caps and meta to match old code 
 ## And for easier local testing in case I make a mistake!

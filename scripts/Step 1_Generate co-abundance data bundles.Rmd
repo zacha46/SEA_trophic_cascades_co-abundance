@@ -1,7 +1,7 @@
 ---
 title: "Step 1_Prepare data for bundling"
 author: "Zachary Amir"
-date: "2023-06-15"
+date: "2023-06-16"
 output: html_document
 ---
 
@@ -620,6 +620,18 @@ group_sp = big$Species[big$mean_count >= 2]
 group_sp = c(group_sp, "Muntiacus_genus", "Macaca_fascicularis" )
 rm(big)
 
+
+### Found a downstream error! Sampling units w/ too many active cameras were causing models to crash! 
+# create a new column in the metadata that counts the number of active cams per SU
+meta$cams_included_count = str_count(meta$cameras_included, " - ") + 1
+hist(meta$cams_included_count) # classic Poisson
+
+## 14 cams per SU was causing probelms earlier... 
+# how many SUs do we lose by exclusing them?
+nrow(meta[meta$cell_id_3km %in% meta$cell_id_3km[meta$cams_included_count >= 14],]) / nrow(meta) * 100
+# 1% of SUs, thats fine. 
+
+
 ## grab today's date 
 day<-str_sub(Sys.Date(),-2)
 month<-str_sub(Sys.Date(),-5,-4)
@@ -635,6 +647,9 @@ date = paste(year,month,day, sep = "")
 # 
 # write.csv(meta, paste("/Users/zachary_amir/Dropbox/Zach PhD/Trophic release project/SEA_trophic_cascades_co-abundance/data/send_to_HPC/clean_metadata_to_make_UMFs_", date,".csv", sep = ""), row.names = F)
 rm(day, month, year, date)
+
+### Also save trait data so I dont have to remake it later
+# write.csv(traits, here::here("results/clean_72_species_trait_data_20230615.csv"), row.names = F)
 
 
 ```
@@ -660,6 +675,7 @@ umfs = list()
 
 ## list all files that should be imported 
 files = list.files(here::here("data/import_UMF_from_HPC"))
+files = files[!grepl("OLD", files)] # remove any old data 
 
 for(i in 1:length(files)){
   
@@ -681,11 +697,11 @@ names(umfs)[grepl("Canis_lupus", names(umfs))] = "Canis_lupus_familiaris"
 ## check if all species are present by importing old species vector
 setdiff(keep, names(umfs)) # present and accounted for! 
 
-### inspect present data
-head(umfs$Panthera_pardus$siteCovs) #nice
-head(umfs$Sus_barbatus$ObsCovs) #nice
-head(umfs$Ursus_thibetanus$y) #nice
-## should be good to go! 
+# ### inspect present data
+# head(umfs$Panthera_pardus$siteCovs) #nice
+# head(umfs$Sus_barbatus$ObsCovs) #nice
+# head(umfs$Ursus_thibetanus$y) #nice
+# ## should be good to go! 
 
 ```
 
@@ -1068,7 +1084,7 @@ year<-str_sub(Sys.Date(),-10,-7)
 date = paste(year,month,day, sep = "")
 rm(day,month,year)
 
-saveRDS(bdata_list, here::here(paste("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_", length(bdata_list), "_species_pairs_", date, ".RDS", sep = "")))
+# saveRDS(bdata_list, here::here(paste("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_", length(bdata_list), "_species_pairs_", date, ".RDS", sep = "")))
 
 
 ```

@@ -21,13 +21,13 @@ slurm = Sys.getenv("SLURM_ARRAY_TASK_ID")
 slurm = as.numeric(slurm) #imports as character var, not numeric
 
 ### Determine what MCMC settings you want to run here-
-setting = "SHORT"           #~30 min
-# setting = "MIDDLE"        # ~13 hrs
-# setting = "LONG"          # ?? hrs 
-# setting = "PUBLICATION"   # ~6000+ min
+# setting = "SHORT"           # 2.5 hrs
+setting = "MIDDLE"            # 36-49 hrs
+# setting = "LONG"            # ?? hrs 
+# setting = "PUBLICATION"     # ~6000+ min
 
 #### Import the already formatted data
-dat = readRDS("data/co-abundance/Bundled_data_for_Bayes_co-abundance_mods_610_species_pairs_20230616.RDS")
+dat = readRDS("data/co-abundance/Bundled_data_for_Bayes_co-abundance_mods_610_species_pairs_20230617.RDS")
 
 ## Thin to a single species pair
 bdata = dat[[slurm]]
@@ -251,7 +251,7 @@ if(setting == "SHORT"){
   ni <- 3000; nt <- 20; nb <- 1000; nc <- 3 # quick test to make sure code works, ~26 min
 }
 if(setting == "MIDDLE"){
-  ni = 30000; nt = 30; nb = 7000 ; nc = 3 # ~13 hours, examine parameter values--> use this for prelim testing.
+  ni = 50000; nt = 50; nb = 10000 ; nc = 3 # ~?? hours, examine parameter values--> use this for prelim testing.
 }
 if(setting == "LONG"){
   ni <- 100000; nt <- 400; nb <- 15000; nc <- 3 # examine parameter values, ~?? minutes
@@ -260,14 +260,18 @@ if(setting == "PUBLICATION"){
   ni <- 1000000; nt <- 80; nb <- 200000; nc <- 3 # publication-quality run, recommended by K&R, ~6000+ min
 }
 
+start = Sys.time()
+
 ### Run the model 
 mod = jags(bdata, inits, params, "ZDA_Co_Abundance_Model_20230615.jags",
             n.chains = nc, n.thin = nt, n.iter = ni, n.burnin = nb, parallel = T)
 
+end = Sys.time()
+
 ### DONT SAVE THE MODEL, they are too big 
 
 print(paste("Finished running co-abundance model for: ", n, " at ", Sys.time(),
-            ". Beginning dataframe extractions now.", sep = ""))
+            ". This model took ", round(difftime(end, start, units = "hours"), 4), " hours to be completed. Beginning dataframe extractions now.", sep = ""))
 
 
 

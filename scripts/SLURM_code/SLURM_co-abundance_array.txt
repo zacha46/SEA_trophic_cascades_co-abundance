@@ -10,7 +10,7 @@
 # Select 3 CPUS per node (one per MCMC chain)
 #SBATCH --ntasks=3
 
-# Select 50,000 MB (50 GB) of memory per node 
+# Select 50000 MB (50 GB) of memory per node 
 #SBATCH --mem=50000
 
 # Ensure we are in the general queue, not AI, debug, or GPU

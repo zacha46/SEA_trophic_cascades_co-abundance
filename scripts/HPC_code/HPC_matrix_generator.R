@@ -50,8 +50,8 @@ if(any(grepl(sp, list.files("results/ZDA_UMF")))) {
   stop("Terminating the script.")
 }
 
-#### Right away, remove any SU's w/ 14 or more active cameras because it created problems in the model
-meta = meta[meta$cams_included_count < 14,]
+#### Right away, remove any SU's w/ 7 or more active cameras because it created problems in the model
+meta = meta[meta$cams_included_count < 7,]
 
 ## and then thin the caps also! 
 caps = caps[caps$cell_id_3km %in% meta$cell_id_3km, ]

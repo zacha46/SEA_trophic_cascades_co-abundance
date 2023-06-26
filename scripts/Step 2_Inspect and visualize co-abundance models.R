@@ -226,16 +226,367 @@ head(ppc_values)
 ppc_values$X = NULL # damn row names 
 str(ppc_values) # looks good! 
 
+# remove list now that were all stored in dfs. 
+rm(ppc_res)
+
 ### Inspect which species pairs are present/missing, 20230615
 setdiff(all_combos, ppc_values$Species_Pair) #44 missing models, certainly an improvement! 7% of mods are missing. 
-which(all_combos == "SUB-Panthera_tigris~DOM-Rusa_unicolor") # Error file: one node produced an error: Error in node y.dom[683,1], Node inconsistent with parents
-which(all_combos == "SUB-Tragulus_genus~DOM-Cuon_alpinus") # Error file: one node produced an error: Error in node y.sub[682,1], Node inconsistent with parents
-which(all_combos == "SUB-Echinosorex_gymnura~DOM-Panthera_pardus") # Error file: one node produced an error: Error in node y.sub[596,1]
-## different species seem to have the same problems! 
+## See Quick trouble shooting pt2, 20230615 for trouble shooting missing combos
+## Long story short, I needed to reduce num_active_cams to < 7 for models to converge --> on the way to better results! 
 
-### inspect these problem critters! 
 
-######## Visualize interaction across community via matrix ######
+######## Import co-abundance prediction dataframes ######
+
+## Make sure all_combos is loaded here! 
+
+# list all files
+files = list.files("results/prediction_dataframes/")
+files = files[!grepl("OLD", files)] # remove any old data 
+
+# store results here
+predict_res = list()
+
+# loop thru each file to import into list
+for(i in 1:length(files)){
+  
+  ## read the file 
+  d = read.csv(paste("results/prediction_dataframes/", files[i], sep = ""))
+  
+  ## save estimated vs predicted abundance in nested list. 
+  if(grepl("estimated", files[i])){
+    
+    predict_res$estimated[[i]] = d
+    
+  }else{
+    
+    predict_res$predicted[[i]] = d
+    
+  } # end estimated vs predicted condition
+  
+}
+rm(d,i, files)
+
+## bind together and inspect
+est_abund = do.call(rbind, predict_res$estimated)
+head(est_abund) 
+est_abund$X = NULL # damn row names 
+str(est_abund) # looks good! 
+
+pred_abund = do.call(rbind, predict_res$predicted)
+head(pred_abund) 
+pred_abund$X = NULL # damn row names 
+str(pred_abund) # looks good! 
+
+## Remove list now that data is good to go
+rm(predict_res)
+
+
+### Inspect which species pairs are present/missing, 20230615
+setdiff(all_combos, pred_abund$Species_Pair) #496 missing mods! But this is because many are still running on HPC. 
+
+
+###### Visualize coefficient effect sizes ###### 
+
+### Will be making two kinds of graphs:
+# 1 comparing the effect sizes for each state variable within each species pair
+# 1 histogram comparing the species interaction parameter for many species pairs per guild pair 
+
+### Will need to make directories in the figures folder for relevant guild pairs
+sort(unique(preform$guild_pair)) # 10 guilds is much more reasonable than 610 species pairs. 
+
+# create each directory
+for(i in 1:length(unique(preform$guild_pair))){
+  
+  #construct the path
+  path = paste("figures/", unique(preform$guild_pair)[i], sep = "")
+  
+  # and make the directory
+  dir.create(path)
+  
+}
+rm(i, path)
+## will get warnings if the directory is already created, no dramas tho. 
+
+
+#
+##
+###
+#### Loop through all species pairs to make a plot for each!
+
+sp_pair_coeff_plots = list() # save em here. 
+
+for(i in 1:length(unique(coeff$Species_Pair))){
+  
+  ## subset for a single species 
+  dat = coeff[coeff$Species_Pair == unique(coeff$Species_Pair)[i],]
+  
+  ## subset for relevant variables 
+  dat = dat[dat$var %in% c("Abundance_intercept","FLII","HFP","Elevation",
+                           "Species_Interaction","Detection_intercept","Active_cams"),]
+  
+  ## replace _ with space for vars for clean x-vars
+  dat$var = gsub("_", " ", dat$var)
+  
+  ## Change active cams to effort for easier understanding
+  dat$var[dat$var == "Active cams"] = "Effort"
+  
+  ## order the factor levels for each variable
+  dat$var = factor(dat$var, levels = c("Species Interaction","FLII","HFP","Elevation", "Abundance intercept", # state vars
+                                       "Detection intercept","Effort")) # then det vars. 
+  
+  # Add a column for significance marker
+  dat$marker <- ifelse(dat$sig == "Significant", "*", "")
+  
+  # Find the position of "Abundance intercept" on the x-axis to add the dashed line. 
+  split_position <- which(levels(dat$var) == "Abundance intercept")
+  
+  # specify the distance were spacing error bars and stars
+  dodge_width = 0.8
+  
+  # Extract the prefix from species to determine sub or dom
+  dat$prefix <- sub("^(SUB|DOM).*", "\\1", dat$species)
+  
+  # specify the colors for dominant and subordinate species based on prefix 
+  dat$color[dat$prefix == "SUB"] = "mediumslateblue"
+  dat$color[dat$prefix == "DOM"] = "mediumseagreen"
+  
+  # Clean up species name for clarity 
+  dat$species_name = sub("^(SUB|DOM)-", "", dat$species)
+  
+  # Reorder factor levels of species_name
+  dat$species_name <- factor(dat$species_name, 
+                             levels = c(unique(dat$species_name[dat$prefix == "DOM"]), 
+                                        unique(dat$species_name[dat$prefix == "SUB"])))
+  
+  # make a title 
+  title = paste("Dominant species:", unique(dat$species_name[dat$prefix == "DOM"]), 
+                "affects subordinate species:", unique(dat$species_name[dat$prefix == "SUB"]))
+  
+  
+  # Plot the grouped bar chart
+  p =
+    ggplot(dat, aes(x = var, y = mean, fill = species_name)) +
+    geom_bar(stat = "identity", position = position_dodge(width = dodge_width), color = "black", width = dodge_width) +
+    geom_errorbar(aes(ymin = lower, ymax = upper), position = position_dodge(width = dodge_width), width = 0, color = "black") +
+    geom_text(aes(y = mean+.3*sign(mean), label = marker), position = position_dodge(width = dodge_width), size = 8) +
+    geom_vline(xintercept = split_position + 0.5, color = "red", linetype = "dashed") +
+    geom_hline(yintercept = 0)+
+    scale_fill_manual(values = dat$color) +
+    labs(x = NULL, y = "Mean Effect Size", fill = NULL, title = title) +
+    theme_test()+
+    theme(
+      axis.text.x = element_text(size = 12, angle = 45, hjust = 1),   # Increase x-axis label font size and tilt it
+      axis.text.y = element_text(size = 12)                           # Increase y-axis tick label font size
+    )
+  ## looks good! 
+  
+  ## save it 
+  sp_pair_coeff_plots[[i]] = p
+  names(sp_pair_coeff_plots)[i] = unique(coeff$Species_Pair)[i]
+  
+}
+# keep it clean! 
+rm(dodge_width, i, split_position, title, p, dat) 
+
+## Save em to the relevant file directories (based off guilds)
+for(i in 1:length(sp_pair_coeff_plots)){
+  
+  ## grab one plot 
+  p = sp_pair_coeff_plots[[i]]
+  #and the name
+  n = names(sp_pair_coeff_plots)[i]
+  
+  # find the matching guild pair
+  gp = preform$guild_pair[preform$Species_Pair == n]
+  
+  # grab today's date
+  day<-str_sub(Sys.Date(),-2)
+  month<-str_sub(Sys.Date(),-5,-4)
+  year<-str_sub(Sys.Date(),-10,-7)
+  date = paste(year,month,day, sep = "")
+  
+  # construct a saving path 
+  path = paste("figures/", gp, "/model_coefficents_", n, "_", date, ".png", sep = "")
+  
+  ## save it! 
+  ggsave(path, p, width = 10.5, height = 6.5, units = "in")
+  
+}
+rm(p,n,gp,i,path,day,month,year,date)
+
+# dont need these plots anymore as they are saved
+rm(sp_pair_coeff_plots)
+
+#
+##
+###
+#### Generate histograms per guild pair + overall 
+
+# first we need to add guild pairs to coeff (probs should have been done earlier)
+add = distinct(select(preform, Species_Pair, guild_pair))
+coeff = merge(coeff, add, by = "Species_Pair")
+rm(add)
+
+## add a column if interaction is significant or not and negative or positve
+coeff$neg_vs_pos = "Positive & Non-Significant"
+coeff$neg_vs_pos[coeff$mean < 0 & coeff$sig == "Significant"] = "Negative & Significant"
+coeff$neg_vs_pos[coeff$mean < 0 & coeff$sig == "Non-Significant"] = "Negative & Non-Significant"
+coeff$neg_vs_pos[coeff$mean > 0 & coeff$sig == "Significant"] = "Positive & Significant"
+
+# ## add colors 
+# coeff$neg_pos_color[coeff$neg_vs_pos == "Positive_Non-Significant"] = 'darkolivegreen1'
+# coeff$neg_pos_color[coeff$neg_vs_pos == "Positive_Significant"] = "darkgreen"
+# coeff$neg_pos_color[coeff$neg_vs_pos == "Negative_Non-Significant"] = "goldenrod1"
+# coeff$neg_pos_color[coeff$neg_vs_pos == "Negative_Significant"] = "firebrick4"
+# specify manually
+color_values <- c("Positive & Non-Significant" = "darkolivegreen1",
+                  "Positive & Significant" = "darkgreen",
+                  "Negative & Non-Significant" = "goldenrod1",
+                  "Negative & Significant" = "firebrick4")
+
+# subset the data
+dat = coeff[coeff$var ==  "Species_Interaction",]
+
+# Calculate the median value
+median_value <- median(dat$mean)
+ 
+# count how many values we have that will be graphed
+pos = ddply(dat, .(neg_vs_pos), summarize,
+            count = length(neg_vs_pos))
+# make the label just below the largest count. 
+y_position <- 0.75 * max(pos$count)
+
+# test the plot 
+p = 
+ggplot(dat, aes(x = mean))+
+  geom_histogram(aes(y = after_stat(count), fill = neg_vs_pos), bins = 50)+
+  scale_fill_manual(values = color_values)+
+  geom_vline(aes(xintercept = 0), linetype = "dashed")+
+  geom_vline(aes(xintercept = median(mean)), color = "purple") + 
+  annotate("text", x = median_value, y = y_position, label = paste("Median =", round(median(dat$mean), 2)),
+           vjust = 1, hjust = -0.2, color = "black", size = 4) +
+  theme_test()+
+  labs(x = "Mean Species Interaction Value", y = "Frequency", fill = NULL, title = "All species pairs")
+
+## save it!
+# ggsave("figures/Histogram_species_interaction_value_ALL_species_pairs_20230626.png", p, 
+#        width = 12, height = 8, units = "in")
+rm(median_value, y_position, p, pos)
+
+### Loop through all guild pairs, and save directly 
+for(i in 1:length(unique(coeff$guild_pair))){
+  
+  ## save the name of one guild pair
+  gp = unique(coeff$guild_pair)[i]
+  
+  ## subset data for 1 pair and the relevant data 
+  dat = coeff[coeff$guild_pair == gp & coeff$var == "Species_Interaction",]
+  
+  # Calculate the median value
+  median_value <- median(dat$mean)
+  
+  # count how many values we have that will be graphed
+  pos = ddply(dat, .(neg_vs_pos), summarize,
+              count = length(neg_vs_pos))
+  # make the label just below the largest count. 
+  y_position <- 0.75 * max(pos$count)
+  
+  # make the plot 
+  p = 
+    ggplot(dat, aes(x = mean))+
+    geom_histogram(aes(y = after_stat(count), fill = neg_vs_pos), bins = 50)+
+    scale_fill_manual(values = color_values)+
+    geom_vline(aes(xintercept = 0), linetype = "dashed")+
+    geom_vline(aes(xintercept = median(mean)), color = "purple") + 
+    annotate("text", x = median_value, y = y_position, label = paste("Median =", round(median(dat$mean), 2)),
+             vjust = 1, hjust = -0.2, color = "black", size = 4) +
+    theme_test()+
+    labs(x = "Mean Species Interaction Value", y = "Frequency", fill = NULL, title = gp)
+  
+  ## create a relevant file directory to save it
+  # grab today's date
+  day<-str_sub(Sys.Date(),-2)
+  month<-str_sub(Sys.Date(),-5,-4)
+  year<-str_sub(Sys.Date(),-10,-7)
+  date = paste(year,month,day, sep = "")
+  
+  # construct a saving path 
+  path = paste("figures/", gp, "/Histogram_species_interaction_values_", gp, "_", date, ".png", sep = "")
+  
+  ## save it 
+  # ggsave(path, p, width = 12, height = 8, units = "in")
+  
+}
+rm(p,i,gp,pos, y_position, dat, median_value, 
+   day, month, year, date,path)
+
+
+### Now make two more histos --> one w/ sub large carn and dom large carn
+## Pt1 --> dominant
+# subset the data
+dat = coeff[coeff$var ==  "Species_Interaction" & grepl("DOM-Large_Carnivore", coeff$guild_pair),]
+
+# Calculate the median value
+median_value <- median(dat$mean)
+
+# count how many values we have that will be graphed
+pos = ddply(dat, .(neg_vs_pos), summarize,
+            count = length(neg_vs_pos))
+# make the label just below the largest count. 
+y_position <- 0.5 * max(pos$count)
+
+# test the plot 
+p = 
+  ggplot(dat, aes(x = mean))+
+  geom_histogram(aes(y = after_stat(count), fill = neg_vs_pos), bins = 50)+
+  scale_fill_manual(values = color_values)+
+  geom_vline(aes(xintercept = 0), linetype = "dashed")+
+  geom_vline(aes(xintercept = median(mean)), color = "purple") + 
+  annotate("text", x = median_value, y = y_position, label = paste("Median =", round(median(dat$mean), 2)),
+           vjust = 1, hjust = -0.2, color = "black", size = 4) +
+  theme_test()+
+  labs(x = "Mean Species Interaction Value", y = "Frequency", fill = NULL, title = "Large carnivores are dominant")
+# # save it!
+# ggsave("figures/Histogram_species_interaction_value_large_carnivores_dominant_20230626.png", p,
+#        width = 12, height = 8, units = "in")
+
+ 
+ ## Pt2 --> subordinate
+# subset the data
+dat = coeff[coeff$var ==  "Species_Interaction" & grepl("SUB-Large_Carnivore", coeff$guild_pair),]
+
+# Calculate the median value
+median_value <- median(dat$mean)
+
+# count how many values we have that will be graphed
+pos = ddply(dat, .(neg_vs_pos), summarize,
+            count = length(neg_vs_pos))
+# make the label just below the largest count. 
+y_position <- 0.75 * max(pos$count)
+
+# test the plot 
+p = 
+  ggplot(dat, aes(x = mean))+
+  geom_histogram(aes(y = after_stat(count), fill = neg_vs_pos), bins = 50)+
+  scale_fill_manual(values = color_values)+
+  geom_vline(aes(xintercept = 0), linetype = "dashed")+
+  geom_vline(aes(xintercept = median(mean)), color = "purple") + 
+  annotate("text", x = median_value, y = y_position, label = paste("Median =", round(median(dat$mean), 2)),
+           vjust = 1, hjust = -0.2, color = "black", size = 4) +
+  theme_test()+
+  labs(x = "Mean Species Interaction Value", y = "Frequency", fill = NULL, title = "Large carnivores are subordinate")
+# # save it!
+# ggsave("figures/Histogram_species_interaction_value_large_carnivores_subordinate_20230626.png", p,
+#        width = 12, height = 8, units = "in")
+
+
+
+
+#
+###### Visualize interaction across community via matrix ######
+
+### THIS PLOT SUCKS, not imformative and hard to make
+## leaving code here for now, but will probably delete later. 
 
 ### will be working with coeff
 ### want a square matrix w/ dominant as cols and subordinat as rows

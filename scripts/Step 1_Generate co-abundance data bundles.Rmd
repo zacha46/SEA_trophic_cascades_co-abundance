@@ -1083,7 +1083,7 @@ month<-str_sub(Sys.Date(),-5,-4)
 year<-str_sub(Sys.Date(),-10,-7)
 date = paste(year,month,day, sep = "")
 rm(day,month,year)
-
+ 
 # saveRDS(bdata_list, here::here(paste("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_", length(bdata_list), "_species_pairs_", date, ".RDS", sep = "")))
 
 

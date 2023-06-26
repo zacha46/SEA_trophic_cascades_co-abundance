@@ -302,11 +302,22 @@ for(i in 1:length(unique(preform$guild_pair))){
   
   # and make the directory
   dir.create(path)
-  
-}
+   
+} # end per guild pair 
 rm(i, path)
 ## will get warnings if the directory is already created, no dramas tho. 
 
+## create a directory for each species pair in the relevant guild pair b/c each species pair will have multiple plots 
+for(i in 1:length(unique(preform$Species_Pair))){
+  
+  #construct the path
+  path = paste("figures/", preform$guild_pair[preform$Species_Pair == unique(preform$Species_Pair)[i]],
+               "/", unique(preform$Species_Pair)[i], sep = "")
+  
+  # and make the directory
+  dir.create(path)
+}
+rm(i, path)
 
 #
 ##
@@ -406,10 +417,10 @@ for(i in 1:length(sp_pair_coeff_plots)){
   date = paste(year,month,day, sep = "")
   
   # construct a saving path 
-  path = paste("figures/", gp, "/model_coefficents_", n, "_", date, ".png", sep = "")
+  path = paste("figures/", paste(gp, n, sep = "/"), "/model_coefficents_", n, "_", date, ".png", sep = "")
   
   ## save it! 
-  ggsave(path, p, width = 10.5, height = 6.5, units = "in")
+  # ggsave(path, p, width = 10.5, height = 6.5, units = "in")
   
 }
 rm(p,n,gp,i,path,day,month,year,date)
@@ -433,12 +444,7 @@ coeff$neg_vs_pos[coeff$mean < 0 & coeff$sig == "Significant"] = "Negative & Sign
 coeff$neg_vs_pos[coeff$mean < 0 & coeff$sig == "Non-Significant"] = "Negative & Non-Significant"
 coeff$neg_vs_pos[coeff$mean > 0 & coeff$sig == "Significant"] = "Positive & Significant"
 
-# ## add colors 
-# coeff$neg_pos_color[coeff$neg_vs_pos == "Positive_Non-Significant"] = 'darkolivegreen1'
-# coeff$neg_pos_color[coeff$neg_vs_pos == "Positive_Significant"] = "darkgreen"
-# coeff$neg_pos_color[coeff$neg_vs_pos == "Negative_Non-Significant"] = "goldenrod1"
-# coeff$neg_pos_color[coeff$neg_vs_pos == "Negative_Significant"] = "firebrick4"
-# specify manually
+# specify colors manually
 color_values <- c("Positive & Non-Significant" = "darkolivegreen1",
                   "Positive & Significant" = "darkgreen",
                   "Negative & Non-Significant" = "goldenrod1",
@@ -514,7 +520,7 @@ for(i in 1:length(unique(coeff$guild_pair))){
   path = paste("figures/", gp, "/Histogram_species_interaction_values_", gp, "_", date, ".png", sep = "")
   
   ## save it 
-  # ggsave(path, p, width = 12, height = 8, units = "in")
+  ggsave(path, p, width = 12, height = 8, units = "in")
   
 }
 rm(p,i,gp,pos, y_position, dat, median_value, 
@@ -579,8 +585,221 @@ p =
 # ggsave("figures/Histogram_species_interaction_value_large_carnivores_subordinate_20230626.png", p,
 #        width = 12, height = 8, units = "in")
 
+## keep it clean
+rm(p, y_position, pos, median_value, dat, i, day, month, year, date,color_values, path,gp)
 
 
+######### Visualize PPC plots ########
+
+## Will generate two plots, 2 w/ the scatter (one for dom and one for sub) and 1 w/ the bars 
+
+## scatter first 
+# add guild_pair to the data
+add = select(preform, Species_Pair, guild_pair)
+ppc_plotdat = merge(ppc_plotdat, add, by = "Species_Pair")
+
+## loop thru each species pair to make the scatter plots per species and save them directly. 
+for(i in 1:length(unique(ppc_plotdat$Species_Pair))){
+  
+  ## grab species pair name 
+  n = unique(ppc_plotdat$Species_Pair)[i]
+  
+  ## subset for a single species 
+  dat = ppc_plotdat[ppc_plotdat$Species_Pair == n,]
+  
+  # grab today's date
+  day<-str_sub(Sys.Date(),-2)
+  month<-str_sub(Sys.Date(),-5,-4)
+  year<-str_sub(Sys.Date(),-10,-7)
+  date = paste(year,month,day, sep = "")
+  
+  ## Create titles based on values
+  val = ppc_values[ppc_values$Species_Pair == n,]
+  sub.bpv = paste("Bayesian P-value =", round(val$BPV.sub, 3),
+                  "& C-hat =", round(val$Chat.sub, 3))
+  dom.bpv = paste("Bayesian P-value =", round(val$BPV.dom, 3),
+                  "& C-hat =",round(val$Chat.dom, 3))
+  
+  ## Subordinate plot
+  plot=
+    ggplot(dat, aes( y = sub.sim, x = sub.real))+
+    geom_point(aes(color = sub.label))+
+    geom_abline(intercept = 0, slope = 1, color = "black", size = 2)+
+    theme_classic()+
+    scale_color_manual(values = c("red", "blue"))+
+    labs(title = sub.bpv, subtitle = str_split(n, "~")[[1]][1]  , 
+         y = "Fit Statistic Simulated Data", x = "Fit Statistic Real Data")+
+    theme(legend.position = "None")
+  
+  ## make a saving path
+  path = paste("figures/", unique(dat$guild_pair), "/", n, "/Subordinate_PPC_scatter_plot_", date, ".png", sep = "")
+  
+  # save it! 
+  ggsave(path, plot, width = 7.5, height = 7, units = "in")
+  
+  
+  ## Dominant plot
+  plot = 
+    ggplot(dat, aes( y = dom.sim, x = dom.real))+
+    geom_point(aes(color = dom.label))+
+    geom_abline(intercept = 0, slope = 1, color = "black", size = 2)+
+    theme_classic()+
+    scale_color_manual(values = c("red", "blue"))+
+    labs(title = dom.bpv, subtitle = str_split(n, "~")[[1]][2], 
+         y = "Fit Statistic Simulated Data", x = "Fit Statistic Real Data")+
+    theme(legend.position = "None")
+  
+  ## make a saving path
+  path = paste("figures/", unique(dat$guild_pair), "/", n, "/Dominant_PPC_scatter_plot_", date, ".png", sep = "")
+  
+  # save it! 
+  ggsave(path, plot, width = 7.5, height = 7, units = "in")
+  
+  
+}
+rm(path, day,month,year,date, plot, n, sub.bpv, dom.bpv, val, dat)
+
+# add guild_pair to the values
+add = select(preform, Species_Pair, guild_pair)
+ppc_values = merge(ppc_values, add, by = "Species_Pair")
+
+## Loop thru each species pair in the values DF to make bar graphs for BPV and Chat values
+for(i in 1:length(unique(ppc_values$Species_Pair))){
+  
+  ## grab species pair name 
+  n = unique(ppc_values$Species_Pair)[i]
+  
+  ## subset for a single species 
+  dat = ppc_values[ppc_values$Species_Pair == n,]
+  
+  ## slightly transform the data to plot better 
+  plot_dat = data.frame("BPV" = c(dat$BPV.dom, dat$BPV.sub),
+                        "Chat" = c(dat$Chat.dom, dat$BPV.sub),
+                        "position" = c("Dominant", "Subordinate"),
+                        "species" = str_split(n, "~")[[1]])
+  
+  ## BPV plot
+  bpv = 
+  ggplot(plot_dat, aes(x = species, y = BPV, fill = position))+
+    geom_col(color = "black", position = "dodge", color = 'black')+
+    geom_hline(yintercept = 0.5)+
+    geom_hline(yintercept = 0.75, linetype = "dashed", color = "red")+
+    geom_hline(yintercept = 0.25, linetype = "dashed", color = "red")+
+    theme_test()+
+    labs(y = "Bayesian P-Value", x = NULL, fill = NULL)+
+    coord_cartesian(ylim = c(0,1))+
+    scale_fill_manual(values = c("tan3","wheat3"))+
+    theme(axis.text.x = element_text(size = 12, face = "bold"))
+  
+  # grab today's date
+  day<-str_sub(Sys.Date(),-2)
+  month<-str_sub(Sys.Date(),-5,-4)
+  year<-str_sub(Sys.Date(),-10,-7)
+  date = paste(year,month,day, sep = "")
+  
+  ## make a saving path
+  path = paste("figures/", paste(dat$guild_pair, dat$Species_Pair, sep = "/"), "/", "Bayes_P-value_bar_plot_", date, ".png", sep = "")
+  
+  # save it! 
+  ggsave(path, bpv, width = 7.5, height = 7, units = "in")
+  
+  ##Chat plot
+  chat = 
+    ggplot(plot_dat, aes(x = species, y = Chat, fill = position))+
+    geom_col(color = "black", position = "dodge", color = 'black')+
+    geom_hline(yintercept = 1)+
+    geom_hline(yintercept = 1.1, linetype = "dashed", color = "red")+
+    theme_test()+
+    labs(y = "Magnitude of Over-Dispersion (C-hat)", x = NULL, fill = NULL)+ 
+    coord_cartesian(ylim = c(0.9,1.2))+
+    scale_fill_manual(values = c("tan3","wheat3"))+
+    theme(axis.text.x = element_text(size = 12, face = "bold"))
+  
+  # grab today's date
+  day<-str_sub(Sys.Date(),-2)
+  month<-str_sub(Sys.Date(),-5,-4)
+  year<-str_sub(Sys.Date(),-10,-7)
+  date = paste(year,month,day, sep = "")
+  
+  ## make a saving path
+  path = paste("figures/", paste(dat$guild_pair, dat$Species_Pair, sep = "/"), "/", "C-hat_overdispersion_bar_plot_", date, ".png", sep = "")
+  
+  # save it! 
+  ggsave(path, chat, width = 7.5, height = 7, units = "in")
+  
+}
+rm(bpv, chat, i, path, day,month,year,date,plot_dat, n, dat)
+
+
+
+######### Visualize prediction plots ########
+
+## Inspect data
+head(est_abund) #estimated abundance per sampling unit
+str(est_abund) # already numeric
+
+head(pred_abund) #Predicted change in subordinate abundance as a function of dominant species abundance
+str(pred_abund) # already numeric
+
+
+## repeat for each species pair 
+for(i in 1:length(unique(pred_abund$Species_Pair))){
+  
+  # save one pair name
+  n = unique(pred_abund$Species_Pair)[i]
+  
+  ## subset est and pred
+  est = est_abund[est_abund$Species_Pair == n,]
+  pred = pred_abund[pred_abund$Species_Pair == n,]
+  
+  ## grab the relevant guild pair for saving later
+  gp = preform$guild_pair[preform$Species_Pair == n]
+  
+  ## and the date while were at it
+  day<-str_sub(Sys.Date(),-2)
+  month<-str_sub(Sys.Date(),-5,-4)
+  year<-str_sub(Sys.Date(),-10,-7)
+  date = paste(year,month,day, sep = "")
+  
+  ## split species apart for nicer names 
+  n_split = str_split(n, "~")[[1]]
+  n_split = gsub("SUB-", "", n_split)
+  n_split = gsub("DOM-", "", n_split)
+  
+  
+  ## make a nice title 
+  title = paste("Dominant species:", n_split[2], 
+                "affects subordinate species:", n_split[1])
+  
+  
+  ## make the plot! 
+  # Hashed out lines are different styles you can test out. 
+  p = 
+  ggplot(pred, aes(y = Predicted.N, x = var))+
+    # geom_point(data = est, aes(y = Sub_abundance, x = Dom_abundance, color = Landscape), alpha = 0.5, inherit.aes = F)+
+    geom_jitter(data = est, aes(y = Sub_abundance, x = Dom_abundance, color = Landscape), width = .5)+
+    geom_line(color = "black", size = 2)+
+    geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.1, color = "black", linetype = "dashed")+
+    # geom_errorbar(data = est, aes(y = Sub_abundance, x = Dom_abundance,
+    #                                  ymin = lower_sub, ymax = upper_sub), alpha = 0.2, inherit.aes = F)+
+    # geom_errorbarh(data = est, aes(y = Sub_abundance, x = Dom_abundance,
+    #                                   xmin = lower_dom, xmax = upper_dom), alpha = 0.2, inherit.aes = F)+
+    labs(y = paste0(n_split[1], " Abundance"), 
+         x = paste0(n_split[2], " Abundance"),
+         title = title, color = NULL)+ 
+    guides(color = "none") + # way too many landscapes to list them now. 
+    theme_test()+
+    coord_cartesian(xlim = c(0, max(est$Dom_abundance)),
+                    ylim = c(0, max(est$Sub_abundance)))
+  
+  ## construct the saving path
+  path = paste("figures/", paste(gp, n, sep = "/"), "/Prediction_plot_", n, "_", date, ".png", sep = "")
+  
+  ## save the dang thang 
+  ggsave(path, p, width = 9, height = 6, units = "in")
+ 
+ }
+rm(path, p,i, title, n, n_split, gp, est, pred, day, month, year, date)
 
 #
 ###### Visualize interaction across community via matrix ######

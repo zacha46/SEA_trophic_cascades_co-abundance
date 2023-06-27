@@ -97,8 +97,8 @@ rm(coeff.res)
 
 ### Inspect which species pairs are present/missing, 20230615
 setdiff(all_combos, coeff$Species_Pair) # only 20 missing models!! This is an improvement, but still check. 
-which(all_combos == "SUB-Paradoxurus_hermaphroditus~DOM-Cuon_alpinus") # currently re-running on HPC
-which(all_combos == "SUB-Arctictis_binturong~DOM-Canis_lupus_familiaris") # 2nd fix made this work! 
+which(all_combos == "SUB-Rusa_unicolor~DOM-Cuon_alpinus") # currently re-running on HPC
+which(all_combos == "SUB-Echinosorex_gymnura~DOM-Panthera_pardus") # 2nd fix made this work! 
 
 ### Long-story-short, I found out they all had problem SUs from DVCA that contained 14+ active cams 
 ## --> removed all SUs w/ > 14 cameras and re-run analysis. 
@@ -181,7 +181,7 @@ table(preform$guild_pair[preform$mod_completion == "completed"]) # a lot!
 # preform = preform[order(preform$DOM_guild, preform$dom_species),]
 
 ## clean up 
-rm(add)
+rm(add, guilds)
 
 
 ######## Import co-abundance PPC dataframes ######
@@ -284,8 +284,89 @@ rm(predict_res)
 ### Inspect which species pairs are present/missing, 20230615
 setdiff(all_combos, pred_abund$Species_Pair) #496 missing mods! But this is because many are still running on HPC. 
 
+######### Track model performance and validity #######
 
-###### Visualize coefficient effect sizes ###### 
+## Will use the preform data.frame (generated in coefficents import) 
+## to track which models are robust, working, and converging. 
+
+## inspect data
+head(preform)
+str(preform) 
+# need to add sub + dom BPV/Chat & species interaction, its significance, and the Rhat value
+
+### inspect available data 
+head(ppc_values) # its all here! 
+
+# select the relevant data 
+add = select(ppc_values, Species_Pair, Interaction_Estimate, Rhat, 
+             Significance, BPV.dom, BPV.sub, Chat.dom, Chat.sub) #TBH, can probably just merge it all together, its all useful info here. 
+
+## and merge it! 
+preform = merge(preform, add, by = "Species_Pair", all.x = T) # make sure to keep all values from preform b/c some could be missing from PPC! 
+rm(add)
+
+## inspect
+head(preform) # looks good 
+head(preform[preform$mod_completion == "uncompleted",]) # all NA values here for BPV,Chat,Rhat,etc b/c the models never finished! 
+str(preform) # looks good! 
+
+## Add a column denoting if the BPV values converged
+preform$BPV_valid = "No"
+preform$BPV_valid[preform$BPV.dom >= 0.25 & preform$BPV.dom <= 0.75 &
+                    preform$BPV.sub >= 0.25 & preform$BPV.sub <= 0.75] = "Yes"
+table(preform$BPV_valid) # mostly invalid rn, but thats w/ short settings. 
+
+## add a column denoting if overdispersion remains
+preform$OD_valid = "No"
+preform$OD_valid[preform$Chat.dom >= 0.98 & preform$Chat.dom <= 1.1 &
+                     preform$Chat.sub >= 0.98 & preform$Chat.sub <= 1.1] = "Yes"
+table(preform$OD_valid) # mostly OD, but thats w/ short settings. TBH, better preformance than expected w/ low settings. 
+
+## add a column denoting if the species interaction parameter converged 
+preform$parameter_valid = "No"
+preform$parameter_valid[preform$Rhat >= 0.99 & preform$Rhat < 1.2] = "Yes"
+table(preform$parameter_valid) # majority is valid! Thats exciting! Should be better w/ more reps. 
+
+## Finally, use all of this information to denote if the overall model is valid and should be trusted
+preform$mod_valid = "No"
+preform$mod_valid[preform$BPV_valid == "Yes" &
+                    preform$OD_valid == "Yes" &
+                    preform$parameter_valid == "Yes"] = "Yes"
+table(preform$mod_valid) # Vast majority are NOT valid, but this checks out b/c of short settings. 
+
+## Save which species pairs are valid to examine data later
+valid_mods = preform$Species_Pair[preform$mod_valid == "Yes"]
+
+
+#### Summarize results to clearly present them-
+sum = ddply(preform, .(guild_pair), summarize,
+            num_neg_int = sum(Interaction_Estimate < 0 & Significance == "Significant", na.rm = T), # number of significant negative interactions
+            num_pos_int = sum(Interaction_Estimate > 0 & Significance == "Significant", na.rm = T), # number of significant positive interactions
+            # num_sub_species = length(unique(sub_species)), # number of sub species per guild pair 
+            # num_dom_species = length(unique(dom_species)), # number of sub species per guild pair
+            num_combos = length(unique(Species_Pair)))     # number of different species pairs per guild 
+
+## what is the percent of negative or positive interactions per guild?
+sum$percent_neg = sum$num_neg_int / sum$num_combos * 100
+sum$percent_pos = sum$num_pos_int / sum$num_combos * 100
+sum
+## Key results! for every guild pairing, there is a higher percentage of positive interactions than negative interactions! 
+
+## Which species pairs involved large carnivores significantly regulating the abundance of other critters?
+preform$Species_Pair[preform$Interaction_Estimate < 0 & 
+                       preform$Significance == "Significant" &
+                       preform$mod_valid == "Yes" &
+                       grepl("DOM-Large_Carnivore", preform$guild_pair)] 
+# only three! 
+# c("SUB-Lophura_nycthemera~DOM-Panthera_tigris", "SUB-Sus_barbatus~DOM-Cuon_alpinus", "SUB-Trichys_fasciculata~DOM-Panthera_tigris")
+
+## Curious to see what happens w/ mods w/ higher MCMC settings. 
+
+#
+##
+######### Visualize coefficient effect sizes ###### 
+
+## Should ideally subset availible mods to the valid_mods species pairs before running this! 
 
 ### Will be making two kinds of graphs:
 # 1 comparing the effect sizes for each state variable within each species pair
@@ -733,6 +814,8 @@ rm(bpv, chat, i, path, day,month,year,date,plot_dat, n, dat)
 
 
 ######### Visualize prediction plots ########
+
+## Should ideally subset availible mods to the valid_mods species pairs before running this! 
 
 ## Inspect data
 head(est_abund) #estimated abundance per sampling unit

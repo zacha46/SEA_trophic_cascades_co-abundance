@@ -20,11 +20,14 @@ options(mc.cores = 3)
 slurm = Sys.getenv("SLURM_ARRAY_TASK_ID")
 slurm = as.numeric(slurm) #imports as character var, not numeric
 
+#### Read settings value from SLURM into R
+setting = Sys.getenv("SETTING")
+
 ### Determine what MCMC settings you want to run here-
 # setting = "SHORT"           # 2.5 hrs
-setting = "MIDDLE"            # 36-49 hrs
+# setting = "MIDDLE"          # 36-49 hrs
 # setting = "LONG"            # ?? hrs 
-# setting = "PUBLICATION"     # ~6000+ min
+# setting = "PUBLICATION"     # ~6000+ min ??
 
 #### Import the already formatted data
 dat = readRDS("data/co-abundance/Bundled_data_for_Bayes_co-abundance_mods_610_species_pairs_20230617.RDS")
@@ -32,14 +35,32 @@ dat = readRDS("data/co-abundance/Bundled_data_for_Bayes_co-abundance_mods_610_sp
 ## Thin to a single species pair
 bdata = dat[[slurm]]
 
+## and save the name of the species pair 
+n = names(dat)[slurm]
+
+### Verify that this species pair at this setting has not already been completed-
+# First, create file name that mimics results to check if already present
+res =  paste(slurm, "_", setting, "_co-abundance_coefficents_", n, sep = "")
+
+# Second, list all completed results
+res_search = list.files("results/co-abundance/coefficent_dataframes/")
+
+# If the newly constructed file name matches ANY values already present in results, 
+if(any(grepl(res, res_search))){
+  
+  ## Print a message stating so
+  print(paste("The species pair:", n, "run with MCMC settings:", setting, "is already present in the results folder. This R script is terminating now."))
+  
+  ## and terminate the R script fully
+  stop("The script was terminated.")
+}
+
 ## matricies saved as char but need to be numeric 
 bdata$y.dom = apply(bdata$y.dom, 2, as.numeric)
 bdata$y.sub = apply(bdata$y.sub, 2, as.numeric)
 bdata$cams = apply(bdata$cams, 2, as.numeric)
 
-## and save the name of the species pair 
-n = names(dat)[slurm]
-
+## if results are not already present, start the models! 
 print(paste("Begining to run co-abundance model for: ", n, " starting at ", Sys.time(), sep = ""))
 
 

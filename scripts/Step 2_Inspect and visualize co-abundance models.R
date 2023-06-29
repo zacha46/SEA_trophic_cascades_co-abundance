@@ -11,11 +11,13 @@
 rm(list = ls())
 
 ## load libs 
-library(jagsUI)
 library(tidyverse)
 library(plyr)
-library(reshape2)
+library(reshape2) # for making checkerboard matrix 
 library(fs) # for moving files around 
+library(ggridges) # for ridgeline plots 
+
+# library(jagsUI) 
 # library(traitdata) # for species trait data
 
 ## set WD (should be automatic b/c RProj, but being safe anyway)
@@ -297,13 +299,9 @@ str(preform)
 ### inspect available data 
 head(ppc_values) # its all here! 
 
-# select the relevant data 
-add = select(ppc_values, Species_Pair, Interaction_Estimate, Rhat, 
-             Significance, BPV.dom, BPV.sub, Chat.dom, Chat.sub) #TBH, can probably just merge it all together, its all useful info here. 
+## merge it! 
+preform = merge(preform, ppc_values, by = "Species_Pair", all.x = T) # make sure to keep all values from preform b/c some could be missing from PPC! 
 
-## and merge it! 
-preform = merge(preform, add, by = "Species_Pair", all.x = T) # make sure to keep all values from preform b/c some could be missing from PPC! 
-rm(add)
 
 ## inspect
 head(preform) # looks good 
@@ -340,15 +338,17 @@ valid_mods = preform$Species_Pair[preform$mod_valid == "Yes"]
 
 #### Summarize results to clearly present them-
 sum = ddply(preform, .(guild_pair), summarize,
-            num_neg_int = sum(Interaction_Estimate < 0 & Significance == "Significant", na.rm = T), # number of significant negative interactions
-            num_pos_int = sum(Interaction_Estimate > 0 & Significance == "Significant", na.rm = T), # number of significant positive interactions
-            # num_sub_species = length(unique(sub_species)), # number of sub species per guild pair 
-            # num_dom_species = length(unique(dom_species)), # number of sub species per guild pair
+            num_sig_neg_int = sum(Interaction_Estimate < 0 & Significance == "Significant", na.rm = T), # number of significant negative interactions
+            num_sig_pos_int = sum(Interaction_Estimate > 0 & Significance == "Significant", na.rm = T), # number of significant positive interactions
+            num_nonsig_neg_int = sum(Interaction_Estimate < 0 & Significance == "Non-Significant", na.rm = T), # number of NON-significant negative interactions
+            num_nonsig_pos_int = sum(Interaction_Estimate > 0 & Significance == "Non-Significant", na.rm = T), # number of NON-significant positive interactions
             num_combos = length(unique(Species_Pair)))     # number of different species pairs per guild 
 
 ## what is the percent of negative or positive interactions per guild?
-sum$percent_neg = sum$num_neg_int / sum$num_combos * 100
-sum$percent_pos = sum$num_pos_int / sum$num_combos * 100
+sum$percent_sig_neg = sum$num_sig_neg_int / sum$num_combos * 100
+sum$percent_sig_pos = sum$num_sig_pos_int / sum$num_combos * 100
+sum$percent_nonsig_neg = sum$num_nonsig_neg_int / sum$num_combos * 100
+sum$percent_nonsig_pos = sum$num_nonsig_pos_int / sum$num_combos * 100
 sum
 ## Key results! for every guild pairing, there is a higher percentage of positive interactions than negative interactions! 
 
@@ -361,6 +361,21 @@ preform$Species_Pair[preform$Interaction_Estimate < 0 &
 # c("SUB-Lophura_nycthemera~DOM-Panthera_tigris", "SUB-Sus_barbatus~DOM-Cuon_alpinus", "SUB-Trichys_fasciculata~DOM-Panthera_tigris")
 
 ## Curious to see what happens w/ mods w/ higher MCMC settings. 
+
+
+
+######### Compare pairwise interactions in different directions ######
+
+### The goal here is to assess both directions of a species pair, e.g.:
+## SUB-Tapirus_indicus~DOM-Panthera_tigris vs SUB-Panthera_tigris~DOM-Tapirus_indicus
+# To determine the overal direciton of the relationship. 
+
+preform[preform$Species_Pair == "SUB-Tapirus_indicus~DOM-Panthera_tigris", 
+        c("Interaction_Estimate","lower","upper", "Significance")] # clear positive effect of tigers on taps 
+
+preform[preform$Species_Pair == "SUB-Panthera_tigris~DOM-Tapirus_indicus", 
+        c("Interaction_Estimate","lower","upper", "Significance")] # unclear negative effect of taps on tigers. 
+
 
 #
 ##
@@ -669,7 +684,78 @@ p =
 ## keep it clean
 rm(p, y_position, pos, median_value, dat, i, day, month, year, date,color_values, path,gp)
 
+#
+##
+###
+#### Generate Ridgeline histograms per guild pair + per large carnivore
 
+## The goal here is to condense several of those histograms into a single figure. 
+library(ggridges)
+
+## first subset coeff to just look at the species interaction value 
+dat = coeff[coeff$var == "Species_Interaction",]
+
+# specify colors manually
+color_values <- c("Positive & Non-Significant" = "darkolivegreen1",
+                  "Positive & Significant" = "darkgreen",
+                  "Negative & Non-Significant" = "goldenrod1",
+                  "Negative & Significant" = "firebrick4")
+
+## guild pair histogram
+ggplot(dat[grepl("DOM-Large_Carn", dat$guild_pair),], aes(x = mean, y = guild_pair))+#, fill = neg_vs_pos)) +
+  geom_density_ridges(scale = 1, alpha = .8) +
+  theme_ridges() +
+  # scale_fill_manual(values = color_values) +
+  labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL)
+
+## Add a column for dominant species
+dat$dom_species = sapply(strsplit(dat$Species_Pair, "~"), function(x) x[2])
+
+## Create a new sig level that combines non-sig into one
+dat$neg_vs_pos2 = dat$neg_vs_pos
+dat$neg_vs_pos2[grepl("Non-Sig", dat$neg_vs_pos2)] = "Non-Significant"
+# specify colors manually
+color_values <- c("Non-Significant" = "gray75",
+                  "Positive & Significant" = "darkgreen",
+                  "Negative & Significant" = "firebrick4")
+
+## remove dom from species name for a cleaner look 
+dat$dom_species = gsub("DOM-", "", dat$dom_species)
+
+## guild pair histogram
+p = 
+  ggplot(dat[grepl("DOM-Large_Carn", dat$guild_pair) & dat$mean > -4,], aes(x = mean, y = dom_species, fill = neg_vs_pos2)) +
+  geom_density_ridges(scale = 1, alpha = .8) +
+  # stat_density_ridges(quantile_lines = TRUE, quantiles = 0.5, alpha = .8, scale = 1)+
+  theme_ridges() +
+  scale_fill_manual(values = color_values) +
+  labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL)
+## save it! 
+# ggsave("figures/Histogram_Ridgeline_species_interaction_value_large_carnivores_dominant_20230629.png",p,
+#        width = 10, height = 8, units = "in")
+
+## This looks WAY better when we exclude models > -4, but were excluding 19 mods... 
+length(unique(dat$Species_Pair[grepl("DOM-Large_Carn", dat$guild_pair) & dat$mean < -4]))
+## most of these are lame anyway. 
+
+## Do the same but reverse it! 
+
+## remove SUB from species name for a cleaner look 
+dat$species = gsub("SUB-", "", dat$species)
+p =
+  ggplot(dat[grepl("SUB-Large_Carn", dat$guild_pair) & dat$mean > -4,], aes(x = mean, y = species, fill = neg_vs_pos2)) +
+    geom_density_ridges(scale = 1, alpha = .8) +
+    # stat_density_ridges(quantile_lines = TRUE, quantiles = 0.5, alpha = .8, scale = 1)+
+    theme_ridges() +
+    scale_fill_manual(values = color_values) +
+    labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL)
+# ggsave("figures/Histogram_Ridgeline_species_interaction_value_large_carnivores_subordinate_20230629.png",p,
+#        width = 10, height = 8, units = "in")
+
+
+rm(dat, p, sum, color_values)
+
+#
 ######### Visualize PPC plots ########
 
 ## Will generate two plots, 2 w/ the scatter (one for dom and one for sub) and 1 w/ the bars 

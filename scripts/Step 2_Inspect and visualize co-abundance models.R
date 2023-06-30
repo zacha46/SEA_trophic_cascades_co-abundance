@@ -376,6 +376,139 @@ preform[preform$Species_Pair == "SUB-Tapirus_indicus~DOM-Panthera_tigris",
 preform[preform$Species_Pair == "SUB-Panthera_tigris~DOM-Tapirus_indicus", 
         c("Interaction_Estimate","lower","upper", "Significance")] # unclear negative effect of taps on tigers. 
 
+## We would move in favor of the larger and more significant response --> 
+## tigers possibly bottom-up limited by taps, but both could be sharing responses to unmeasured covarites.  
+
+## Make a plot comparing both interactions (i.e. when large carnivores are dominant AND subordinate)
+## to determine direction of relationship for each species pairs 
+plots = list() #store plots here
+
+## First, create a dom + sub species column 
+coeff <- within(coeff, {
+  sub_sp <- sapply(strsplit(Species_Pair, "~"), function(x) x[1])
+  dom_sp <- sapply(strsplit(Species_Pair, "~"), function(x) x[2])
+})
+coeff$dom_sp = gsub("DOM-", "", coeff$dom_sp)
+coeff$sub_sp = gsub("SUB-", "", coeff$sub_sp)
+
+
+for(i in 1:length(unique(coeff$Species_Pair))){
+  
+  ## grab the name of the species pair 
+  n = unique(coeff$Species_Pair)[i]
+  
+  ##subset coeff for it 
+  a = coeff[coeff$Species_Pair == n, ]
+  
+  # and for the the complementary species pair data.
+  b = subset(coeff, sub_sp == unique(a$dom_sp) & dom_sp == unique(a$sub_sp))
+ 
+  ## then combine
+  dat = rbind(a[a$var == "Species_Interaction",],
+              b[b$var == "Species_Interaction",])
+  
+  ## add a col for which position by looking for all dominant large carnivores
+  dat$dom_position = ifelse(dat$dom_sp %in% c("Canis_lupus_familiaris","Panthera_tigris",
+                                              "Panthera_pardus","Neofelis_genus",
+                                              "Cuon_alpinus"),
+                            "Large_carnivore", "Prey")
+  
+  ## set the dom_pos as a factor 
+  # dat$dom_position = factor(dat$dom_position, levels = c( "Large_carnivore", "Prey"))
+  
+  # Add a column for significance marker
+  dat$marker <- ifelse(dat$sig == "Significant", "*", "")
+  
+  ## combine both species pairs for the ID
+  id = paste(dat$Species_Pair[1], dat$Species_Pair[2], sep = " & ")
+  
+  ## combine dom and sub species for a title 
+  title = paste(dat$dom_sp[1], dat$sub_sp[1], sep = " & ")
+  
+  ## set bar dodge width 
+  dodge_width = 0.8
+  
+  ## make the plot
+  p = 
+    ggplot(dat, aes(x = var, y = mean, fill = dom_position)) +
+    geom_bar(stat = "identity", position = position_dodge(width = dodge_width), color = "black", width = dodge_width) +
+    geom_errorbar(aes(ymin = lower, ymax = upper), position = position_dodge(width = dodge_width), width = 0, color = "black") +
+    geom_text(aes(y = mean+.2*sign(mean), label = marker), position = position_dodge(width = dodge_width), size = 8) +
+    geom_hline(yintercept = 0)+
+    scale_fill_manual(values = c("Prey" = "mediumslateblue", "Large_carnivore" = "mediumseagreen")) +
+    labs(x = "Species Interaction Estimate", y = "Mean Effect Size", fill = "Dominant Guild", title = title) +
+    theme_test()+
+    theme(
+      axis.text.y = element_text(size = 12), # Increase y-axis tick label font size
+      axis.text.x = element_blank() 
+    )
+  
+  ## save it
+  plots[[i]] = p
+  names(plots)[i] = id
+  
+}
+rm(p,i,dodge_width, a,b, title, n, id, dat)
+
+names(plots)
+plots[[585]] # NA in title means there was no complementary model 
+
+## remove plots w/ NA
+plots = plots[!grepl("NA", names(plots))]
+plots$`SUB-Geokichla_citrina~DOM-Cuon_alpinus & SUB-Cuon_alpinus~DOM-Geokichla_citrina` # its working! 
+plots$`SUB-Cuon_alpinus~DOM-Geokichla_citrina & SUB-Geokichla_citrina~DOM-Cuon_alpinus` # also working, but need to remove redundant graphs! 
+
+## Chat GPT to the resuce?
+# Function to sort and concatenate species pairs in canonical form
+getCanonicalForm <- function(label) {
+  sorted_pairs <- sort(strsplit(label, " & ")[[1]])
+  return(paste(sorted_pairs, collapse = " & "))
+}
+
+# Get the canonical forms of the plot labels
+canonical_labels <- sapply(names(plots), getCanonicalForm)
+
+# Identify duplicate plots based on canonical labels
+duplicate_indices <- duplicated(canonical_labels)
+
+# Remove duplicate plots
+plots <- plots[!duplicate_indices]
+
+names(plots) # seems better! 
+plots$`SUB-Panthera_pardus~DOM-Elephas_maximus & SUB-Elephas_maximus~DOM-Panthera_pardus` # good + interesting result
+plots$`SUB-Cuon_alpinus~DOM-Elephas_maximus & SUB-Elephas_maximus~DOM-Cuon_alpinus` # its working! 
+
+## keep it clean
+rm(getCanonicalForm, canonical_labels, duplicate_indices)
+
+
+## save each of these graphs! 
+for(i in 1:length(plots)){
+  
+  # select one plot 
+  p = plots[[i]]
+  
+  # Isolate the relevant species pair
+  id = str_split(names(plots)[i], " & ")[[1]][1]
+  id = paste((str_split(id, "~")[[1]]), collapse=" & ")
+  id = gsub("SUB-", "", id)
+  id = gsub("DOM-", "", id)
+  
+  # grab today's date
+  day<-str_sub(Sys.Date(),-2)
+  month<-str_sub(Sys.Date(),-5,-4)
+  year<-str_sub(Sys.Date(),-10,-7)
+  date = paste(year,month,day, sep = "")
+  
+  # construct a saving path 
+  path = paste("figures/Double pairwise species interaction comparison/", id, "_", date, ".png", sep = "")
+  
+  # save it! 
+  ggsave(path, p, width = 6, height = 5, units = "in")
+
+  
+}
+rm(p, path, day, month, year, date, id, i)
 
 #
 ##

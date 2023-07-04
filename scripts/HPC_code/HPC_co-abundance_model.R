@@ -25,7 +25,7 @@ setting = Sys.getenv("SETTING")
 
 ### Determine what MCMC settings you want to run here-
 # setting = "SHORT"           # 2.5 hrs
-# setting = "MIDDLE"          # 36-49 hrs
+# setting = "MIDDLE"          # 36-49 hrs, with a few (3) models exceeding 85 hours! 
 # setting = "LONG"            # ?? hrs 
 # setting = "PUBLICATION"     # ~6000+ min ??
 

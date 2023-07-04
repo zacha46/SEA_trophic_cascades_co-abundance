@@ -97,10 +97,13 @@ str(coeff)
 rm(coeff.res)
 
 
-### Inspect which species pairs are present/missing, 20230615
-setdiff(all_combos, coeff$Species_Pair) # only 20 missing models!! This is an improvement, but still check. 
-which(all_combos == "SUB-Rusa_unicolor~DOM-Cuon_alpinus") # currently re-running on HPC
-which(all_combos == "SUB-Echinosorex_gymnura~DOM-Panthera_pardus") # 2nd fix made this work! 
+### Inspect which species pairs are present/missing, 20230704
+setdiff(all_combos, coeff$Species_Pair) # only 4 missing models!! This is a huge improvement, but still check. 
+which(all_combos == "SUB-Canis_lupus_familiaris~DOM-Lophura_bulweri") # exceeded 85 hour wall time! 
+which(all_combos == "SUB-Panthera_pardus~DOM-Muntiacus_genus") # exceeded 85 hour wall time! 
+which(all_combos == "SUB-Trichys_fasciculata~DOM-Neofelis_genus") # Error in node y.sub[665,4], Node inconsistent with parents
+which(all_combos == "SUB-Tupaia_genus~DOM-Neofelis_genus") # exceeded 85 hour wall time! 
+
 
 ### Long-story-short, I found out they all had problem SUs from DVCA that contained 14+ active cams 
 ## --> removed all SUs w/ > 14 cameras and re-run analysis. 
@@ -136,7 +139,7 @@ anyNA(preform) # Must be F
 ## assess which models are completed
 preform$mod_completion = "uncompleted"
 preform$mod_completion[preform$Species_Pair %in% coeff$Species_Pair] = "completed"
-table(preform$mod_completion) # only 3.4% of models have failed! Epic improvement. 
+table(preform$mod_completion) # <1% of models have failed! Epic improvement. 
 
 #
 ##
@@ -227,14 +230,14 @@ ppc_values = do.call(rbind, ppc_res$values)
 head(ppc_values) 
 ppc_values$X = NULL # damn row names 
 str(ppc_values) # looks good! 
+summary(ppc_values$Rhat) # looks decent! 
+nrow(ppc_values[ppc_values$Rhat > 1.2,])/nrow(ppc_values) * 100 # 3/4ths of mods have good interaction param. 
 
 # remove list now that were all stored in dfs. 
 rm(ppc_res)
 
 ### Inspect which species pairs are present/missing, 20230615
-setdiff(all_combos, ppc_values$Species_Pair) #44 missing models, certainly an improvement! 7% of mods are missing. 
-## See Quick trouble shooting pt2, 20230615 for trouble shooting missing combos
-## Long story short, I needed to reduce num_active_cams to < 7 for models to converge --> on the way to better results! 
+setdiff(all_combos, ppc_values$Species_Pair) #4 missing models, same as above
 
 
 ######## Import co-abundance prediction dataframes ######
@@ -313,17 +316,20 @@ preform$BPV_valid = "No"
 preform$BPV_valid[preform$BPV.dom >= 0.25 & preform$BPV.dom <= 0.75 &
                     preform$BPV.sub >= 0.25 & preform$BPV.sub <= 0.75] = "Yes"
 table(preform$BPV_valid) # mostly invalid rn, but thats w/ short settings. 
+## Still mostly invalid with middle settings. 70% are not a good fit. 
 
 ## add a column denoting if overdispersion remains
 preform$OD_valid = "No"
 preform$OD_valid[preform$Chat.dom >= 0.98 & preform$Chat.dom <= 1.1 &
                      preform$Chat.sub >= 0.98 & preform$Chat.sub <= 1.1] = "Yes"
 table(preform$OD_valid) # mostly OD, but thats w/ short settings. TBH, better preformance than expected w/ low settings. 
+## Middle settings are very good, 91% have no OD
 
 ## add a column denoting if the species interaction parameter converged 
 preform$parameter_valid = "No"
-preform$parameter_valid[preform$Rhat >= 0.99 & preform$Rhat < 1.2] = "Yes"
+preform$parameter_valid[preform$Rhat >= 0.99 & preform$Rhat <= 1.2] = "Yes"
 table(preform$parameter_valid) # majority is valid! Thats exciting! Should be better w/ more reps. 
+## Middle settings are good, 76% have good interaction parameters 
 
 ## Finally, use all of this information to denote if the overall model is valid and should be trusted
 preform$mod_valid = "No"
@@ -331,6 +337,7 @@ preform$mod_valid[preform$BPV_valid == "Yes" &
                     preform$OD_valid == "Yes" &
                     preform$parameter_valid == "Yes"] = "Yes"
 table(preform$mod_valid) # Vast majority are NOT valid, but this checks out b/c of short settings. 
+## middle settings have 25% of all mods as totally valid --> improvement! 
 
 ## Save which species pairs are valid to examine data later
 valid_mods = preform$Species_Pair[preform$mod_valid == "Yes"]
@@ -357,7 +364,8 @@ preform$Species_Pair[preform$Interaction_Estimate < 0 &
                        preform$Significance == "Significant" &
                        preform$mod_valid == "Yes" &
                        grepl("DOM-Large_Carnivore", preform$guild_pair)] 
-# only three! 
+
+# only 9 with middle settings 
 # c("SUB-Lophura_nycthemera~DOM-Panthera_tigris", "SUB-Sus_barbatus~DOM-Cuon_alpinus", "SUB-Trichys_fasciculata~DOM-Panthera_tigris")
 
 ## Curious to see what happens w/ mods w/ higher MCMC settings. 
@@ -857,7 +865,7 @@ dat$dom_species = gsub("DOM-", "", dat$dom_species)
 
 ## guild pair histogram
 p = 
-  ggplot(dat[grepl("DOM-Large_Carn", dat$guild_pair) & dat$mean > -4,], aes(x = mean, y = dom_species, fill = neg_vs_pos2)) +
+  ggplot(dat[grepl("DOM-Large_Carn", dat$guild_pair),], aes(x = mean, y = dom_species, fill = neg_vs_pos2)) +
   geom_density_ridges(scale = 1, alpha = .8) +
   # stat_density_ridges(quantile_lines = TRUE, quantiles = 0.5, alpha = .8, scale = 1)+
   theme_ridges() +
@@ -869,14 +877,24 @@ p =
 
 ## This looks WAY better when we exclude models > -4, but were excluding 19 mods... 
 length(unique(dat$Species_Pair[grepl("DOM-Large_Carn", dat$guild_pair) & dat$mean < -4]))
-## most of these are lame anyway. 
+
+## inspect 
+check = dat[dat$mean < -4 & dat$sig == "Significant",]
+summary(check$sd) # very large SD! Not good! 
+summary(check$Rhat) # not bad rhats tho 
+table(preform$mod_valid[preform$Species_Pair %in% check$Species_Pair]) # 6 of these mods w/ huge estimates are valid. 
+
+preform[preform$Species_Pair %in% preform$Species_Pair[preform$Species_Pair %in% check$Species_Pair &
+                                                         preform$mod_valid == "Yes"],]
+## These almost all involve the emerald dove! 
+
 
 ## Do the same but reverse it! 
 
 ## remove SUB from species name for a cleaner look 
 dat$species = gsub("SUB-", "", dat$species)
 p =
-  ggplot(dat[grepl("SUB-Large_Carn", dat$guild_pair) & dat$mean > -4,], aes(x = mean, y = species, fill = neg_vs_pos2)) +
+  ggplot(dat[grepl("SUB-Large_Carn", dat$guild_pair) & dat$mean > -5 & dat$mean < 5 ,], aes(x = mean, y = species, fill = neg_vs_pos2)) +
     geom_density_ridges(scale = 1, alpha = .8) +
     # stat_density_ridges(quantile_lines = TRUE, quantiles = 0.5, alpha = .8, scale = 1)+
     theme_ridges() +

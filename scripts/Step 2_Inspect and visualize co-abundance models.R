@@ -108,6 +108,7 @@ which(all_combos == "SUB-Tupaia_genus~DOM-Neofelis_genus") # exceeded 85 hour wa
 ### Long-story-short, I found out they all had problem SUs from DVCA that contained 14+ active cams 
 ## --> removed all SUs w/ > 14 cameras and re-run analysis. 
 ## 2nd update --> removed all SUs w/ > 7 cameras and re-run analysis with MUCH better performance. 
+## 3rd update --> Seems to be going well! only probelmatic models are excluded (i.e. took too long to run)
 
 ## create a dataframe to track our model performance
 preform = data.frame("Species_Pair" = all_combos,
@@ -230,13 +231,20 @@ ppc_values = do.call(rbind, ppc_res$values)
 head(ppc_values) 
 ppc_values$X = NULL # damn row names 
 str(ppc_values) # looks good! 
+
+## quicky inspect parameter convergence for species interaction parameter
 summary(ppc_values$Rhat) # looks decent! 
 nrow(ppc_values[ppc_values$Rhat > 1.2,])/nrow(ppc_values) * 100 # 3/4ths of mods have good interaction param. 
+# how about sample size?
+summary(coeff$n.eff[coeff$var == "Species_Interaction"]) # this could certainly be improved! 
+length(coeff$n.eff[coeff$var == "Species_Interaction" & 
+                     coeff$n.eff < 100]) / length(coeff$n.eff[coeff$var == "Species_Interaction"]) * 100 # 70% of mods have good sample size. 
+### Seems like middle settings are decent, but definitely not up to snuff! 
 
 # remove list now that were all stored in dfs. 
 rm(ppc_res)
 
-### Inspect which species pairs are present/missing, 20230615
+### Inspect which species pairs are present/missing, 20230704
 setdiff(all_combos, ppc_values$Species_Pair) #4 missing models, same as above
 
 
@@ -286,12 +294,13 @@ str(pred_abund) # looks good!
 rm(predict_res)
 
 
-### Inspect which species pairs are present/missing, 20230615
-setdiff(all_combos, pred_abund$Species_Pair) #496 missing mods! But this is because many are still running on HPC. 
+### Inspect which species pairs are present/missing,  20230704
+setdiff(all_combos, pred_abund$Species_Pair) #4 missing models, same as above
+
 
 ######### Track model performance and validity #######
 
-## Will use the preform data.frame (generated in coefficents import) 
+## Will use the preform data.frame (generated in coefficents import), 
 ## to track which models are robust, working, and converging. 
 
 ## inspect data
@@ -324,6 +333,7 @@ preform$OD_valid[preform$Chat.dom >= 0.98 & preform$Chat.dom <= 1.1 &
                      preform$Chat.sub >= 0.98 & preform$Chat.sub <= 1.1] = "Yes"
 table(preform$OD_valid) # mostly OD, but thats w/ short settings. TBH, better preformance than expected w/ low settings. 
 ## Middle settings are very good, 91% have no OD
+## I bet this is because active_cams + RE for source are actually good for detection models... less reliance on ODRE
 
 ## add a column denoting if the species interaction parameter converged 
 preform$parameter_valid = "No"
@@ -342,23 +352,6 @@ table(preform$mod_valid) # Vast majority are NOT valid, but this checks out b/c 
 ## Save which species pairs are valid to examine data later
 valid_mods = preform$Species_Pair[preform$mod_valid == "Yes"]
 
-
-#### Summarize results to clearly present them-
-sum = ddply(preform, .(guild_pair), summarize,
-            num_sig_neg_int = sum(Interaction_Estimate < 0 & Significance == "Significant", na.rm = T), # number of significant negative interactions
-            num_sig_pos_int = sum(Interaction_Estimate > 0 & Significance == "Significant", na.rm = T), # number of significant positive interactions
-            num_nonsig_neg_int = sum(Interaction_Estimate < 0 & Significance == "Non-Significant", na.rm = T), # number of NON-significant negative interactions
-            num_nonsig_pos_int = sum(Interaction_Estimate > 0 & Significance == "Non-Significant", na.rm = T), # number of NON-significant positive interactions
-            num_combos = length(unique(Species_Pair)))     # number of different species pairs per guild 
-
-## what is the percent of negative or positive interactions per guild?
-sum$percent_sig_neg = sum$num_sig_neg_int / sum$num_combos * 100
-sum$percent_sig_pos = sum$num_sig_pos_int / sum$num_combos * 100
-sum$percent_nonsig_neg = sum$num_nonsig_neg_int / sum$num_combos * 100
-sum$percent_nonsig_pos = sum$num_nonsig_pos_int / sum$num_combos * 100
-sum
-## Key results! for every guild pairing, there is a higher percentage of positive interactions than negative interactions! 
-
 ## Which species pairs involved large carnivores significantly regulating the abundance of other critters?
 preform$Species_Pair[preform$Interaction_Estimate < 0 & 
                        preform$Significance == "Significant" &
@@ -367,6 +360,7 @@ preform$Species_Pair[preform$Interaction_Estimate < 0 &
 
 # only 9 with middle settings 
 # c("SUB-Lophura_nycthemera~DOM-Panthera_tigris", "SUB-Sus_barbatus~DOM-Cuon_alpinus", "SUB-Trichys_fasciculata~DOM-Panthera_tigris")
+## but a lot more when we exclude the mod_valid part! 
 
 ## Curious to see what happens w/ mods w/ higher MCMC settings. 
 
@@ -386,6 +380,13 @@ preform[preform$Species_Pair == "SUB-Panthera_tigris~DOM-Tapirus_indicus",
 
 ## We would move in favor of the larger and more significant response --> 
 ## tigers possibly bottom-up limited by taps, but both could be sharing responses to unmeasured covarites.  
+
+## what is the difference in the interaction?
+preform$Interaction_Estimate[preform$Species_Pair == "SUB-Tapirus_indicus~DOM-Panthera_tigris"] -
+  preform$Interaction_Estimate[preform$Species_Pair == "SUB-Panthera_tigris~DOM-Tapirus_indicus"] 
+# Again, this is a larger positive difference in interactions, suggesting a positive (bottom-up relaitonship)
+# but make sure to calculate difference when large carnivores are dominant FIRST! (maybe?)
+
 
 ## Make a plot comparing both interactions (i.e. when large carnivores are dominant AND subordinate)
 ## to determine direction of relationship for each species pairs 
@@ -415,6 +416,11 @@ for(i in 1:length(unique(coeff$Species_Pair))){
   dat = rbind(a[a$var == "Species_Interaction",],
               b[b$var == "Species_Interaction",])
   
+  ## bypass models that are missing their complement 
+  if(nrow(dat)<2){
+    next
+  }
+  
   ## add a col for which position by looking for all dominant large carnivores
   dat$dom_position = ifelse(dat$dom_sp %in% c("Canis_lupus_familiaris","Panthera_tigris",
                                               "Panthera_pardus","Neofelis_genus",
@@ -427,6 +433,20 @@ for(i in 1:length(unique(coeff$Species_Pair))){
   # Add a column for significance marker
   dat$marker <- ifelse(dat$sig == "Significant", "*", "")
   
+  ## if there is a large carnivore pairwise comparison,
+  if(length(unique(dat$dom_position)) == 1){
+    
+    # Calculate the difference in effect sizes just by 1-2
+    dat$diff = dat$mean[1] - dat$mean[2]
+    
+    # but if its not two large carnivores, 
+  }else{
+    
+    # Calculate the difference in effect sizes following a standard order
+    dat$diff = dat$mean[dat$dom_position == "Large_carnivore"] - dat$mean[dat$dom_position == "Prey"]
+    
+  }
+  
   ## combine both species pairs for the ID
   id = paste(dat$Species_Pair[1], dat$Species_Pair[2], sep = " & ")
   
@@ -437,11 +457,13 @@ for(i in 1:length(unique(coeff$Species_Pair))){
   dodge_width = 0.8
   
   ## make the plot
-  p = 
+  p =
     ggplot(dat, aes(x = var, y = mean, fill = dom_position)) +
     geom_bar(stat = "identity", position = position_dodge(width = dodge_width), color = "black", width = dodge_width) +
     geom_errorbar(aes(ymin = lower, ymax = upper), position = position_dodge(width = dodge_width), width = 0, color = "black") +
     geom_text(aes(y = mean+.2*sign(mean), label = marker), position = position_dodge(width = dodge_width), size = 8) +
+    geom_text(aes(y = .04, label = round(Rhat, 2)), position = position_dodge(width = dodge_width), size = 3,  hjust = -.3) +
+    geom_text(aes(y = max(upper), x = 1, label = paste("Difference =", round(unique(diff),2))), size = 4, vjust = 1, hjust = 1) +  
     geom_hline(yintercept = 0)+
     scale_fill_manual(values = c("Prey" = "mediumslateblue", "Large_carnivore" = "mediumseagreen")) +
     labs(x = "Species Interaction Estimate", y = "Mean Effect Size", fill = "Dominant Guild", title = title) +
@@ -459,10 +481,10 @@ for(i in 1:length(unique(coeff$Species_Pair))){
 rm(p,i,dodge_width, a,b, title, n, id, dat)
 
 names(plots)
-plots[[585]] # NA in title means there was no complementary model 
+plots[[593]] # "" in title means there was no complementary model 
 
 ## remove plots w/ NA
-plots = plots[!grepl("NA", names(plots))]
+plots = plots[names(plots) != ""]
 plots$`SUB-Geokichla_citrina~DOM-Cuon_alpinus & SUB-Cuon_alpinus~DOM-Geokichla_citrina` # its working! 
 plots$`SUB-Cuon_alpinus~DOM-Geokichla_citrina & SUB-Geokichla_citrina~DOM-Cuon_alpinus` # also working, but need to remove redundant graphs! 
 
@@ -521,8 +543,6 @@ rm(p, path, day, month, year, date, id, i)
 #
 ##
 ######### Visualize coefficient effect sizes ###### 
-
-## Should ideally subset availible mods to the valid_mods species pairs before running this! 
 
 ### Will be making two kinds of graphs:
 # 1 comparing the effect sizes for each state variable within each species pair
@@ -657,7 +677,7 @@ for(i in 1:length(sp_pair_coeff_plots)){
   path = paste("figures/", paste(gp, n, sep = "/"), "/model_coefficents_", n, "_", date, ".png", sep = "")
   
   ## save it! 
-  # ggsave(path, p, width = 10.5, height = 6.5, units = "in")
+  ggsave(path, p, width = 10.5, height = 6.5, units = "in")
   
 }
 rm(p,n,gp,i,path,day,month,year,date)
@@ -712,7 +732,7 @@ ggplot(dat, aes(x = mean))+
   labs(x = "Mean Species Interaction Value", y = "Frequency", fill = NULL, title = "All species pairs")
 
 ## save it!
-# ggsave("figures/Histogram_species_interaction_value_ALL_species_pairs_20230626.png", p, 
+# ggsave("figures/Grouped Histograms/Histogram_species_interaction_value_ALL_species_pairs_20230713.png", p,
 #        width = 12, height = 8, units = "in")
 rm(median_value, y_position, p, pos)
 
@@ -754,7 +774,7 @@ for(i in 1:length(unique(coeff$guild_pair))){
   date = paste(year,month,day, sep = "")
   
   # construct a saving path 
-  path = paste("figures/", gp, "/Histogram_species_interaction_values_", gp, "_", date, ".png", sep = "")
+  path = paste("figures/Grouped Histograms/Histogram_species_interaction_values_", gp, "_", date, ".png", sep = "")
   
   ## save it 
   ggsave(path, p, width = 12, height = 8, units = "in")
@@ -790,7 +810,7 @@ p =
   theme_test()+
   labs(x = "Mean Species Interaction Value", y = "Frequency", fill = NULL, title = "Large carnivores are dominant")
 # # save it!
-# ggsave("figures/Histogram_species_interaction_value_large_carnivores_dominant_20230626.png", p,
+# ggsave("figures/Grouped Histograms/Histogram_species_interaction_value_large_carnivores_dominant_20230713.png", p,
 #        width = 12, height = 8, units = "in")
 
  
@@ -819,7 +839,7 @@ p =
   theme_test()+
   labs(x = "Mean Species Interaction Value", y = "Frequency", fill = NULL, title = "Large carnivores are subordinate")
 # # save it!
-# ggsave("figures/Histogram_species_interaction_value_large_carnivores_subordinate_20230626.png", p,
+# ggsave("figures/Grouped Histograms/Histogram_species_interaction_value_large_carnivores_subordinate_20230713.png", p,
 #        width = 12, height = 8, units = "in")
 
 ## keep it clean
@@ -831,7 +851,6 @@ rm(p, y_position, pos, median_value, dat, i, day, month, year, date,color_values
 #### Generate Ridgeline histograms per guild pair + per large carnivore
 
 ## The goal here is to condense several of those histograms into a single figure. 
-library(ggridges)
 
 ## first subset coeff to just look at the species interaction value 
 dat = coeff[coeff$var == "Species_Interaction",]
@@ -870,12 +889,12 @@ p =
   # stat_density_ridges(quantile_lines = TRUE, quantiles = 0.5, alpha = .8, scale = 1)+
   theme_ridges() +
   scale_fill_manual(values = color_values) +
-  labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL)
+  labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, title = "Large carnivores are dominant")
 ## save it! 
-# ggsave("figures/Histogram_Ridgeline_species_interaction_value_large_carnivores_dominant_20230629.png",p,
+# ggsave("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_dominant_20230713.png",p,
 #        width = 10, height = 8, units = "in")
 
-## This looks WAY better when we exclude models > -4, but were excluding 19 mods... 
+## This looks WAY better when we exclude models > -4, but were excluding 25 mods... 
 length(unique(dat$Species_Pair[grepl("DOM-Large_Carn", dat$guild_pair) & dat$mean < -4]))
 
 ## inspect 
@@ -886,7 +905,7 @@ table(preform$mod_valid[preform$Species_Pair %in% check$Species_Pair]) # 6 of th
 
 preform[preform$Species_Pair %in% preform$Species_Pair[preform$Species_Pair %in% check$Species_Pair &
                                                          preform$mod_valid == "Yes"],]
-## These almost all involve the emerald dove! 
+## These almost all involve the emerald dove! but there are other critters here too. 
 
 
 ## Do the same but reverse it! 
@@ -894,13 +913,13 @@ preform[preform$Species_Pair %in% preform$Species_Pair[preform$Species_Pair %in%
 ## remove SUB from species name for a cleaner look 
 dat$species = gsub("SUB-", "", dat$species)
 p =
-  ggplot(dat[grepl("SUB-Large_Carn", dat$guild_pair) & dat$mean > -5 & dat$mean < 5 ,], aes(x = mean, y = species, fill = neg_vs_pos2)) +
+  ggplot(dat[grepl("SUB-Large_Carn", dat$guild_pair),], aes(x = mean, y = species, fill = neg_vs_pos2)) +
     geom_density_ridges(scale = 1, alpha = .8) +
     # stat_density_ridges(quantile_lines = TRUE, quantiles = 0.5, alpha = .8, scale = 1)+
     theme_ridges() +
     scale_fill_manual(values = color_values) +
-    labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL)
-# ggsave("figures/Histogram_Ridgeline_species_interaction_value_large_carnivores_subordinate_20230629.png",p,
+    labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, title = "Large carnivores are subordinate")
+# ggsave("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_subordinate_20230629.png",p,
 #        width = 10, height = 8, units = "in")
 
 
@@ -1121,8 +1140,77 @@ for(i in 1:length(unique(pred_abund$Species_Pair))){
  }
 rm(path, p,i, title, n, n_split, gp, est, pred, day, month, year, date)
 
-#
-###### Visualize interaction across community via matrix ######
+######## Summary statistics to describe overall interactions #####
+
+#### Summarize results by guild to clearly present them-
+sum = ddply(preform, .(guild_pair), summarize,
+            num_sig_neg_int = sum(Interaction_Estimate < 0 & Significance == "Significant", na.rm = T), # number of significant negative interactions
+            num_sig_pos_int = sum(Interaction_Estimate > 0 & Significance == "Significant", na.rm = T), # number of significant positive interactions
+            num_nonsig_neg_int = sum(Interaction_Estimate < 0 & Significance == "Non-Significant", na.rm = T), # number of NON-significant negative interactions
+            num_nonsig_pos_int = sum(Interaction_Estimate > 0 & Significance == "Non-Significant", na.rm = T), # number of NON-significant positive interactions
+            num_combos = length(unique(Species_Pair)))     # number of different species pairs per guild 
+
+## what is the percent of negative or positive interactions per guild?
+sum$percent_sig_neg = sum$num_sig_neg_int / sum$num_combos * 100
+sum$percent_sig_pos = sum$num_sig_pos_int / sum$num_combos * 100
+sum$percent_nonsig_neg = sum$num_nonsig_neg_int / sum$num_combos * 100
+sum$percent_nonsig_pos = sum$num_nonsig_pos_int / sum$num_combos * 100
+sum
+## Key results! for every guild pairing and significant interactions, 
+## there is a higher percentage of positive interactions than negative interactions! 
+
+
+## Subset preform for only large carnivores as dominant
+dat = preform[preform$DOM_guild == "Large_Carnivore",]
+unique(dat$dom_species) # good. 
+
+#### Summarize results by large carnivore to clearly present them
+sum_dom_large_carn = ddply(dat, .(dom_species), summarize,
+                           num_sig_neg_int = sum(Interaction_Estimate < 0 & Significance == "Significant", na.rm = T), # number of significant negative interactions
+                           num_sig_pos_int = sum(Interaction_Estimate > 0 & Significance == "Significant", na.rm = T), # number of significant positive interactions
+                           num_nonsig_neg_int = sum(Interaction_Estimate < 0 & Significance == "Non-Significant", na.rm = T), # number of NON-significant negative interactions
+                           num_nonsig_pos_int = sum(Interaction_Estimate > 0 & Significance == "Non-Significant", na.rm = T), # number of NON-significant positive interactions
+                           num_combos = length(unique(Species_Pair)))     # number of different species pairs per dom large carn
+
+## what is the percent of negative or positive interactions per dominant large carnivore?
+sum_dom_large_carn$percent_sig_neg = sum_dom_large_carn$num_sig_neg_int / sum_dom_large_carn$num_combos * 100
+sum_dom_large_carn$percent_sig_pos = sum_dom_large_carn$num_sig_pos_int / sum_dom_large_carn$num_combos * 100
+sum_dom_large_carn$percent_nonsig_neg = sum_dom_large_carn$num_nonsig_neg_int / sum_dom_large_carn$num_combos * 100
+sum_dom_large_carn$percent_nonsig_pos = sum_dom_large_carn$num_nonsig_pos_int / sum_dom_large_carn$num_combos * 100
+sum_dom_large_carn
+## Very interesting! Canis lupus is the only species with more significant negative interactions than any other! 
+
+## which species are feral dogs negetivly affecting?
+preform$sub_species[preform$dom_species == "Canis_lupus_familiaris" &
+                       preform$Interaction_Estimate < 0 &
+                       preform$Significance == "Significant"]
+## very interesting results here! Tigers are suppressed by feral dogs... 
+
+## which guilds are negativly affected by feral dogs?
+table(preform$SUB_guild[preform$dom_species == "Canis_lupus_familiaris" &
+                          preform$Interaction_Estimate < 0 &
+                          preform$Significance == "Significant"])
+## All guilds! But particularly small omnivores. 
+
+## inspect feral dog records
+dog = bdata$`SUB-Amaurornis_genus~DOM-Canis_lupus_familiaris`
+# convert matrix to a df 
+dog = (dog$y.dom)
+dog = apply(dog, 2, as.numeric)
+dog = as.data.frame(dog)
+# grab row names
+dog$SU = rownames(bdata$`SUB-Amaurornis_genus~DOM-Canis_lupus_familiaris`$y.dom)
+# get total counts
+dog$sum_count = rowSums(dog[,1:20], na.rm = T)
+dog$landscape = sub("_\\d+.*", "", dog$SU)
+
+##summarize it all
+dog_sum = ddply(dog, .(landscape), summarize,
+                total_dog_count = sum(sum_count))
+dog_sum
+## There is something here! 
+
+##### Visualize interaction across community via matrix ######
 
 ### THIS PLOT SUCKS, not imformative and hard to make
 ## leaving code here for now, but will probably delete later. 
@@ -1359,7 +1447,7 @@ rm(p, sig,sig_mat, int,int_mat, dat, tmp)
 
 
 
-###### Quick trouble shooting pt1, 20230614 ####
+##### Quick trouble shooting pt1, 20230614 ####
 
 ## Based on coefficent dataframe import, ~20230614
 
@@ -1502,7 +1590,7 @@ check_good$y.dom["Sabah_DVCA_163_2019_c"]
 # also char
 str(check_good$y.sub) # also char
 
-###### Quick trouble shooting pt2, 20230615 ####### 
+##### Quick trouble shooting pt2, 20230615 ####### 
 
 ## Based off PPC data import on 20230615 w/ 44 missing pairs. 
 

@@ -16,12 +16,19 @@ library(plyr)
 library(reshape2) # for making checkerboard matrix 
 library(fs) # for moving files around 
 library(ggridges) # for ridgeline plots 
+library(leaflet) # for creating concepts of study map
+library(colortools) # for nice colors in the map 
+
 
 # library(jagsUI) 
 # library(traitdata) # for species trait data
 
 ## set WD (should be automatic b/c RProj, but being safe anyway)
 setwd("/Users/zachary_amir/Dropbox/Zach PhD/Trophic release project/SEA_trophic_cascades_co-abundance")
+
+## Import original unmodified cam trap data here for referencing
+og_captures = read.csv("data/send_to_HPC/clean_captures_to_make_UMFs_20230615.csv")
+og_meta = read.csv("data/send_to_HPC/clean_metadata_to_make_UMFs_20230616.csv")
 
 
 ######## Import co-abundance coefficent dataframes ######
@@ -1182,8 +1189,9 @@ sum_dom_large_carn
 
 ## which species are feral dogs negetivly affecting?
 preform$sub_species[preform$dom_species == "Canis_lupus_familiaris" &
-                       preform$Interaction_Estimate < 0 &
-                       preform$Significance == "Significant"]
+                      preform$Interaction_Estimate < 0 &
+                      # preform$mod_valid == "Yes" & # There are no sub_species if checking for valid mods! 
+                      preform$Significance == "Significant"]
 ## very interesting results here! Tigers are suppressed by feral dogs... 
 
 ## which guilds are negativly affected by feral dogs?
@@ -1209,6 +1217,103 @@ dog_sum = ddply(dog, .(landscape), summarize,
                 total_dog_count = sum(sum_count))
 dog_sum
 ## There is something here! 
+
+######## Summary statistics to describe overall dataset ######
+
+### effort per survey?
+og_meta$camera_end.date = as.Date(og_meta$camera_end.date, format = "%Y-%m-%d")
+og_meta$camera_start.date = as.Date(og_meta$camera_start.date, format = "%Y-%m-%d")
+
+eff = ddply(og_meta, .(survey_id), summarize,
+            total_eff = sum(effort),
+            dur = as.numeric(difftime(max(camera_end.date), min(camera_start.date), units = "days")))
+
+summary(eff$dur) # mean = 80.25
+sd(eff$dur) # sd = 30.16
+
+rm(eff)
+
+### how many detections of our study species 
+nrow(og_captures[og_captures$Species %in% preform$sub_species,])
+
+
+#### We can also make a study map (coneptually) w/ the original metadata
+
+## first make a map for the whole study area
+
+#Genereate colour scheme as factor
+category <- "Landscape" #What should we use as our category to generate colours for now survey ID
+colour <- "lightgreen"# Define a colour from the R options to base the colourscheme
+
+## make it a factor now 
+og_meta$Landscape <- as.factor(og_meta$Landscape)
+col.cat <- wheel(colour, num = length(levels(og_meta$Landscape)))
+og_meta$Cols <- col.cat[og_meta$Landscape]
+
+
+## make the map! 
+leaflet() %>%
+  # Add base map data
+  addProviderTiles(providers$Esri.WorldImagery, group="Satellite") %>%  
+  addCircleMarkers(lng= og_meta$Avg_Longitude, #Add Longitude
+                   lat= og_meta$Avg_Latitude, #Add latitude
+                   color= og_meta$Cols
+                   ) %>%
+  # Add a legend
+  addLegend("topleft", colors = col.cat,
+            labels = levels(og_meta$Landscape),
+            title = category,
+            labFormat = labelFormat(prefix = "$"),
+            opacity = 1,
+            group = "Legend") %>%
+  # Add a scale bar
+  addScaleBar(
+    position = c("bottomleft")) %>%
+  # Layers control
+  addLayersControl(
+    overlayGroups = "Legend",
+    options = layersControlOptions(collapsed = FALSE)
+  )
+
+### Now subset the data for just the Thai E forest complex
+thai = og_meta[grepl("Thai_E_FC_", og_meta$Landscape),]
+
+#Genereate colour scheme as factor for data source
+category <- "Landscape" #What should we use as our category to generate colours for now survey ID
+colour <- "lightgreen"# Define a colour from the R options to base the colourscheme
+
+## make it a factor now 
+thai$source <- as.factor(thai$source)
+col.cat <- wheel(colour, num = length(levels(thai$source)))
+thai$Cols <- col.cat[thai$source]
+
+
+## make the map! 
+leaflet() %>%
+  # Add base map data
+  addProviderTiles(providers$Esri.WorldImagery, group="Satellite") %>%  
+  addCircleMarkers(lng= thai$Avg_Longitude, #Add Longitude
+                   lat= thai$Avg_Latitude, #Add latitude
+                   color= thai$Cols
+  ) %>%
+  # Add a legend
+  addLegend("topleft", colors = col.cat,
+            labels = levels(thai$source),
+            title = category,
+            labFormat = labelFormat(prefix = "$"),
+            opacity = 1,
+            group = "Legend") %>%
+  # Add a scale bar
+  addScaleBar(
+    position = c("bottomleft")) %>%
+  # Layers control
+  addLayersControl(
+    overlayGroups = "Legend",
+    options = layersControlOptions(collapsed = FALSE)
+  )
+
+
+
 
 ##### Visualize interaction across community via matrix ######
 

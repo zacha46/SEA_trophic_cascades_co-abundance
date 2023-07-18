@@ -30,7 +30,7 @@ setting = Sys.getenv("SETTING")
 # setting = "PUBLICATION"     # ~6000+ min ??
 
 #### Import the already formatted data
-dat = readRDS("data/co-abundance/Bundled_data_for_Bayes_co-abundance_mods_610_species_pairs_20230617.RDS")
+dat = readRDS("data/co-abundance/Bundled_data_for_Bayes_co-abundance_mods_435_species_pairs_20230718.RDS")
 
 ## Thin to a single species pair
 bdata = dat[[slurm]]
@@ -61,12 +61,13 @@ bdata$y.sub = apply(bdata$y.sub, 2, as.numeric)
 bdata$cams = apply(bdata$cams, 2, as.numeric)
 
 ## if results are not already present, start the models! 
-print(paste("Begining to run co-abundance model for: ", n, " starting at ", Sys.time(), sep = ""))
+print(paste("Begining to run co-abundance model for: ", n, " with MCMC settings: ", setting ,
+            " and is starting at ", Sys.time(), sep = ""))
 
 
 ####### Make the model in BUGS language and run it ####
 
-cat(file = "ZDA_Co_Abundance_Model_20230615.jags", 
+cat(file = "ZDA_Co_Abundance_Model_20230718.jags", 
     
     "model{
 
@@ -84,7 +85,10 @@ cat(file = "ZDA_Co_Abundance_Model_20230615.jags",
     
     # Elev
     a3[i] ~ dnorm(0, 0.01)
-      
+  
+    # Hunt
+    a4[i] ~ dnorm(0, 0.01)
+  
     # Det intercept
     b0[i] ~ dnorm(0, 0.01)
     
@@ -98,33 +102,33 @@ cat(file = "ZDA_Co_Abundance_Model_20230615.jags",
     }
     
   ## Species interaction
-  a4 ~ dnorm(0, 0.01)
+  a5 ~ dnorm(0, 0.01)
     
   # Landscape RE hyper prior --> define it's variance
-  sigma.a5 ~ dunif(0,5)
-  var.a5 <- 1/(sigma.a5*sigma.a5) 
-    
   sigma.a6 ~ dunif(0,5)
-  var.a6 <- 1/(sigma.a6*sigma.a6)
+  var.a6 <- 1/(sigma.a6*sigma.a6) 
+    
+  sigma.a7 ~ dunif(0,5)
+  var.a7 <- 1/(sigma.a7*sigma.a7)
     
   for (k in 1:narea) {
       
-    a5[k] ~ dnorm(0,var.a5)
     a6[k] ~ dnorm(0,var.a6)
+    a7[k] ~ dnorm(0,var.a7)
       
   }
   
   # year RE hyper prior --> define it's variance
-  sigma.a7 ~ dunif(0,5)
-  var.a7 <- 1/(sigma.a7*sigma.a7)
-
   sigma.a8 ~ dunif(0,5)
   var.a8 <- 1/(sigma.a8*sigma.a8)
 
+  sigma.a9 ~ dunif(0,5)
+  var.a9 <- 1/(sigma.a9*sigma.a9)
+
   for (k in 1:nyear) {
 
-    a7[k] ~ dnorm(0,var.a7)
     a8[k] ~ dnorm(0,var.a8)
+    a9[k] ~ dnorm(0,var.a9)
 
   }
   
@@ -150,12 +154,12 @@ cat(file = "ZDA_Co_Abundance_Model_20230615.jags",
     # Abundance of Subordinate Species w/ iZIP
     N.sub[j] ~ dpois(lambda.sub[j] * Z.sub[j])
 
-      log(lambda.sub[j]) <- a0[1] + a1[1]*flii[j] + a2[1]*hfp[j] + a3[1]*elev[j] + a4*N.dom[j] + a5[area[j]] + a7[year[j]]
+      log(lambda.sub[j]) <- a0[1] + a1[1]*flii[j] + a2[1]*hfp[j] + a3[1]*elev[j] + a4[1]*hunt[j] + a5*N.dom[j] + a6[area[j]] + a8[year[j]]
     
     # Abundance of Dominant Species w/ iZIP 
     N.dom[j] ~ dpois(lambda.dom[j] * Z.dom[j])
     
-      log(lambda.dom[j]) <- a0[2] + a1[2]*flii[j] + a2[2]*hfp[j] + a3[2]*elev[j] + a6[area[j]] + a8[year[j]]
+      log(lambda.dom[j]) <- a0[2] + a1[2]*flii[j] + a2[2]*hfp[j] + a3[2]*elev[j] + a4[2]*hunt[j] + a7[area[j]] + a9[year[j]]
                       
                       
     # Observation model for counts per replicated observation with OD params 
@@ -236,29 +240,29 @@ cat(file = "ZDA_Co_Abundance_Model_20230615.jags",
 
 
 ### Specify the parameters to be monitored.
-params = c('a0', 'a1', 'a2', 'a3', 'a4',    # Abundance parameters
-           'b0',  'b2',                     # Detection parameters
-           'var.a5','var.a6','a5', 'a6',    # Landscape random effects
-           'var.a7','var.a8','a7', 'a8',    # Year random effects
-           'var.b3','var.b4','b3', 'b4',    # source random effects
-           "tau.p","eps.p.dom","eps.p.sub", # OD params
-           "fit.sub", "fit.rep.sub",        # Chi2 stat for sub, real then simulated
-           "fit.dom", "fit.rep.dom",        # Chi2 stat for dom, real then simulated
+params = c('a0', 'a1', 'a2', 'a3', 'a4', 'a5',    # Abundance parameters
+           'b0',  'b2',                           # Detection parameters
+           'var.a6','var.a7','a6', 'a7',          # Landscape random effects
+           'var.a8','var.a9','a8', 'a9',          # Year random effects
+           'var.b3','var.b4','b3', 'b4',          # source random effects
+           "tau.p","eps.p.dom","eps.p.sub",       # OD params
+           "fit.sub", "fit.rep.sub",              # Chi2 stat for sub, real then simulated
+           "fit.dom", "fit.rep.dom",              # Chi2 stat for dom, real then simulated
            "E.dom", "E.rep.dom",
            "E.sub", "E.rep.sub",
-           "N.dom", "N.sub")                # Abundance per site, for making graphs?   
+           "N.dom", "N.sub")                      # Abundance per site, for making graphs?   
 
 
 # Specify the initial values
 inits = function() {
-  list(a0=rnorm(2), a1=rnorm(2), a2=rnorm(2), a3=rnorm(2), a4=rnorm(1), 
+  list(a0=rnorm(2), a1=rnorm(2), a2=rnorm(2), a3=rnorm(2), a4=rnorm(2), a5=rnorm(1),
        b0=rnorm(2), b2=rnorm(2),
        sd.p = runif(2, .4, .8), # Experimented and medium values seem to produce better convergence.
-       a5=rnorm(bdata$narea), a6=rnorm(bdata$narea),
-       a7=rnorm(bdata$nyear), a8=rnorm(bdata$nyear),
+       a6=rnorm(bdata$narea), a7=rnorm(bdata$narea),
+       a8=rnorm(bdata$nyear), a9=rnorm(bdata$nyear),
        b3=rnorm(bdata$nsource), b4=rnorm(bdata$nsource),
-       sigma.a5= runif(1, 3, 5), sigma.a6= runif(1, 3, 5), #crashes w/ inits >= 6, and has better convergence > 2
-       sigma.a7= runif(1, 3, 5), sigma.a8= runif(1, 3, 5), #havent explored these values at all.
+       sigma.a6= runif(1, 3, 5), sigma.a7= runif(1, 3, 5), #crashes w/ inits >= 6, and has better convergence > 2
+       sigma.a8= runif(1, 3, 5), sigma.a9= runif(1, 3, 5), #havent explored these values at all.
        sigma.b3= runif(1, 3, 5), sigma.b4= runif(1, 3, 5), #havent explored these values at all.
        N.sub = as.vector(apply(bdata$y.sub ,1,max, na.rm=T)),   
        N.dom = as.vector(apply(bdata$y.dom ,1,max, na.rm=T)),
@@ -269,22 +273,22 @@ inits = function() {
 
 # MCMC settings, based on assignment above
 if(setting == "SHORT"){
-  ni <- 3000; nt <- 20; nb <- 1000; nc <- 3 # quick test to make sure code works, ~26 min
+  ni <- 3000; nt <- 20; nb <- 1000; nc <- 3 # quick test to make sure code works
 }
 if(setting == "MIDDLE"){
-  ni = 50000; nt = 50; nb = 10000 ; nc = 3 # ~?? hours, examine parameter values--> use this for prelim testing.
+  ni = 50000; nt = 50; nb = 10000 ; nc = 3 #examine parameter values--> use this for prelim testing.
 }
 if(setting == "LONG"){
-  ni <- 100000; nt <- 400; nb <- 15000; nc <- 3 # examine parameter values, ~?? minutes
+  ni <- 100000; nt <- 400; nb <- 15000; nc <- 3 # examine parameter values
 }
 if(setting == "PUBLICATION"){
-  ni <- 1000000; nt <- 80; nb <- 200000; nc <- 3 # publication-quality run, recommended by K&R, ~6000+ min
+  ni <- 1000000; nt <- 80; nb <- 200000; nc <- 3 # publication-quality run, recommended by K&R
 }
 
 start = Sys.time()
 
 ### Run the model 
-mod = jags(bdata, inits, params, "ZDA_Co_Abundance_Model_20230615.jags",
+mod = jags(bdata, inits, params, "ZDA_Co_Abundance_Model_20230718.jags",
             n.chains = nc, n.thin = nt, n.iter = ni, n.burnin = nb, parallel = T)
 
 end = Sys.time()
@@ -312,16 +316,16 @@ s = s[!grepl("N.", s$var),] # dont need b/c its estimated later
 
 # Add sub species name
 s$species[grepl("\\[1]", s$var)] = str_split(n, "~")[[1]][1]  
-s$species[grepl("a5", s$var)] = str_split(n, "~")[[1]][1] #landscape RE
-s$species[grepl("a7", s$var)] = str_split(n, "~")[[1]][1] #year RE
+s$species[grepl("a6", s$var)] = str_split(n, "~")[[1]][1] #landscape RE
+s$species[grepl("a8", s$var)] = str_split(n, "~")[[1]][1] #year RE
 s$species[grepl("b3", s$var)] = str_split(n, "~")[[1]][1] #source RE
 s$species[grepl("sub", s$var)] = str_split(n, "~")[[1]][1]  
-s$species[s$var == "a4"] = str_split(n, "~")[[1]][1] # interaction 
+s$species[s$var == "a5"] = str_split(n, "~")[[1]][1] # interaction 
 
 # Add dom species name
 s$species[grepl("\\[2]", s$var)] = str_split(n, "~")[[1]][2]
-s$species[grepl("a6", s$var)] = str_split(n, "~")[[1]][2] # landscape RE
-s$species[grepl("a8", s$var)] = str_split(n, "~")[[1]][2] # year RE
+s$species[grepl("a7", s$var)] = str_split(n, "~")[[1]][2] # landscape RE
+s$species[grepl("a9", s$var)] = str_split(n, "~")[[1]][2] # year RE
 s$species[grepl("b4", s$var)] = str_split(n, "~")[[1]][1] #source RE
 s$species[grepl("dom", s$var)] = str_split(n, "~")[[1]][2]
 
@@ -330,7 +334,8 @@ s$var[grepl("a0", s$var)]= "Abundance_intercept"
 s$var[grepl("a1", s$var)]= "FLII"
 s$var[grepl("a2", s$var)]= "HFP"
 s$var[grepl("a3", s$var)]= "Elevation"
-s$var[grepl("a4", s$var)]= "Species_Interaction"
+s$var[grepl("a4", s$var)]= "Hunting"
+s$var[grepl("a5", s$var)]= "Species_Interaction"
 
 s$var[grepl("b0", s$var)]= "Detection_intercept"
 s$var[grepl("b2", s$var)]= "Active_cams"
@@ -341,10 +346,10 @@ s$sig[s$overlap0 == 1] = "Non-Significant"
 s$overlap0 = NULL
 
 ## REs
-s$var[grepl("a5", s$var)] = gsub("a5", "Landscape", s$var[grepl("a5", s$var)])
 s$var[grepl("a6", s$var)] = gsub("a6", "Landscape", s$var[grepl("a6", s$var)])
-s$var[grepl("a7", s$var)] = gsub("a7", "Year", s$var[grepl("a7", s$var)])
+s$var[grepl("a7", s$var)] = gsub("a7", "Landscape", s$var[grepl("a7", s$var)])
 s$var[grepl("a8", s$var)] = gsub("a8", "Year", s$var[grepl("a8", s$var)])
+s$var[grepl("a9", s$var)] = gsub("a9", "Year", s$var[grepl("a9", s$var)])
 s$var[grepl("b3", s$var)] = gsub("b3", "Source", s$var[grepl("b3", s$var)])
 s$var[grepl("b4", s$var)] = gsub("b4", "Source", s$var[grepl("b4", s$var)])
 
@@ -374,7 +379,7 @@ print(paste("Finished generating coefficent dataframe for: ", n, " at ", Sys.tim
 bdata = dat[[slurm]]
 
 ## We will need the metadata here to grab accurate landscape ID's 
-covars = read.csv("data/ZDA_UMF/clean_metadata_to_make_UMFs_20230616.csv")
+covars = read.csv("data/ZDA_UMF/clean_metadata_to_make_UMFs_20230718.csv")
 
 ## Thin covars to match sampling units in species matrixs
 covars = covars[covars$cell_id_3km %in% rownames(bdata$y.dom),]
@@ -406,6 +411,7 @@ est.dat[1:length(colMeans(mod$sims.list$N.sub)), 9] = n
 flii = bdata$flii
 hfp = bdata$hfp
 elev = bdata$elev
+hunt = bdata$hunt
 
 # extract the dominant species abundance from the model and vary it across the observed range
 int = colMeans(mod$sims.list$N.dom)
@@ -414,11 +420,11 @@ int = seq(from = min(int), to = max(int), length.out = length(colMeans(mod$sims.
 
 # Extract average overall landscape random effect
 # for the subordinate species  across all landscapes
-land = mod$sims.list$a5 # all RE values for each simulation of MCMC
+land = mod$sims.list$a6 # all RE values for each simulation of MCMC
 land = colMeans(land) # average RE value per landscape
 
 # do the same for year
-yr = mod$sims.list$a7
+yr = mod$sims.list$a8
 yr = colMeans(yr)
 
 #Create empty df to fill predictions per row
@@ -427,11 +433,13 @@ pred.dat = matrix(NA, nrow = length(int), ncol = 7)
 for(l in 1:length(int)){ 
   
   ## Species interaction prediction
-  p = mod$sims.list$a0[,1] +  #Let abundance intercept vary
-    mod$sims.list$a1[,1] * mean(flii) + #hold FLII constant 
-    mod$sims.list$a2[,1] * mean(hfp) + #hold HFP constant
-    mod$sims.list$a3 * int[l] + #vary predator abundance
-    land + yr #hold REs constant
+  p = mod$sims.list$a0[,1] +             #Let abundance intercept vary
+    mod$sims.list$a1[,1] * mean(flii) +  #hold FLII constant 
+    mod$sims.list$a2[,1] * mean(hfp) +   #hold HFP constant
+    mod$sims.list$a3[,1] * mean(elev) +  #hold elev constant
+    mod$sims.list$a4[,1] * mean(hunt) +  #hold hunting constant
+    mod$sims.list$a5 * int[l] +          #vary predator abundance
+    land + yr                            #hold REs constant
   
   ## Back-transform from Poisson distribution
   p = exp(p)

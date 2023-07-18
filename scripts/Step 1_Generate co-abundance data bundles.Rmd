@@ -1,7 +1,7 @@
 ---
 title: "Step 1_Prepare data for bundling"
 author: "Zachary Amir"
-date: "2023-06-16"
+date: "2023-07-18"
 output: html_document
 ---
 
@@ -18,6 +18,7 @@ This code works off the spatially re-sampled captures and covariates that are ge
 ## start fresh
 rm(list = ls())
 
+## load libraries
 library(tidyverse)
 library(here)
 library(plyr)
@@ -294,7 +295,7 @@ keep = keep[! keep$Species %in% c("Scincidae","Small_mammal", "Herpestidae",
 length(keep$Species) # 72 species after removing fluff. 
 rm(sp_count)
 
-### I think these should be good to go! 
+### Looks good, but will remove more species once body weights are accounted for. 
 sort(keep$Species)
 
 ## save it as a vector, not dataframe
@@ -492,6 +493,19 @@ traits$TrophicLevel[traits$scientificNameStd == "Pongo_pygmaeus"] = "Herbivore"
 # make body mass numeric 
 traits$AdultBodyMass_g = as.numeric(traits$AdultBodyMass_g)
 
+## We do NOT want to analyze anything < 1kg in body mass, so remove them here
+# which do we lose?
+sort(traits$scientificNameStd[traits$AdultBodyMass_g < 1000]) 
+## double checked old results for those >500g, and doesnt seem like we will miss much here... REMOVE
+traits = traits[traits$AdultBodyMass_g > 1000,]
+## also remove anything over 1000 kg, which is too large to be preyed upon 
+sort(traits$scientificNameStd[traits$AdultBodyMass_g > 1000000])  # just elephants
+traits = traits[traits$AdultBodyMass_g < 1000000,]
+# thin keep to match 
+keep = keep[keep %in% traits$scientificNameStd]
+
+
+
 ## add small and large to trophic levels 
 traits$TrophicGuild = traits$TrophicLevel
 
@@ -626,11 +640,18 @@ rm(big)
 meta$cams_included_count = str_count(meta$cameras_included, " - ") + 1
 hist(meta$cams_included_count) # classic Poisson
 
-## 14 cams per SU was causing probelms earlier... 
+## > 7 cams per SU was causing probelms earlier... 
 # how many SUs do we lose by exclusing them?
-nrow(meta[meta$cell_id_3km %in% meta$cell_id_3km[meta$cams_included_count >= 14],]) / nrow(meta) * 100
-# 1% of SUs, thats fine. 
+nrow(meta[meta$cell_id_3km %in% meta$cell_id_3km[meta$cams_included_count > 7],]) / nrow(meta) * 100
+# 4.3% of SUs, thats fine. 
 
+
+### Also verify key covariates we are intersted in are not strongly correlated 
+check = select(meta, Avg_FLLI_3km, Avg_human_footprint_3km, Avg_altitude_3km, Avg_hunting_accessibility_3km)
+cov.corr = cor(check[,sapply(check, is.numeric)])
+cov.corr= as.data.frame(cov.corr)
+cov.corr[abs(cov.corr) < abs(.6)] = "good" # stick w/ .6 b/c FLII and HFP are 0.5 correlated. 
+rm(check, cov.corr)
 
 ## grab today's date 
 day<-str_sub(Sys.Date(),-2)
@@ -638,18 +659,18 @@ month<-str_sub(Sys.Date(),-5,-4)
 year<-str_sub(Sys.Date(),-10,-7)
 date = paste(year,month,day, sep = "")
 
-### Save all relevant files 
-# saveRDS(species, paste("/Users/zachary_amir/Dropbox/Zach PhD/Trophic release project/SEA_trophic_cascades_co-abundance/data/send_to_HPC/species_vector_", length(species), "_species_", date, ".RDS", sep = ""))
+# ### Save all relevant files 
+# saveRDS(keep, paste("/Users/zachary_amir/Dropbox/Zach PhD/Trophic release project/SEA_trophic_cascades_co-abundance/data/send_to_HPC/species_vector_", length(keep), "_species_", date, ".RDS", sep = ""))
 # 
 # saveRDS(group_sp, paste("/Users/zachary_amir/Dropbox/Zach PhD/Trophic release project/SEA_trophic_cascades_co-abundance/data/send_to_HPC/group_living_", length(group_sp), "_species_vector_", date, ".RDS", sep = ""))
 # 
 # write.csv(caps, paste("/Users/zachary_amir/Dropbox/Zach PhD/Trophic release project/SEA_trophic_cascades_co-abundance/data/send_to_HPC/clean_captures_to_make_UMFs_", date,".csv", sep = ""), row.names = F)
 # 
 # write.csv(meta, paste("/Users/zachary_amir/Dropbox/Zach PhD/Trophic release project/SEA_trophic_cascades_co-abundance/data/send_to_HPC/clean_metadata_to_make_UMFs_", date,".csv", sep = ""), row.names = F)
+# 
+# ### Also save trait data so I dont have to remake it later
+# write.csv(traits, paste("/Users/zachary_amir/Dropbox/Zach PhD/Trophic release project/SEA_trophic_cascades_co-abundance/data/species_traits/clean_", nrow(traits), "_species_trait_data_", date, ".csv", sep = ""), row.names = F)
 rm(day, month, year, date)
-
-### Also save trait data so I dont have to remake it later
-# write.csv(traits, here::here("results/clean_72_species_trait_data_20230615.csv"), row.names = F)
 
 
 ```
@@ -691,7 +712,7 @@ for(i in 1:length(files)){
 }
 rm(i,u,f,path, files)
 
-names(umfs) # looks good, except one typo b/c long species name
+sort(names(umfs)) # looks good, except one typo b/c long species name
 names(umfs)[grepl("Canis_lupus", names(umfs))] = "Canis_lupus_familiaris"
 
 ## check if all species are present by importing old species vector
@@ -1029,22 +1050,23 @@ for(i in 1:length(umfs)){ # repeat for each first speices
     ####### BUNDLE all the data for the bayesian model 
     
     #these are the variable names used in the bayes mod! 
-    bdata = list(y.dom = data.dom,                        # Count history matrix for dominant spp
-                 y.sub = data.sub,                        # Count history matrix for subordinate spp
-                 Z.dom = z.dom$occu,                      # Dominant presence/absence for all sites
-                 Z.sub = z.sub$occu,                      # Subordinate presence/absence for all sites 
-                 nsites = dim(data.dom)[1],               # Number of sampling locations (i.e. rows in matrix)
-                 nreps = dim(data.dom)[2],                # Number of sampling occasions (i.e. cols in matrix)
-                 flii = covs$Avg_FLLI_3km,                # Site covaraite 1
-                 hfp = covs$Avg_human_footprint_3km,      # Site covaraite 2
-                 elev = covs$Avg_altitude_3km,            # Site covaraite 3
-                 cams = obs,                              # Observation covaraite 1
-                 narea = length(unique(covs$land.num)),   # number of levels in landscape RE
-                 area = covs$land.num,                    # Landscape random effect (as.num)
-                 nsource = length(unique(covs$source)),   # number of levels in source RE 
-                 source = covs$source.num,                # Data source random effect (as.num)
-                 nyear = length(unique(covs$year.num)),   # number of levels in year RE
-                 year = covs$year.num)                    # year random effect (as.num)
+    bdata = list(y.dom = data.dom,                           # Count history matrix for dominant spp
+                 y.sub = data.sub,                           # Count history matrix for subordinate spp
+                 Z.dom = z.dom$occu,                         # Dominant presence/absence for all sites
+                 Z.sub = z.sub$occu,                         # Subordinate presence/absence for all sites 
+                 nsites = dim(data.dom)[1],                  # Number of sampling locations (i.e. rows in matrix)
+                 nreps = dim(data.dom)[2],                   # Number of sampling occasions (i.e. cols in matrix)
+                 flii = covs$Avg_FLLI_3km,                   # Site covaraite 1
+                 hfp = covs$Avg_human_footprint_3km,         # Site covaraite 2
+                 elev = covs$Avg_altitude_3km,               # Site covaraite 3
+                 hunt = covs$Avg_hunting_accessibility_3km,  # Site covariate 4
+                 cams = obs,                                 # Observation covaraite 1
+                 narea = length(unique(covs$land.num)),      # number of levels in landscape RE
+                 area = covs$land.num,                       # Landscape random effect (as.num)
+                 nsource = length(unique(covs$source)),      # number of levels in source RE 
+                 source = covs$source.num,                   # Data source random effect (as.num)
+                 nyear = length(unique(covs$year.num)),      # number of levels in year RE
+                 year = covs$year.num)                       # year random effect (as.num)
     
     ## save the bundle 
     temp[[l]] = bdata
@@ -1066,7 +1088,7 @@ rm(i,l,sp_dom,sp_sub, sp_dom_dat, sp_sub_dat, obs, temp, z.dom, z.sub,
 
 ## flatten the list of lists into a single list
 bdata_list = unlist(bdata_list, recursive = FALSE)
-length(bdata_list) #610 combos --> Nice! 
+length(bdata_list) #435 combos --> Nice! should allow faster testing as we reduce species. 
 names(bdata_list) # looks good! 
 
 ```

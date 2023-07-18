@@ -2,17 +2,17 @@
 #### it just takes too long on a regular comp,
 ### when I know it'll work on the HPC 
 
-## Submitted June 16th, 2023
+## Submitted July 18th, 2023
 # Z.amir@uq.edu.au
 
 library(tidyverse)
 library(vegan)
 
 #### import the data 
-species = readRDS("data/ZDA_UMF/species_vector_72_species_20230615.RDS")
-group_sp = readRDS("data/ZDA_UMF/group_living_13_species_vector_20230615.RDS")
-caps = read.csv("data/ZDA_UMF/clean_captures_to_make_UMFs_20230615.csv")
-meta = read.csv("data/ZDA_UMF/clean_metadata_to_make_UMFs_20230616.csv")
+species = readRDS("data/ZDA_UMF/species_vector_51_species_20230718.RDS")
+group_sp = readRDS("data/ZDA_UMF/group_living_10_species_vector_20230718.RDS")
+caps = read.csv("data/ZDA_UMF/clean_captures_to_make_UMFs_20230718.csv")
+meta = read.csv("data/ZDA_UMF/clean_metadata_to_make_UMFs_20230718.csv")
 
 # ### Local testing
 # species = readRDS("data/send_to_HPC/species_vector_72_species_20230615.RDS")

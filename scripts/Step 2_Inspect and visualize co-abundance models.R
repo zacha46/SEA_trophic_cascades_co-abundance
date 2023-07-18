@@ -17,24 +17,26 @@ library(reshape2) # for making checkerboard matrix
 library(fs) # for moving files around 
 library(ggridges) # for ridgeline plots 
 library(leaflet) # for creating concepts of study map
-library(colortools) # for nice colors in the map 
 
 
+# library(colortools) # for nice colors in the map 
 # library(jagsUI) 
 # library(traitdata) # for species trait data
 
 ## set WD (should be automatic b/c RProj, but being safe anyway)
 setwd("/Users/zachary_amir/Dropbox/Zach PhD/Trophic release project/SEA_trophic_cascades_co-abundance")
 
-## Import original unmodified cam trap data here for referencing
+## Import clean cam trap data here for referencing
 og_captures = read.csv("data/send_to_HPC/clean_captures_to_make_UMFs_20230615.csv")
 og_meta = read.csv("data/send_to_HPC/clean_metadata_to_make_UMFs_20230616.csv")
+
+## should also import NON-resampled data for referencing too! 
 
 
 ######## Import co-abundance coefficent dataframes ######
 
 ## first, I will import the bundled data to generate a vector of relevant species pairs 
-bdata = readRDS("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_610_species_pairs_20230617.RDS")
+bdata = readRDS("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_435_species_pairs_20230718.RDS")
 all_combos = names(bdata)
 
 
@@ -77,6 +79,11 @@ rm(current_files, earliest_date, files_to_move, name, duplicated_names, file_nam
 files = list.files("results/coefficent_dataframes/")
 files = files[!grepl("OLD", files)] # remove any old data 
 
+## Have a few long and all middle files in this directory, subset for one
+# files = files[grepl("LONG", files)]
+files = files[grepl("MIDDLE", files)]
+
+
 # store results here
 coeff.res = list()
 
@@ -102,6 +109,9 @@ coeff = do.call(rbind, coeff.res)
 head(coeff)
 str(coeff)
 rm(coeff.res)
+
+summary(coeff$n.eff[coeff$var == "Species_Interaction"]) # still pretty low! 
+summary(coeff$Rhat[coeff$var == "Species_Interaction"]) # Mostly low, but some biggies out there! 
 
 
 ### Inspect which species pairs are present/missing, 20230704
@@ -155,7 +165,7 @@ table(preform$mod_completion) # <1% of models have failed! Epic improvement.
 #### Combine species trait/guild data w/ model performance
 
 #load guild data
-guilds = read.csv(("data/species_traits/clean_72_species_trait_data_20230615.csv"))
+guilds = read.csv(("data/species_traits/OLD/clean_72_species_trait_data_20230615.csv"))
 head(guilds)
 str(guilds)
 
@@ -204,6 +214,10 @@ rm(add, guilds)
 # list all files
 files = list.files("results/PPC_dataframes/")
 files = files[!grepl("OLD", files)] # remove any old data 
+
+## Have a few long and all middle files in this directory, subset for one
+# files = files[grepl("LONG", files)]
+files = files[grepl("MIDDLE", files)]
 
 # store results here
 ppc_res = list()
@@ -256,6 +270,60 @@ setdiff(all_combos, ppc_values$Species_Pair) #4 missing models, same as above
 
 
 ######## Import co-abundance prediction dataframes ######
+
+
+## I forgot to delete old data in predictions results folder on HPC
+## and now all middle/long results are mingling with the new short ones
+## but all of those are saved here anyway: results/OLD_20230617/prediction_dataframes
+#### SO, delete all middle and long files! 
+
+# ## grab all files 
+# files = dir("results/prediction_dataframes/", full.names = TRUE)
+# # now middle
+# a = files[grepl("MIDDLE", files)]
+# # now long
+# b = files[grepl("LONG", files)]
+# # and combine 
+# rm = c(a,b)
+# rm(a,b,files)
+# 
+# ## simple loop to delete all of them 
+# for(i in 1:length(rm)){
+#   file.remove(rm[i])
+# }
+# rm(i,rm)
+
+## ONLY UNHASH IF YOU MUST DELETE FILES, there is no control + Z here. 
+
+# List all files in the coefficents folder
+file_list <- dir("results/prediction_dataframes/", full.names = TRUE)
+
+# Extract the filenames without the date
+file_names <- basename(file_list) %>% str_remove("\\d{8}\\.csv$")
+
+# Find the duplicated file names
+duplicated_names <- file_names[duplicated(file_names)]
+
+# Iterate over the duplicated names
+for (name in duplicated_names) {
+  # Get the files with the current name
+  current_files <- file_list[file_names == name]
+  
+  # Find the earliest date among the duplicated files
+  earliest_date <- as.character(min(as.Date(str_extract(current_files, "\\d{8}"), format = "%Y%m%d")))
+  
+  # replace - with nothing to match existing format
+  earliest_date = gsub("-", "", earliest_date)
+  
+  # Get the files with the earliest date
+  files_to_move <- current_files[str_extract(current_files, "\\d{8}") == earliest_date]
+  
+  # Move the files to the destination folder
+  file_move(files_to_move, "results/coefficent_dataframes/OLD")
+}
+rm(current_files, earliest_date, files_to_move, name, duplicated_names, file_names, file_list)
+
+
 
 ## Make sure all_combos is loaded here! 
 
@@ -1239,6 +1307,17 @@ nrow(og_captures[og_captures$Species %in% preform$sub_species,])
 
 #### We can also make a study map (coneptually) w/ the original metadata
 
+### Import NON-spatially re-sampled metadata for the map 
+non_resamp_meta = read_csv("/Users/zachary_amir/Dropbox/CT capture histories database/Asian ECL raw CT data/Step4_output_pre-resampling/Clean_independent_metadata_20230610.csv")
+
+## thin this to be a bit easier to work with 
+non_resamp_meta = select(non_resamp_meta, deployment_id, cell_id_3km, survey_id, Landscape, country, Latitude, Longitude)
+
+## calculate average coords per landsacpe to visualize 
+avg_land = ddply(non_resamp_meta, .(Landscape), summarize,
+                 avg_lat = mean(Latitude),
+                 avg_long = mean(Longitude))
+
 ## first make a map for the whole study area
 
 #Genereate colour scheme as factor
@@ -1246,22 +1325,22 @@ category <- "Landscape" #What should we use as our category to generate colours 
 colour <- "lightgreen"# Define a colour from the R options to base the colourscheme
 
 ## make it a factor now 
-og_meta$Landscape <- as.factor(og_meta$Landscape)
-col.cat <- wheel(colour, num = length(levels(og_meta$Landscape)))
-og_meta$Cols <- col.cat[og_meta$Landscape]
+avg_land$Landscape <- as.factor(avg_land$Landscape)
+col.cat <- wheel(colour, num = length(levels(avg_land$Landscape)))
+avg_land$Cols <- col.cat[avg_land$Landscape]
 
 
 ## make the map! 
 leaflet() %>%
   # Add base map data
   addProviderTiles(providers$Esri.WorldImagery, group="Satellite") %>%  
-  addCircleMarkers(lng= og_meta$Avg_Longitude, #Add Longitude
-                   lat= og_meta$Avg_Latitude, #Add latitude
-                   color= og_meta$Cols
+  addCircleMarkers(lng= avg_land$avg_long, #Add Longitude
+                   lat= avg_land$avg_lat, #Add latitude
+                   color= avg_land$Cols
                    ) %>%
   # Add a legend
   addLegend("topleft", colors = col.cat,
-            labels = levels(og_meta$Landscape),
+            labels = levels(avg_land$Landscape),
             title = category,
             labFormat = labelFormat(prefix = "$"),
             opacity = 1,
@@ -1274,43 +1353,35 @@ leaflet() %>%
     overlayGroups = "Legend",
     options = layersControlOptions(collapsed = FALSE)
   )
+## Screen-shot'ed! 
 
 ### Now subset the data for just the Thai E forest complex
-thai = og_meta[grepl("Thai_E_FC_", og_meta$Landscape),]
+thai = non_resamp_meta[grepl("Thai_E_FC_", non_resamp_meta$Landscape),]
 
-#Genereate colour scheme as factor for data source
-category <- "Landscape" #What should we use as our category to generate colours for now survey ID
-colour <- "lightgreen"# Define a colour from the R options to base the colourscheme
+### But goal is to visualize the hexagons for resampling, so summarize data by cell_id
+thai_cell = ddply(thai, .(cell_id_3km), summarize,
+                  num_cam = length(unique(deployment_id)),
+                  avg_lat = mean(Latitude),
+                  avg_long = mean(Longitude))
 
-## make it a factor now 
-thai$source <- as.factor(thai$source)
-col.cat <- wheel(colour, num = length(levels(thai$source)))
-thai$Cols <- col.cat[thai$source]
+# library(hexbin) # for hex bins
+library(sf) # make grids
 
+## Convert metadata to a spatial object using the coordinates
+sf_data = st_as_sf(thai_cell, coords = c("avg_long", "avg_lat"), 
+                 crs = "+proj=longlat +datum=WGS84")
 
-## make the map! 
-leaflet() %>%
-  # Add base map data
-  addProviderTiles(providers$Esri.WorldImagery, group="Satellite") %>%  
-  addCircleMarkers(lng= thai$Avg_Longitude, #Add Longitude
-                   lat= thai$Avg_Latitude, #Add latitude
-                   color= thai$Cols
-  ) %>%
-  # Add a legend
-  addLegend("topleft", colors = col.cat,
-            labels = levels(thai$source),
-            title = category,
-            labFormat = labelFormat(prefix = "$"),
-            opacity = 1,
-            group = "Legend") %>%
-  # Add a scale bar
-  addScaleBar(
-    position = c("bottomleft")) %>%
-  # Layers control
-  addLayersControl(
-    overlayGroups = "Legend",
-    options = layersControlOptions(collapsed = FALSE)
-  )
+# Ensure EPSG is 4087 via transformation
+sf_data = st_transform(sf_data, 4087)
+
+## 3km hex
+hex3 = st_make_grid(sf_data, cellsize = 1861.2, square = FALSE) %>%
+  st_sf() 
+
+## This will suffice for concept now 
+ggplot()+
+  geom_sf(data = hex3)+
+  geom_sf(data = sf_data)#, aes(color = num_cam))#[shape$deployment_id == p,])
 
 
 

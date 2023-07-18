@@ -518,7 +518,7 @@ names(da) = c("Interaction_Estimate", "SD", "lower", "upper", "Rhat",
 
 # Extract posterior mean values and Rhat
 a = data.frame(mod$summary)
-a = a[rownames(a) == "a4", c("mean", "sd","X2.5.", "X97.5.", "Rhat", "overlap0")]
+a = a[rownames(a) == "a5", c("mean", "sd","X2.5.", "X97.5.", "Rhat", "overlap0")]
 # start filling in da
 da[1, 1:6] = a
 

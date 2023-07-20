@@ -845,6 +845,22 @@ for(i in 1:length(umfs)){ # repeat for each first speices
       
     } # end exact matrix size validation
     
+    ### Now verify that both species are detected together in at least one landscape
+    pres = unique(exp$Landscape[exp$presence == "yes" & exp$Species == unique(exp$Species)[1] &
+                                  exp$Landscape %in% exp$Landscape[exp$presence == "yes" & 
+                                                                     exp$Species ==  unique(exp$Species)[2]]])
+    ## if there are no landscapes where both are detected,
+    if(length(pres) == 0){
+      
+      ## let us know 
+      print(paste("The species combo of", sp_sub, "~", sp_dom, 
+                  "do not spatially overlap! This pair was skipped."))
+      ## and skip the problematic one
+      next
+      
+    }
+
+    
     ## convert matrix dataframes back to matrix 
     rownames(data.dom)=data.dom[,1] #set rownames as sampling units
     data.dom=data.dom[,-1] #remove sampling unit col
@@ -1088,7 +1104,7 @@ rm(i,l,sp_dom,sp_sub, sp_dom_dat, sp_sub_dat, obs, temp, z.dom, z.sub,
 
 ## flatten the list of lists into a single list
 bdata_list = unlist(bdata_list, recursive = FALSE)
-length(bdata_list) #435 combos --> Nice! should allow faster testing as we reduce species. 
+length(bdata_list) #394 combos after removing species that don't spatially overlap --> Nice! should allow faster testing as we reduce species. 
 names(bdata_list) # looks good! 
 
 ```

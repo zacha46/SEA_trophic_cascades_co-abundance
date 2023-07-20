@@ -5,7 +5,7 @@
 ## Import dataframes, not complete models b/c theyre too heavy
 
 # Zachary Amir, Z.Amir@uq.edu.au
-# Last updated on June 16th, 2023
+# Last updated on July 20th, 2023
 
 ## start fresh
 rm(list = ls())
@@ -16,9 +16,9 @@ library(plyr)
 library(reshape2) # for making checkerboard matrix 
 library(fs) # for moving files around 
 library(ggridges) # for ridgeline plots 
-library(leaflet) # for creating concepts of study map
 
 
+# library(leaflet) # for creating concepts of study map
 # library(colortools) # for nice colors in the map 
 # library(jagsUI) 
 # library(traitdata) # for species trait data
@@ -27,16 +27,18 @@ library(leaflet) # for creating concepts of study map
 setwd("/Users/zachary_amir/Dropbox/Zach PhD/Trophic release project/SEA_trophic_cascades_co-abundance")
 
 ## Import clean cam trap data here for referencing
-og_captures = read.csv("data/send_to_HPC/clean_captures_to_make_UMFs_20230615.csv")
-og_meta = read.csv("data/send_to_HPC/clean_metadata_to_make_UMFs_20230616.csv")
+og_resamp_captures = read.csv("data/send_to_HPC/clean_captures_to_make_UMFs_20230718.csv")
+og_resamp_meta = read.csv("data/send_to_HPC/clean_metadata_to_make_UMFs_20230718.csv")
 
 ## should also import NON-resampled data for referencing too! 
+og_captures = read.csv("/Users/zachary_amir/Dropbox/CT capture histories database/Asian ECL raw CT data/Step4_output_pre-resampling/Clean_independent_captures_20230610.csv")
+og_meta = read.csv("/Users/zachary_amir/Dropbox/CT capture histories database/Asian ECL raw CT data/Step4_output_pre-resampling/Clean_independent_metadata_20230610.csv")
 
 
 ######## Import co-abundance coefficent dataframes ######
 
 ## first, I will import the bundled data to generate a vector of relevant species pairs 
-bdata = readRDS("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_435_species_pairs_20230718.RDS")
+bdata = readRDS("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_394_species_pairs_20230720.RDS")
 all_combos = names(bdata)
 
 
@@ -81,7 +83,33 @@ files = files[!grepl("OLD", files)] # remove any old data
 
 ## Have a few long and all middle files in this directory, subset for one
 # files = files[grepl("LONG", files)]
-files = files[grepl("MIDDLE", files)]
+# files = files[grepl("MIDDLE", files)]
+files = files[grepl("SHORT", files)]
+
+
+### Noticed a typo that included generated results for species that dont spatially overlap
+## and these have been removed from bdata, but not worth re-running models b/c they take long.
+# so thin files to match relevant combos and exclude pointless mods via loop
+### This will be irrelevant w/ updated models and testing. 
+
+# create a new files vector to save good files
+matched_files <- vector("character", length(all_combos))
+
+for(i in 1:length(all_combos)){
+  # if there are any TRUE matches for all_combos in files
+  if(any(grepl(all_combos[i], files))){
+    ## save that file name in the new vector
+    matched_files[i] = files[grepl(all_combos[i], files)]
+  }
+}
+rm(i)
+
+## remove matched_files w/ blank names (likely b/c mod never left HPC)
+matched_files = matched_files[matched_files != ""]
+
+## update files w/ the good ones (for consistent naming)
+files = matched_files
+rm(matched_files)
 
 
 # store results here
@@ -110,17 +138,18 @@ head(coeff)
 str(coeff)
 rm(coeff.res)
 
-summary(coeff$n.eff[coeff$var == "Species_Interaction"]) # still pretty low! 
-summary(coeff$Rhat[coeff$var == "Species_Interaction"]) # Mostly low, but some biggies out there! 
+summary(coeff$n.eff[coeff$var == "Species_Interaction"]) # not good! short settings tho
+summary(coeff$Rhat[coeff$var == "Species_Interaction"]) # The Meidan is acceptable! but some high values exist. 
 
 
-### Inspect which species pairs are present/missing, 20230704
-setdiff(all_combos, coeff$Species_Pair) # only 4 missing models!! This is a huge improvement, but still check. 
-which(all_combos == "SUB-Canis_lupus_familiaris~DOM-Lophura_bulweri") # exceeded 85 hour wall time! 
-which(all_combos == "SUB-Panthera_pardus~DOM-Muntiacus_genus") # exceeded 85 hour wall time! 
-which(all_combos == "SUB-Trichys_fasciculata~DOM-Neofelis_genus") # Error in node y.sub[665,4], Node inconsistent with parents
-which(all_combos == "SUB-Tupaia_genus~DOM-Neofelis_genus") # exceeded 85 hour wall time! 
-
+### Inspect which species pairs are present/missing, 20230719, SHORT
+setdiff(all_combos, coeff$Species_Pair) # only 6 missing models!! This is a huge improvement, but still check. 
+which(all_combos == "SUB-Panthera_tigris~DOM-Helarctos_malayanus")       # exceeded 4 hour wall time, cancelled at 4.5 hours
+which(all_combos == "SUB-Canis_lupus_familiaris~DOM-Lophura_diardi")     # exceeded 4 hour wall time, cancelled at 4.5 hours
+which(all_combos == "SUB-Neofelis_genus~DOM-Arctonyx_collaris")          # exceeded 4 hour wall time, cancelled at 4.5 hours
+which(all_combos == "SUB-Canis_lupus_familiaris~DOM-Argusianus_argus")   # exceeded 4 hour wall time, cancelled at 4.5 hours
+which(all_combos == "SUB-Herpestes_genus~DOM-Neofelis_genus")            # exceeded 4 hour wall time, cancelled at 4.5 hours
+which(all_combos == "SUB-Neofelis_genus~DOM-Bos_taurus")                 # exceeded 4 hour wall time, cancelled at 4.5 hours
 
 ### Long-story-short, I found out they all had problem SUs from DVCA that contained 14+ active cams 
 ## --> removed all SUs w/ > 14 cameras and re-run analysis. 
@@ -157,7 +186,7 @@ anyNA(preform) # Must be F
 ## assess which models are completed
 preform$mod_completion = "uncompleted"
 preform$mod_completion[preform$Species_Pair %in% coeff$Species_Pair] = "completed"
-table(preform$mod_completion) # <1% of models have failed! Epic improvement. 
+table(preform$mod_completion) # 1.5% of models have failed! Epic improvement. 
 
 #
 ##
@@ -165,11 +194,11 @@ table(preform$mod_completion) # <1% of models have failed! Epic improvement.
 #### Combine species trait/guild data w/ model performance
 
 #load guild data
-guilds = read.csv(("data/species_traits/OLD/clean_72_species_trait_data_20230615.csv"))
+guilds = read.csv(("data/species_traits/clean_51_species_trait_data_20230718.csv"))
 head(guilds)
 str(guilds)
 
-## make sure all speceis are present
+## make sure all species are present
 setdiff(preform$sub_species, guilds$scientificNameStd) # these match, add subordinate guild first
 
 add = select(guilds, scientificNameStd, TrophicGuild)
@@ -204,7 +233,7 @@ table(preform$guild_pair[preform$mod_completion == "completed"]) # a lot!
 # preform = preform[order(preform$DOM_guild, preform$dom_species),]
 
 ## clean up 
-rm(add, guilds)
+rm(add)
 
 
 ######## Import co-abundance PPC dataframes ######
@@ -215,9 +244,34 @@ rm(add, guilds)
 files = list.files("results/PPC_dataframes/")
 files = files[!grepl("OLD", files)] # remove any old data 
 
-## Have a few long and all middle files in this directory, subset for one
+## Subset files for one setting, especially if multiple are in the mix. 
 # files = files[grepl("LONG", files)]
-files = files[grepl("MIDDLE", files)]
+# files = files[grepl("MIDDLE", files)]
+files = files[grepl("SHORT", files)]
+
+### Noticed a typo that included generated results for species that dont spatially overlap
+## and these have been removed from bdata, but not worth re-running models b/c they take long.
+# so thin files to match relevant combos and exclude pointless mods via loop
+### This will be irrelevant w/ updated models and testing. 
+
+# create a new files vector to save good files
+matched_files <- vector("character", length(all_combos))
+
+for(i in 1:length(all_combos)){
+  # if there are any TRUE matches for all_combos in files
+  if(any(grepl(all_combos[i], files))){
+    ## save that file name in the new vector
+    matched_files[i] = files[grepl(all_combos[i], files)]
+  }
+}
+rm(i)
+
+## remove matched_files w/ blank names (likely b/c mod never left HPC)
+matched_files = matched_files[matched_files != ""]
+
+## update files w/ the good ones (for consistent naming)
+files = matched_files
+rm(matched_files)
 
 # store results here
 ppc_res = list()
@@ -248,6 +302,8 @@ head(ppc_plotdat)
 ppc_plotdat$X = NULL # damn row names 
 str(ppc_plotdat) # looks good! 
 
+### UPDATE 2023-07-19, typo in updated co-abundance model did not let this one generate! 
+## It has been fixed for next round tho. 
 ppc_values = do.call(rbind, ppc_res$values)
 head(ppc_values) 
 ppc_values$X = NULL # damn row names 
@@ -259,14 +315,15 @@ nrow(ppc_values[ppc_values$Rhat > 1.2,])/nrow(ppc_values) * 100 # 3/4ths of mods
 # how about sample size?
 summary(coeff$n.eff[coeff$var == "Species_Interaction"]) # this could certainly be improved! 
 length(coeff$n.eff[coeff$var == "Species_Interaction" & 
-                     coeff$n.eff < 100]) / length(coeff$n.eff[coeff$var == "Species_Interaction"]) * 100 # 70% of mods have good sample size. 
+                     coeff$n.eff < 100]) / length(coeff$n.eff[coeff$var == "Species_Interaction"]) * 100 # 76% of mods have small (< 100) sample size. 
+
 ### Seems like middle settings are decent, but definitely not up to snuff! 
 
 # remove list now that were all stored in dfs. 
 rm(ppc_res)
 
-### Inspect which species pairs are present/missing, 20230704
-setdiff(all_combos, ppc_values$Species_Pair) #4 missing models, same as above
+### Inspect which species pairs are present/missing, 20230719
+setdiff(all_combos, ppc_plotdat$Species_Pair) #6 missing models, same as above
 
 
 ######## Import co-abundance prediction dataframes ######
@@ -331,6 +388,43 @@ rm(current_files, earliest_date, files_to_move, name, duplicated_names, file_nam
 files = list.files("results/prediction_dataframes/")
 files = files[!grepl("OLD", files)] # remove any old data 
 
+## Subset files for one setting, especially if multiple are in the mix. 
+# files = files[grepl("LONG", files)]
+# files = files[grepl("MIDDLE", files)]
+files = files[grepl("SHORT", files)]
+
+### Noticed a typo that included generated results for species that dont spatially overlap
+## and these have been removed from bdata, but not worth re-running models b/c they take long.
+# so thin files to match relevant combos and exclude pointless mods via loop
+### This will be irrelevant w/ updated models and testing. 
+
+# create a new files vector to save good files
+matched_files_est <- vector("character", length(all_combos))
+matched_files_pred <- vector("character", length(all_combos))
+
+
+for(i in 1:length(all_combos)){
+  # if there are any TRUE matches for all_combos in files w/ estimated abundance
+  if(any(grepl(all_combos[i], files[grepl("estimated", files)]))){
+    ## save that file name in the new vector
+    matched_files_est[i] = files[grepl("estimated", files)][grepl(all_combos[i], files[grepl("estimated", files)])]
+  }
+  # Repeat this process also for predicted abundance
+  if(any(grepl(all_combos[i], files[grepl("predicted", files)]))){
+    ## save that file name in the new vector
+    matched_files_pred[i] = files[grepl("predicted", files)][grepl(all_combos[i], files[grepl("predicted", files)])]
+  }
+}
+rm(i)
+
+## remove matched_files w/ blank names (likely b/c mod never left HPC)
+matched_files_est = matched_files_est[matched_files_est != ""]
+matched_files_pred = matched_files_pred[matched_files_pred != ""]
+
+## update files w/ the good ones (for consistent naming)
+files = c(matched_files_est, matched_files_pred)
+rm(matched_files_est, matched_files_pred)
+
 # store results here
 predict_res = list()
 
@@ -369,8 +463,8 @@ str(pred_abund) # looks good!
 rm(predict_res)
 
 
-### Inspect which species pairs are present/missing,  20230704
-setdiff(all_combos, pred_abund$Species_Pair) #4 missing models, same as above
+### Inspect which species pairs are present/missing,  20230719
+setdiff(all_combos, pred_abund$Species_Pair) #6 missing models, same as above
 
 
 ######### Track model performance and validity #######
@@ -514,6 +608,9 @@ for(i in 1:length(unique(coeff$Species_Pair))){
     # Calculate the difference in effect sizes just by 1-2
     dat$diff = dat$mean[1] - dat$mean[2]
     
+    # and change dom_guild to the large carnivore species names
+    dat$dom_position = dat$dom_sp
+    
     # but if its not two large carnivores, 
   }else{
     
@@ -531,6 +628,13 @@ for(i in 1:length(unique(coeff$Species_Pair))){
   ## set bar dodge width 
   dodge_width = 0.8
   
+  # Assign colors based on unique dominant positions
+  colors <- c("Prey" = "mediumslateblue", "Large_carnivore" = "mediumseagreen", 
+              "Cuon_alpinus" = "red1", "Panthera_pardus" = "purple1", 
+              "Canis_lupus_familiaris" = "grey", "Panthera_tigris" = "orange1", 
+              "Neofelis_genus" = "blue1")
+  colors <- colors[unique(dat$dom_position)]
+  
   ## make the plot
   p =
     ggplot(dat, aes(x = var, y = mean, fill = dom_position)) +
@@ -540,7 +644,7 @@ for(i in 1:length(unique(coeff$Species_Pair))){
     geom_text(aes(y = .04, label = round(Rhat, 2)), position = position_dodge(width = dodge_width), size = 3,  hjust = -.3) +
     geom_text(aes(y = max(upper), x = 1, label = paste("Difference =", round(unique(diff),2))), size = 4, vjust = 1, hjust = 1) +  
     geom_hline(yintercept = 0)+
-    scale_fill_manual(values = c("Prey" = "mediumslateblue", "Large_carnivore" = "mediumseagreen")) +
+    scale_fill_manual(values = colors) +  # Assign dynamically generated color scale
     labs(x = "Species Interaction Estimate", y = "Mean Effect Size", fill = "Dominant Guild", title = title) +
     theme_test()+
     theme(
@@ -553,17 +657,18 @@ for(i in 1:length(unique(coeff$Species_Pair))){
   names(plots)[i] = id
   
 }
-rm(p,i,dodge_width, a,b, title, n, id, dat)
+rm(p,i,dodge_width, a,b, title, n, id, dat, colors)
 
 names(plots)
-plots[[593]] # "" in title means there was no complementary model 
+plots[[383]] # "" in title means there was no complementary model 
 
 ## remove plots w/ NA
 plots = plots[names(plots) != ""]
-plots$`SUB-Geokichla_citrina~DOM-Cuon_alpinus & SUB-Cuon_alpinus~DOM-Geokichla_citrina` # its working! 
-plots$`SUB-Cuon_alpinus~DOM-Geokichla_citrina & SUB-Geokichla_citrina~DOM-Cuon_alpinus` # also working, but need to remove redundant graphs! 
+## need to remove redundant plots tho 
+# plots$`SUB-Geokichla_citrina~DOM-Cuon_alpinus & SUB-Cuon_alpinus~DOM-Geokichla_citrina` # its working! 
+# plots$`SUB-Cuon_alpinus~DOM-Geokichla_citrina & SUB-Geokichla_citrina~DOM-Cuon_alpinus` # also working, but need to remove redundant graphs! 
 
-## Chat GPT to the resuce?
+## Chat GPT to the rescue?
 # Function to sort and concatenate species pairs in canonical form
 getCanonicalForm <- function(label) {
   sorted_pairs <- sort(strsplit(label, " & ")[[1]])
@@ -580,8 +685,8 @@ duplicate_indices <- duplicated(canonical_labels)
 plots <- plots[!duplicate_indices]
 
 names(plots) # seems better! 
-plots$`SUB-Panthera_pardus~DOM-Elephas_maximus & SUB-Elephas_maximus~DOM-Panthera_pardus` # good + interesting result
-plots$`SUB-Cuon_alpinus~DOM-Elephas_maximus & SUB-Elephas_maximus~DOM-Cuon_alpinus` # its working! 
+plots$`SUB-Canis_lupus_familiaris~DOM-Presbytis_rubicunda & SUB-Presbytis_rubicunda~DOM-Canis_lupus_familiaris` # good + interesting result
+plots$`SUB-Neofelis_genus~DOM-Cuon_alpinus & SUB-Cuon_alpinus~DOM-Neofelis_genus` # its working! 
 
 ## keep it clean
 rm(getCanonicalForm, canonical_labels, duplicate_indices)
@@ -617,6 +722,81 @@ rm(p, path, day, month, year, date, id, i)
 
 #
 ##
+
+######### Add data on dietary preferences for large carnivores ######
+
+#### TBH, this should probably get added to step 1 when I generate the guilds DF anyway. 
+
+### The goal here is to determine if large carnivores have different effects 
+## when looking at 'preferred' prey species vs non-preferred species. 
+# Ideally, just add a yes-no column to the guilds dataframe for each large carnivore. 
+
+# Diet changes so much based on habitat, interactions, and time of year... 
+# All species seem to prefer to some degree Sus scrofa based on readings. 
+
+#### Tigers
+# https://zslpublications.onlinelibrary.wiley.com/doi/full/10.1111/j.1469-7998.2011.00871.x
+# suggests preferred weight range of 60-250 kg, and wil eat the largest available prey.... So anything >= 60 kg to accomodate tapir, gaur, and cattle
+guilds$tiger_pref = "No"
+guilds$tiger_pref[guilds$AdultBodyMass_g > 60000] = "Yes"
+guilds$tiger_pref[guilds$scientificNameStd == "Panthera_tigris"] = "NA" # no cannibals allowed. 
+# who is preferred?
+guilds$scientificNameStd[guilds$tiger_pref == "Yes"] # 8 species, ok
+# black bear made it in, and this MS says they are preyed upon by tigers in Laos: https://onlinelibrary.wiley.com/doi/full/10.1002/ece3.9067
+#who is missing?
+sort(guilds$scientificNameStd[guilds$tiger_pref == "No"]) # seems ok, 42 species
+
+#### Leopards 
+#  https://doi.org/10.1111/j.1469-7998.2006.00139.x
+# suggest preferred weight range of 10-40 kg. 
+# https://www.sciencedirect.com/science/article/pii/S0006320712005149 # langurs/primates, pigs when tigers are absent. 
+guilds$leopard_pref = "No"
+guilds$leopard_pref[guilds$AdultBodyMass_g > 10000 & guilds$AdultBodyMass_g <= 40000] = "Yes"
+guilds$tiger_pref[guilds$scientificNameStd == "Panthera_pardus"] = "NA" # no cannibals allowed. 
+# who is preferred?
+guilds$scientificNameStd[guilds$leopard_pref == "Yes"] # 5 species, mostly carnivores
+## exclude clouded leopards and dholes, leave dogs tho (evidence from india)
+guilds$leopard_pref[guilds$scientificNameStd %in% c("Cuon_alpinus","Neofelis_genus")] = "No"
+## also add primates and pigs based off readings
+guilds$leopard_pref[grepl("Macac", guilds$scientificNameStd)] = "Yes" # leopards dont overlap w/ langurs in our dataset, so only include macaques. 
+guilds$leopard_pref[guilds$scientificNameStd == "Sus_scrofa"] = "Yes"
+# who is preferred now?
+guilds$scientificNameStd[guilds$leopard_pref == "Yes"] # 8 species, much better! 
+
+
+#### Dholes
+# https://zslpublications.onlinelibrary.wiley.com/doi/10.1111/jzo.12171
+## Hayward style pref wieght range of 130–190 kg, and highlights sambar as important. 
+# https://www.ncbi.nlm.nih.gov/pmc/articles/PMC9388674/
+## scat analysis that emphasizes large deer (sambar + chital), pigs and muntjac were moderetly avoided but still consumed.
+# https://doi.org/10.1016/j.mambio.2013.08.007
+## lit review of scats and abundance: 40 and 60 kg weight range, sambar preferred most. 
+guilds$dhole_pref = "No"
+guilds$dhole_pref[guilds$AdultBodyMass_g > 40000 & guilds$AdultBodyMass_g < 190000 &
+                    guilds$TrophicLevel != "Carnivore"] = "Yes"
+# who is preferred?
+guilds$scientificNameStd[guilds$dhole_pref == "Yes"] # Some species here dont make sense: bears --> remove! Also some dont spatially overlap (orangutan)
+# remove bears + orangutans, no evidence for this! 
+guilds$dhole_pref[guilds$scientificNameStd %in% c("Helarctos_malayanus", "Ursus_thibetanus", "Pongo_pygmaeus")] = "No"
+## unsure if muntjac should be added here... adding for now because they are consumed
+guilds$dhole_pref[guilds$scientificNameStd %in% c("Muntiacus_genus")] = "Yes"
+# who is preferred?
+guilds$scientificNameStd[guilds$dhole_pref == "Yes"] # 5 species now... just ok. 
+
+
+#### Clouded leopards
+# https://onlinelibrary.wiley.com/doi/full/10.1002/ece3.9067 
+# Serow! Ungulates in particular. No evidence for primates in this citation,
+# but evidence from elsewhere for primates, and generally evidence for a varied and wide diet. 
+guilds$CL_pref = "No"
+guilds$CL_pref[guilds$AdultBodyMass_g > 7000 & guilds$AdultBodyMass_g < 190000 &
+                           guilds$TrophicGuild != "Large_Carnivore"] = "Yes"
+# who is preferred?
+guilds$scientificNameStd[guilds$CL_pref == "Yes"] # Remove some of the larger carnivores (e.g. bears, cats), but leaving binturong b/c evidence exists! 
+guilds$CL_pref[guilds$scientificNameStd %in% c("Catopuma_temminckii", "Helarctos_malayanus", "Ursus_thibetanus")] = "No"
+## this has 14 species, many more than other predators, but little info exists for them! 
+
+
 ######### Visualize coefficient effect sizes ###### 
 
 ### Will be making two kinds of graphs:
@@ -664,7 +844,7 @@ for(i in 1:length(unique(coeff$Species_Pair))){
   dat = coeff[coeff$Species_Pair == unique(coeff$Species_Pair)[i],]
   
   ## subset for relevant variables 
-  dat = dat[dat$var %in% c("Abundance_intercept","FLII","HFP","Elevation",
+  dat = dat[dat$var %in% c("Abundance_intercept","FLII","HFP","Elevation","Hunting",
                            "Species_Interaction","Detection_intercept","Active_cams"),]
   
   ## replace _ with space for vars for clean x-vars
@@ -674,7 +854,8 @@ for(i in 1:length(unique(coeff$Species_Pair))){
   dat$var[dat$var == "Active cams"] = "Effort"
   
   ## order the factor levels for each variable
-  dat$var = factor(dat$var, levels = c("Species Interaction","FLII","HFP","Elevation", "Abundance intercept", # state vars
+  dat$var = factor(dat$var, levels = c("Species Interaction","FLII","HFP", "Hunting", # state vars
+                                       "Elevation", "Abundance intercept", # more state vars
                                        "Detection intercept","Effort")) # then det vars. 
   
   # Add a column for significance marker
@@ -760,10 +941,10 @@ rm(p,n,gp,i,path,day,month,year,date)
 # dont need these plots anymore as they are saved
 rm(sp_pair_coeff_plots)
 
-#
-##
-###
-#### Generate histograms per guild pair + overall 
+
+######### Visualize species interaction coefficient via histograms #######
+
+##### First, examine at the guild-level 
 
 # first we need to add guild pairs to coeff (probs should have been done earlier)
 add = distinct(select(preform, Species_Pair, guild_pair))
@@ -777,37 +958,46 @@ coeff$neg_vs_pos[coeff$mean < 0 & coeff$sig == "Non-Significant"] = "Negative & 
 coeff$neg_vs_pos[coeff$mean > 0 & coeff$sig == "Significant"] = "Positive & Significant"
 
 # specify colors manually
-color_values <- c("Positive & Non-Significant" = "darkolivegreen1",
-                  "Positive & Significant" = "darkgreen",
-                  "Negative & Non-Significant" = "goldenrod1",
-                  "Negative & Significant" = "firebrick4")
+color_values_full <- c("Positive & Non-Significant" = "darkolivegreen1",
+                       "Positive & Significant" = "darkgreen",
+                       "Negative & Non-Significant" = "goldenrod1",
+                       "Negative & Significant" = "firebrick4")
+
+## Create a new sig level that combines non-sig into one
+coeff$neg_vs_pos2 = coeff$neg_vs_pos
+coeff$neg_vs_pos2[grepl("Non-Sig", coeff$neg_vs_pos2)] = "Non-Significant"
+coeff$neg_vs_pos2[grepl("Positive", coeff$neg_vs_pos2)] = "Positive"
+coeff$neg_vs_pos2[grepl("Negative", coeff$neg_vs_pos2)] = "Negative" # clean up names
+
+# specify colors manually
+color_values_short <- c("Positive" = "darkgreen",
+                        "Negative" = "firebrick4",
+                        "Non-Significant" = "gray75")
+
+#### Make a test plot 
 
 # subset the data
 dat = coeff[coeff$var ==  "Species_Interaction",]
 
 # Calculate the median value
 median_value <- median(dat$mean)
- 
-# count how many values we have that will be graphed
-pos = ddply(dat, .(neg_vs_pos), summarize,
-            count = length(neg_vs_pos))
-# make the label just below the largest count. 
-y_position <- 0.75 * max(pos$count)
+
 
 # test the plot 
-p = 
+p =
 ggplot(dat, aes(x = mean))+
-  geom_histogram(aes(y = after_stat(count), fill = neg_vs_pos), bins = 50)+
-  scale_fill_manual(values = color_values)+
+  geom_histogram(aes(y = after_stat(density), fill = neg_vs_pos), bins = 100)+
+  geom_density(aes(fill = neg_vs_pos), alpha = .75) +  # Add density plot with opacity
+  scale_fill_manual(values = color_values_full)+
   geom_vline(aes(xintercept = 0), linetype = "dashed")+
-  geom_vline(aes(xintercept = median(mean)), color = "purple") + 
-  annotate("text", x = median_value, y = y_position, label = paste("Median =", round(median(dat$mean), 2)),
-           vjust = 1, hjust = -0.2, color = "black", size = 4) +
+  geom_vline(aes(xintercept = median(mean)), color = "purple") +
+  annotate("text", x = Inf, y = Inf, label = paste("Median =", round(median(dat$mean), 2)),
+           vjust = 10, hjust = 1.5, color = "black", size = 6) +
   theme_test()+
-  labs(x = "Mean Species Interaction Value", y = "Frequency", fill = NULL, title = "All species pairs")
+  labs(x = "Mean Species Interaction Value", y = "Density", fill = NULL, title = "All species pairs")
 
 ## save it!
-# ggsave("figures/Grouped Histograms/Histogram_species_interaction_value_ALL_species_pairs_20230713.png", p,
+# ggsave("figures/Grouped Histograms/Histogram_species_interaction_value_ALL_species_pairs_20230720.png", p,
 #        width = 12, height = 8, units = "in")
 rm(median_value, y_position, p, pos)
 
@@ -823,23 +1013,25 @@ for(i in 1:length(unique(coeff$guild_pair))){
   # Calculate the median value
   median_value <- median(dat$mean)
   
-  # count how many values we have that will be graphed
-  pos = ddply(dat, .(neg_vs_pos), summarize,
-              count = length(neg_vs_pos))
-  # make the label just below the largest count. 
-  y_position <- 0.75 * max(pos$count)
+  # # count how many values we have that will be graphed
+  # pos = ddply(dat, .(neg_vs_pos), summarize,
+  #             count = length(neg_vs_pos))
+  # # make the label just below the largest count. 
+  # y_position <- 0.75 * max(pos$count)
+  ### THIS^^ is only needed if looking at raw counts, but using density now. 
   
   # make the plot 
-  p = 
+  p =
     ggplot(dat, aes(x = mean))+
-    geom_histogram(aes(y = after_stat(count), fill = neg_vs_pos), bins = 50)+
-    scale_fill_manual(values = color_values)+
+    geom_histogram(aes(y = after_stat(density), fill = neg_vs_pos), bins = 100)+
+    geom_density(aes(fill = neg_vs_pos), alpha = .75) +  # Add density plot with opacity
+    scale_fill_manual(values = color_values_full)+
     geom_vline(aes(xintercept = 0), linetype = "dashed")+
-    geom_vline(aes(xintercept = median(mean)), color = "purple") + 
-    annotate("text", x = median_value, y = y_position, label = paste("Median =", round(median(dat$mean), 2)),
-             vjust = 1, hjust = -0.2, color = "black", size = 4) +
+    geom_vline(aes(xintercept = median(mean)), color = "purple") +
+    annotate("text", x = Inf, y = Inf, label = paste("Median =", round(median(dat$mean), 2)),
+             vjust = 10, hjust = 1.5, color = "black", size = 6) +
     theme_test()+
-    labs(x = "Mean Species Interaction Value", y = "Frequency", fill = NULL, title = gp)
+    labs(x = "Mean Species Interaction Value", y = "Density", fill = NULL, title = gp)
   
   ## create a relevant file directory to save it
   # grab today's date
@@ -864,112 +1056,210 @@ rm(p,i,gp,pos, y_position, dat, median_value,
 # subset the data
 dat = coeff[coeff$var ==  "Species_Interaction" & grepl("DOM-Large_Carnivore", coeff$guild_pair),]
 
-# Calculate the median value
-median_value <- median(dat$mean)
+# # count how many values we have that will be graphed
+# pos = ddply(dat, .(neg_vs_pos), summarize,
+#             count = length(neg_vs_pos))
+# # make the label just below the largest count. 
+# y_position <- 0.5 * max(pos$count)
 
-# count how many values we have that will be graphed
-pos = ddply(dat, .(neg_vs_pos), summarize,
-            count = length(neg_vs_pos))
-# make the label just below the largest count. 
-y_position <- 0.5 * max(pos$count)
-
-# test the plot 
-p = 
+# make the plot 
+p =
   ggplot(dat, aes(x = mean))+
-  geom_histogram(aes(y = after_stat(count), fill = neg_vs_pos), bins = 50)+
-  scale_fill_manual(values = color_values)+
+  geom_histogram(aes(y = after_stat(density), fill = neg_vs_pos), bins = 100)+
+  geom_density(aes(fill = neg_vs_pos), alpha = .75) +  # Add density plot with opacity
+  scale_fill_manual(values = color_values_full)+
   geom_vline(aes(xintercept = 0), linetype = "dashed")+
-  geom_vline(aes(xintercept = median(mean)), color = "purple") + 
-  annotate("text", x = median_value, y = y_position, label = paste("Median =", round(median(dat$mean), 2)),
-           vjust = 1, hjust = -0.2, color = "black", size = 4) +
+  geom_vline(aes(xintercept = median(mean)), color = "purple") +
+  annotate("text", x = Inf, y = Inf, label = paste("Median =", round(median(dat$mean), 2)),
+           vjust = 10, hjust = 1.5, color = "black", size = 6) +
   theme_test()+
-  labs(x = "Mean Species Interaction Value", y = "Frequency", fill = NULL, title = "Large carnivores are dominant")
+  labs(x = "Mean Species Interaction Value", y = "Density", fill = NULL, title = "Large carnivores are dominant")
 # # save it!
-# ggsave("figures/Grouped Histograms/Histogram_species_interaction_value_large_carnivores_dominant_20230713.png", p,
+# ggsave("figures/Grouped Histograms/Histogram_species_interaction_value_large_carnivores_dominant_20230720.png", p,
 #        width = 12, height = 8, units = "in")
 
- 
- ## Pt2 --> subordinate
+
+## Do the same, but exclude dogs for exploratory purposes. 
+dat = dat[!grepl("Canis_lupus", dat$dom_sp),]
+p =
+  ggplot(dat, aes(x = mean))+
+  geom_histogram(aes(y = after_stat(density), fill = neg_vs_pos), bins = 100)+
+  geom_density(aes(fill = neg_vs_pos), alpha = .75) +  # Add density plot with opacity
+  scale_fill_manual(values = color_values_full)+
+  geom_vline(aes(xintercept = 0), linetype = "dashed")+
+  geom_vline(aes(xintercept = median(mean)), color = "purple") +
+  annotate("text", x = Inf, y = Inf, label = paste("Median =", round(median(dat$mean), 2)),
+           vjust = 10, hjust = 1.5, color = "black", size = 6) +
+  theme_test()+
+  labs(x = "Mean Species Interaction Value", y = "Density", fill = NULL, title = "Large carnivores are dominant but no dogs")
+# # save it!
+# ggsave("figures/Grouped Histograms/Histogram_species_interaction_value_large_carnivores_dominant_NO_DOGS_20230720.png", p,
+#        width = 12, height = 8, units = "in")
+
+
+## Pt2 --> subordinate
 # subset the data
 dat = coeff[coeff$var ==  "Species_Interaction" & grepl("SUB-Large_Carnivore", coeff$guild_pair),]
 
-# Calculate the median value
-median_value <- median(dat$mean)
-
-# count how many values we have that will be graphed
-pos = ddply(dat, .(neg_vs_pos), summarize,
-            count = length(neg_vs_pos))
-# make the label just below the largest count. 
-y_position <- 0.75 * max(pos$count)
+# # Calculate the median value
+# median_value <- median(dat$mean)
+# 
+# # count how many values we have that will be graphed
+# pos = ddply(dat, .(neg_vs_pos), summarize,
+#             count = length(neg_vs_pos))
+# # make the label just below the largest count. 
+# y_position <- 0.75 * max(pos$count)
 
 # test the plot 
 p = 
   ggplot(dat, aes(x = mean))+
-  geom_histogram(aes(y = after_stat(count), fill = neg_vs_pos), bins = 50)+
-  scale_fill_manual(values = color_values)+
+  geom_histogram(aes(y = after_stat(density), fill = neg_vs_pos), bins = 100)+
+  geom_density(aes(fill = neg_vs_pos), alpha = .75) +  # Add density plot with opacity
+  scale_fill_manual(values = color_values_full)+
   geom_vline(aes(xintercept = 0), linetype = "dashed")+
-  geom_vline(aes(xintercept = median(mean)), color = "purple") + 
-  annotate("text", x = median_value, y = y_position, label = paste("Median =", round(median(dat$mean), 2)),
-           vjust = 1, hjust = -0.2, color = "black", size = 4) +
+  geom_vline(aes(xintercept = median(mean)), color = "purple") +
+  annotate("text", x = Inf, y = Inf, label = paste("Median =", round(median(dat$mean), 2)),
+           vjust = 10, hjust = 1.5, color = "black", size = 6) +
   theme_test()+
-  labs(x = "Mean Species Interaction Value", y = "Frequency", fill = NULL, title = "Large carnivores are subordinate")
+  labs(x = "Mean Species Interaction Value", y = "Density", fill = NULL, title = "Large carnivores are subordinate")
 # # save it!
-# ggsave("figures/Grouped Histograms/Histogram_species_interaction_value_large_carnivores_subordinate_20230713.png", p,
+# ggsave("figures/Grouped Histograms/Histogram_species_interaction_value_large_carnivores_subordinate_20230720.png", p,
 #        width = 12, height = 8, units = "in")
 
+## Do the same, but exclude dogs for exploratory purposes. 
+dat = dat[!grepl("Canis_lupus", dat$sub_sp),]
+p = 
+  ggplot(dat, aes(x = mean))+
+  geom_histogram(aes(y = after_stat(density), fill = neg_vs_pos), bins = 100)+
+  geom_density(aes(fill = neg_vs_pos), alpha = .75) +  # Add density plot with opacity
+  scale_fill_manual(values = color_values_full)+
+  geom_vline(aes(xintercept = 0), linetype = "dashed")+
+  geom_vline(aes(xintercept = median(mean)), color = "purple") +
+  annotate("text", x = Inf, y = Inf, label = paste("Median =", round(median(dat$mean), 2)),
+           vjust = 10, hjust = 1.5, color = "black", size = 6) +
+  theme_test()+
+  labs(x = "Mean Species Interaction Value", y = "Density", fill = NULL, title = "Large carnivores are subordinate but no dogs")
+# ggsave("figures/Grouped Histograms/Histogram_species_interaction_value_large_carnivores_subordinate_NO_DOGS_20230720.png", p,
+#        width = 12, height = 8, units = "in")
+
+
 ## keep it clean
-rm(p, y_position, pos, median_value, dat, i, day, month, year, date,color_values, path,gp)
+rm(p, y_position, pos, median_value, dat, i, day, month, year, date, path,gp)
 
 #
 ##
 ###
-#### Generate Ridgeline histograms per guild pair + per large carnivore
+#### Next, examine at the species-level 
+##### Generate Ridgeline histograms per large carnivore
 
 ## The goal here is to condense several of those histograms into a single figure. 
 
 ## first subset coeff to just look at the species interaction value 
 dat = coeff[coeff$var == "Species_Interaction",]
 
-# specify colors manually
-color_values <- c("Positive & Non-Significant" = "darkolivegreen1",
-                  "Positive & Significant" = "darkgreen",
-                  "Negative & Non-Significant" = "goldenrod1",
-                  "Negative & Significant" = "firebrick4")
+# ## remove dom from species name for a cleaner look 
+dat$dom_sp = gsub("DOM-", "", dat$dom_sp)
 
-## guild pair histogram
-ggplot(dat[grepl("DOM-Large_Carn", dat$guild_pair),], aes(x = mean, y = guild_pair))+#, fill = neg_vs_pos)) +
-  geom_density_ridges(scale = 1, alpha = .8) +
-  theme_ridges() +
-  # scale_fill_manual(values = color_values) +
-  labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL)
+## create two data subsets, 
+a = dat[grepl("DOM-Large_Carn", dat$guild_pair),] # one with all large carnivores as dominant
+b = a
+unique(b$dom_sp) # and a second where all of these are combined into one 
+b$dom_sp = "All_large_carnivores"
 
-## Add a column for dominant species
-dat$dom_species = sapply(strsplit(dat$Species_Pair, "~"), function(x) x[2])
+## and combine
+dat = rbind(a,b)
 
-## Create a new sig level that combines non-sig into one
-dat$neg_vs_pos2 = dat$neg_vs_pos
-dat$neg_vs_pos2[grepl("Non-Sig", dat$neg_vs_pos2)] = "Non-Significant"
-# specify colors manually
-color_values <- c("Non-Significant" = "gray75",
-                  "Positive & Significant" = "darkgreen",
-                  "Negative & Significant" = "firebrick4")
+## Set factor level based off weights from guild dataframe 
+order = arrange(guilds[guilds$TrophicGuild == "Large_Carnivore",], desc(AdultBodyMass_g))
+order$scientificNameStd
+## do it manually b/c order is silly on graph
+dat$dom_sp = factor(dat$dom_sp, levels = c("Neofelis_genus","Cuon_alpinus","Canis_lupus_familiaris", 
+                                           "Panthera_pardus","Panthera_tigris","All_large_carnivores"))
 
-## remove dom from species name for a cleaner look 
-dat$dom_species = gsub("DOM-", "", dat$dom_species)
-
-## guild pair histogram
+## dominant large carnivore histogram
 p = 
-  ggplot(dat[grepl("DOM-Large_Carn", dat$guild_pair),], aes(x = mean, y = dom_species, fill = neg_vs_pos2)) +
+  ggplot(dat, aes(x = mean, y = dom_sp, fill = neg_vs_pos2)) +
   geom_density_ridges(scale = 1, alpha = .8) +
-  # stat_density_ridges(quantile_lines = TRUE, quantiles = 0.5, alpha = .8, scale = 1)+
+  geom_vline(aes(xintercept = 0), color = "black") +
   theme_ridges() +
-  scale_fill_manual(values = color_values) +
+  scale_fill_manual(values = color_values_short) +
   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, title = "Large carnivores are dominant")
 ## save it! 
-# ggsave("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_dominant_20230713.png",p,
+# ggsave("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_dominant_20230720.png",p,
 #        width = 10, height = 8, units = "in")
 
-## This looks WAY better when we exclude models > -4, but were excluding 25 mods... 
+## make the same plot but without dogs 
+## first subset coeff to just look at the species interaction value 
+dat = coeff[coeff$var == "Species_Interaction",]
+
+## create two data subsets, 
+a = dat[grepl("DOM-Large_Carn", dat$guild_pair),] # one with all large carnivores as dominant
+## but remove dogs here !
+a = a[a$dom_sp != "Canis_lupus_familiaris",]
+b = a
+unique(b$dom_sp) # and a second where all of these are combined into one 
+b$dom_sp = "All_large_carnivores"
+# combine 
+dat = rbind(a,b)
+# and set factor levels
+dat$dom_sp = factor(dat$dom_sp, levels = c("Neofelis_genus","Cuon_alpinus",
+                                           "Panthera_pardus","Panthera_tigris","All_large_carnivores"))
+
+## make the plot
+p = 
+  ggplot(dat, aes(x = mean, y = dom_sp, fill = neg_vs_pos2)) +
+  geom_density_ridges(scale = 1, alpha = .8) +
+  geom_vline(aes(xintercept = 0), color = "black") +
+  theme_ridges() +
+  scale_fill_manual(values = color_values_short) +
+  labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, title = "Large carnivores are dominant but no dogs")
+# ggsave("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_dominant_NO_DOGS_20230720.png",p,
+#        width = 10, height = 8, units = "in")
+
+
+#### Remake this graph, but ONLY w/ preferred prey species
+# First, gather and combine relevant data 
+a = dat[dat$dom_sp == "Neofelis_genus" & 
+          dat$sub_sp %in% guilds$scientificNameStd[guilds$CL_pref == "Yes"],]
+b = dat[dat$dom_sp == "Panthera_tigris" & 
+          dat$sub_sp %in% guilds$scientificNameStd[guilds$tiger_pref == "Yes"],]
+c = dat[dat$dom_sp == "Panthera_pardus" & 
+          dat$sub_sp %in% guilds$scientificNameStd[guilds$leopard_pref == "Yes"],]
+d = dat[dat$dom_sp == "Canis_lupus_familiaris" & 
+          dat$sub_sp %in% guilds$scientificNameStd[guilds$CL_pref == "Yes"],] # no accurat dog preferences, going w/ most broad group
+e = dat[dat$dom_sp == "Cuon_alpinus" & 
+          dat$sub_sp %in% guilds$scientificNameStd[guilds$dhole_pref == "Yes"],]
+
+ridge_dat = rbind(a,b,c,d,e)
+rm(a,b,c,d,e)
+# make the plot! 
+p =
+  ggplot(ridge_dat, aes(x = mean, y = dom_sp, fill = neg_vs_pos2)) +
+  geom_density_ridges(scale = 1, alpha = .8) +
+  geom_vline(aes(xintercept = 0), color = "black") +
+  theme_ridges() +
+  scale_fill_manual(values = color_values_short) +
+  labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, title = "Large carnivores are dominant upon preferred prey")
+# ggsave("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_dominant_w_preferred_prey_20230720.png",p,
+#        width = 10, height = 8, units = "in")
+
+### now make a second one w/out dogs
+p =
+  ggplot(ridge_dat[ridge_dat$dom_sp != "Canis_lupus_familiaris",], aes(x = mean, y = dom_sp, fill = neg_vs_pos2)) +
+  geom_density_ridges(scale = 1, alpha = .8) +
+  geom_vline(aes(xintercept = 0), color = "black") +
+  theme_ridges() +
+  scale_fill_manual(values = color_values_short) +
+  labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, title = "Large carnivores are dominant upon preferred prey")
+# ggsave("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_dominant_w_preferred_prey_and_NO_DOGS_20230720.png",p,
+#        width = 10, height = 8, units = "in")
+
+
+
+
+#
+##
+### The graphs looks WAY better when we exclude models > -4, but were excluding 25 mods... 11 mods after removing small critters. 
 length(unique(dat$Species_Pair[grepl("DOM-Large_Carn", dat$guild_pair) & dat$mean < -4]))
 
 ## inspect 
@@ -981,24 +1271,116 @@ table(preform$mod_valid[preform$Species_Pair %in% check$Species_Pair]) # 6 of th
 preform[preform$Species_Pair %in% preform$Species_Pair[preform$Species_Pair %in% check$Species_Pair &
                                                          preform$mod_valid == "Yes"],]
 ## These almost all involve the emerald dove! but there are other critters here too. 
+rm(check)
 
 
-## Do the same but reverse it! 
 
-## remove SUB from species name for a cleaner look 
-dat$species = gsub("SUB-", "", dat$species)
+####
+###
+##
+# Do the same but reverse it! 
+
+## first subset coeff to just look at the species interaction value 
+dat = coeff[coeff$var == "Species_Interaction",]
+
+## create two data subsets, 
+a = dat[grepl("SUB-Large_Carn", dat$guild_pair),] # one with all large carnivores as dominant
+b = a
+unique(b$sub_sp) # and a second where all of these are combined into one 
+b$sub_sp = "All_large_carnivores"
+
+## and combine
+dat = rbind(a,b)
+
+## Set factor level to match other graphs 
+dat$sub_sp = factor(dat$sub_sp, levels = c("Neofelis_genus","Cuon_alpinus","Canis_lupus_familiaris", 
+                                           "Panthera_pardus","Panthera_tigris","All_large_carnivores"))
+
 p =
-  ggplot(dat[grepl("SUB-Large_Carn", dat$guild_pair),], aes(x = mean, y = species, fill = neg_vs_pos2)) +
+  ggplot(dat, aes(x = mean, y = sub_sp, fill = neg_vs_pos2)) +
     geom_density_ridges(scale = 1, alpha = .8) +
-    # stat_density_ridges(quantile_lines = TRUE, quantiles = 0.5, alpha = .8, scale = 1)+
     theme_ridges() +
-    scale_fill_manual(values = color_values) +
+    geom_vline(aes(xintercept = 0), color = "black") +
+    scale_fill_manual(values = color_values_short) +
     labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, title = "Large carnivores are subordinate")
-# ggsave("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_subordinate_20230629.png",p,
+# ggsave("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_subordinate_20230720.png",p,
+#        width = 10, height = 8, units = "in")
+
+##### do the same w/out dogs
+## first subset coeff to just look at the species interaction value 
+dat = coeff[coeff$var == "Species_Interaction",]
+
+## create two data subsets, 
+a = dat[grepl("SUB-Large_Carn", dat$guild_pair),] # one with all large carnivores as dominant
+# but remove dogs!
+a = a[a$sub_sp != "Canis_lupus_familiaris",]
+b = a
+unique(b$sub_sp) # and a second where all of these are combined into one 
+b$sub_sp = "All_large_carnivores"
+
+## and combine
+dat = rbind(a,b)
+
+## Set factor level to match other graphs 
+dat$sub_sp = factor(dat$sub_sp, levels = c("Neofelis_genus","Cuon_alpinus", 
+                                           "Panthera_pardus","Panthera_tigris","All_large_carnivores"))
+## make the plot!
+p =
+  ggplot(dat, aes(x = mean, y = sub_sp, fill = neg_vs_pos2)) +
+  geom_density_ridges(scale = 1, alpha = .8) +
+  theme_ridges() +
+  geom_vline(aes(xintercept = 0), color = "black") +
+  scale_fill_manual(values = color_values_short) +
+  labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, title = "Large carnivores are subordinate")
+# ggsave("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_subordinate_NO_DOGS_20230720.png",p,
+#        width = 10, height = 8, units = "in")
+
+####
+###
+##
+# now subset for preferred prey species
+
+# First, gather and combine relevant data 
+a = dat[dat$sub_sp == "Neofelis_genus" & 
+          dat$dom_sp %in% guilds$scientificNameStd[guilds$CL_pref == "Yes"],]
+b = dat[dat$sub_sp == "Panthera_tigris" & 
+          dat$dom_sp %in% guilds$scientificNameStd[guilds$tiger_pref == "Yes"],]
+c = dat[dat$sub_sp == "Panthera_pardus" & 
+          dat$dom_sp %in% guilds$scientificNameStd[guilds$leopard_pref == "Yes"],]
+d = dat[dat$sub_sp == "Canis_lupus_familiaris" & 
+          dat$dom_sp %in% guilds$scientificNameStd[guilds$CL_pref == "Yes"],]# no accurat dog preferences, going w/ most broad group
+e = dat[dat$sub_sp == "Cuon_alpinus" & 
+          dat$dom_sp %in% guilds$scientificNameStd[guilds$dhole_pref == "Yes"],]
+
+ridge_dat = rbind(a,b,c,d,e)
+rm(a,b,c,d,e)
+
+## Make the plots 
+p=
+  ggplot(ridge_dat, aes(x = mean, y = sub_sp, fill = neg_vs_pos2)) +
+  geom_density_ridges(scale = 1, alpha = .8) +
+  theme_ridges() +
+  geom_vline(aes(xintercept = 0), color = "black") +
+  scale_fill_manual(values = color_values_short) +
+  labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, title = "Large carnivores are subordinate to preferred prey")
+# ggsave("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_subordinate_with_preferred_prey_20230720.png",p,
+#        width = 10, height = 8, units = "in")
+
+## do the same w/out dogs
+p =
+  ggplot(ridge_dat[ridge_dat$sub_sp != "Canis_lupus_familiaris",], aes(x = mean, y = sub_sp, fill = neg_vs_pos2)) +
+  geom_density_ridges(scale = 1, alpha = .8) +
+  theme_ridges() +
+  geom_vline(aes(xintercept = 0), color = "black") +
+  scale_fill_manual(values = color_values_short) +
+  labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, title = "Large carnivores are subordinate to preferred prey")
+# ggsave("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_subordinate_with_preferred_prey_NO_DOGS_20230720.png",p,
 #        width = 10, height = 8, units = "in")
 
 
-rm(dat, p, sum, color_values)
+
+
+rm(dat, ridge_dat,order, p, color_values_short, color_values_full, a,b)
 
 #
 ######### Visualize PPC plots ########
@@ -1236,8 +1618,14 @@ sum
 
 
 ## Subset preform for only large carnivores as dominant
-dat = preform[preform$DOM_guild == "Large_Carnivore",]
-unique(dat$dom_species) # good. 
+# dat = preform[preform$DOM_guild == "Large_Carnivore",]
+# unique(dat$dom_species) # good. 
+
+## Preform failed in recent test, using coeff rn
+dat = coeff[grepl("DOM-Large_Carnivore", coeff$guild_pair) & coeff$var == "Species_Interaction",]
+# rename cols to match 
+names(dat)[c(2, 10, 11)] = c("Interaction_Estimate", "Significance", "dom_species")
+
 
 #### Summarize results by large carnivore to clearly present them
 sum_dom_large_carn = ddply(dat, .(dom_species), summarize,
@@ -1254,6 +1642,7 @@ sum_dom_large_carn$percent_nonsig_neg = sum_dom_large_carn$num_nonsig_neg_int / 
 sum_dom_large_carn$percent_nonsig_pos = sum_dom_large_carn$num_nonsig_pos_int / sum_dom_large_carn$num_combos * 100
 sum_dom_large_carn
 ## Very interesting! Canis lupus is the only species with more significant negative interactions than any other! 
+## But now leopards have an equal number of significant negative and positive interactions.  
 
 ## which species are feral dogs negetivly affecting?
 preform$sub_species[preform$dom_species == "Canis_lupus_familiaris" &

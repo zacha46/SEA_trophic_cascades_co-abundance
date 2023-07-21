@@ -5,7 +5,7 @@
 ## But because models are too large to save ALL of them, 
 # this script will extract only the relevant dataframes. 
 
-## Submitted to HPC on June 15th, 2023
+## Submitted to HPC on June 21st, 2023
 # Zachary Amir, z.amir@uq.edu.au
 
 ####### Set up #####
@@ -30,7 +30,7 @@ setting = Sys.getenv("SETTING")
 # setting = "PUBLICATION"     # ~6000+ min ??
 
 #### Import the already formatted data
-dat = readRDS("data/co-abundance/Bundled_data_for_Bayes_co-abundance_mods_435_species_pairs_20230718.RDS")
+dat = readRDS("data/co-abundance/Bundled_data_for_Bayes_co-abundance_mods_394_species_pairs_20230720.RDS")
 
 ## Thin to a single species pair
 bdata = dat[[slurm]]

@@ -10,8 +10,8 @@
 # Select 3 CPUS per node (one per MCMC chain)
 #SBATCH --ntasks=3
 
-# Select 500,000 MB (500 GB) of memory per node 
-#SBATCH --mem=500000
+# Select 1,000,000 MB (1 TB) of memory per node 
+#SBATCH --mem=1000000
 
 # Ensure we are in the general queue, not AI, debug, or GPU
 #SBATCH --partition=general
@@ -20,10 +20,10 @@
 #SBATCH --time=200:00:00
 
 # SPECIFY THE JOB ARRAY-
-#SBATCH --array=1-610
+#SBATCH --array=1-394
 
 # SPECIFY THE JOB NAME
-#SBATCH --job-name=co-ab_BIG
+#SBATCH --job-name=CoA_BIG
 
 # SPECIFY .err AND .out FILE LOCATIONS
 #SBATCH --output=OE/co-abundance/slurm-%A_%a.out
@@ -37,7 +37,7 @@ if [ $? -ne 0 ]; then
 fi
 
 # SET THE 'setting' VARIABLE THAT WILL BE LOADED IN R
-export SETTING="LONG" 
+export SETTING="PUBLICATION" 
 
 # SPECIFY THE PBS WORKING DIRECTORY AND PRINT TO VERIFY
 cd $SLURM_SUBMIT_DIR

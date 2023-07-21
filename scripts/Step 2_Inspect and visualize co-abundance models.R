@@ -1175,6 +1175,7 @@ order$scientificNameStd
 ## do it manually b/c order is silly on graph
 dat$dom_sp = factor(dat$dom_sp, levels = c("Neofelis_genus","Cuon_alpinus","Canis_lupus_familiaris", 
                                            "Panthera_pardus","Panthera_tigris","All_large_carnivores"))
+rm(order)
 
 ## dominant large carnivore histogram
 p = 
@@ -1218,6 +1219,7 @@ p =
 
 
 #### Remake this graph, but ONLY w/ preferred prey species
+dat = coeff[coeff$var == "Species_Interaction",]
 # First, gather and combine relevant data 
 a = dat[dat$dom_sp == "Neofelis_genus" & 
           dat$sub_sp %in% guilds$scientificNameStd[guilds$CL_pref == "Yes"],]
@@ -1226,21 +1228,31 @@ b = dat[dat$dom_sp == "Panthera_tigris" &
 c = dat[dat$dom_sp == "Panthera_pardus" & 
           dat$sub_sp %in% guilds$scientificNameStd[guilds$leopard_pref == "Yes"],]
 d = dat[dat$dom_sp == "Canis_lupus_familiaris" & 
-          dat$sub_sp %in% guilds$scientificNameStd[guilds$CL_pref == "Yes"],] # no accurat dog preferences, going w/ most broad group
+          dat$sub_sp %in% guilds$scientificNameStd[guilds$CL_pref == "Yes"],] # no accurate dog preferences, going w/ most broad group
 e = dat[dat$dom_sp == "Cuon_alpinus" & 
           dat$sub_sp %in% guilds$scientificNameStd[guilds$dhole_pref == "Yes"],]
+## also adding all large carnivores to keep sizing consistent
+f = dat[grepl("DOM-Large_Carn", dat$guild_pair),]
+f$dom_sp = "All_large_carnivores"
 
-ridge_dat = rbind(a,b,c,d,e)
-rm(a,b,c,d,e)
+ridge_dat = rbind(a,b,c,d,e,f)
+rm(a,b,c,d,e,f)
+
+## set factor levels 
+ridge_dat$dom_sp = factor(ridge_dat$dom_sp, levels = c("Neofelis_genus","Cuon_alpinus","Canis_lupus_familiaris", 
+                                                       "Panthera_pardus","Panthera_tigris","All_large_carnivores"))
+unique(ridge_dat$dom_sp) # good, want 6 spots 
+
 # make the plot! 
 p =
   ggplot(ridge_dat, aes(x = mean, y = dom_sp, fill = neg_vs_pos2)) +
   geom_density_ridges(scale = 1, alpha = .8) +
   geom_vline(aes(xintercept = 0), color = "black") +
   theme_ridges() +
+  coord_cartesian(xlim = c(-7,2))+ # to remove all large carn fluff
   scale_fill_manual(values = color_values_short) +
   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, title = "Large carnivores are dominant upon preferred prey")
-# ggsave("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_dominant_w_preferred_prey_20230720.png",p,
+# ggsave("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_dominant_w_preferred_prey_20230721.png",p,
 #        width = 10, height = 8, units = "in")
 
 ### now make a second one w/out dogs
@@ -1249,11 +1261,24 @@ p =
   geom_density_ridges(scale = 1, alpha = .8) +
   geom_vline(aes(xintercept = 0), color = "black") +
   theme_ridges() +
+  coord_cartesian(xlim = c(-7,2))+ # to remove all large carn fluff
   scale_fill_manual(values = color_values_short) +
   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, title = "Large carnivores are dominant upon preferred prey")
-# ggsave("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_dominant_w_preferred_prey_and_NO_DOGS_20230720.png",p,
+# ggsave("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_dominant_w_preferred_prey_and_NO_DOGS_20230721.png",p,
 #        width = 10, height = 8, units = "in")
 
+
+### Which preferred prey species are significant suppressed by tigers?
+dat = coeff[coeff$var == "Species_Interaction",]
+dat[dat$mean < 0 &
+      dat$dom_sp == "Panthera_tigris" &
+      dat$sig == "Significant" &
+      dat$sub_sp %in% guilds$scientificNameStd[guilds$tiger_pref == "Yes"],]
+## now what about leopards 
+dat[dat$mean < 0 &
+      dat$dom_sp == "Panthera_pardus" &
+      dat$sig == "Significant" &
+      dat$sub_sp %in% guilds$scientificNameStd[guilds$leopard_pref == "Yes"],] # macaques! 
 
 
 
@@ -1340,7 +1365,9 @@ p =
 ##
 # now subset for preferred prey species
 
-# First, gather and combine relevant data 
+# First, start fresh
+dat = coeff[coeff$var == "Species_Interaction",]
+# then, gather and combine relevant data 
 a = dat[dat$sub_sp == "Neofelis_genus" & 
           dat$dom_sp %in% guilds$scientificNameStd[guilds$CL_pref == "Yes"],]
 b = dat[dat$sub_sp == "Panthera_tigris" & 
@@ -1351,19 +1378,28 @@ d = dat[dat$sub_sp == "Canis_lupus_familiaris" &
           dat$dom_sp %in% guilds$scientificNameStd[guilds$CL_pref == "Yes"],]# no accurat dog preferences, going w/ most broad group
 e = dat[dat$sub_sp == "Cuon_alpinus" & 
           dat$dom_sp %in% guilds$scientificNameStd[guilds$dhole_pref == "Yes"],]
+f = dat[grepl("SUB-Large_Carn", dat$guild_pair),]
+f$sub_sp = "All_large_carnivores"
 
-ridge_dat = rbind(a,b,c,d,e)
-rm(a,b,c,d,e)
+## combine
+ridge_dat = rbind(a,b,c,d,e,f)
+rm(a,b,c,d,e,f)
+
+## Set factor level to match other graphs 
+ridge_dat$sub_sp = factor(ridge_dat$sub_sp, levels = c("Neofelis_genus","Cuon_alpinus","Canis_lupus_familiaris", 
+                                                       "Panthera_pardus","Panthera_tigris","All_large_carnivores"))
+
 
 ## Make the plots 
 p=
   ggplot(ridge_dat, aes(x = mean, y = sub_sp, fill = neg_vs_pos2)) +
   geom_density_ridges(scale = 1, alpha = .8) +
   theme_ridges() +
-  geom_vline(aes(xintercept = 0), color = "black") +
+  coord_cartesian(xlim = c(-4,2))+ # to remove all large carn fluff
+  geom_vline(aes(xintercept = 0), color = "black") + 
   scale_fill_manual(values = color_values_short) +
   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, title = "Large carnivores are subordinate to preferred prey")
-# ggsave("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_subordinate_with_preferred_prey_20230720.png",p,
+# ggsave("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_subordinate_with_preferred_prey_20230721.png",p,
 #        width = 10, height = 8, units = "in")
 
 ## do the same w/out dogs
@@ -1371,11 +1407,29 @@ p =
   ggplot(ridge_dat[ridge_dat$sub_sp != "Canis_lupus_familiaris",], aes(x = mean, y = sub_sp, fill = neg_vs_pos2)) +
   geom_density_ridges(scale = 1, alpha = .8) +
   theme_ridges() +
+  coord_cartesian(xlim = c(-4,2))+ # to remove all large carn fluff
   geom_vline(aes(xintercept = 0), color = "black") +
   scale_fill_manual(values = color_values_short) +
   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, title = "Large carnivores are subordinate to preferred prey")
-# ggsave("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_subordinate_with_preferred_prey_NO_DOGS_20230720.png",p,
+# ggsave("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_subordinate_with_preferred_prey_NO_DOGS_20230721.png",p,
 #        width = 10, height = 8, units = "in")
+
+### Which preferred prey species are significant supporting tigers?
+dat = coeff[coeff$var == "Species_Interaction",]
+dat[dat$mean > 0 &
+      dat$sub_sp == "Panthera_tigris" &
+      dat$sig == "Significant" &
+      dat$dom_sp %in% guilds$scientificNameStd[guilds$tiger_pref == "Yes"],]
+## now what about leopards 
+dat[dat$mean > 0 &
+      dat$sub_sp == "Panthera_pardus" &
+      dat$sig == "Significant" &
+      dat$dom_sp %in% guilds$scientificNameStd[guilds$leopard_pref == "Yes"],] 
+## now what about dholes 
+dat[dat$mean > 0 &
+      dat$sub_sp == "Cuon_alpinus" &
+      dat$sig == "Significant" &
+      dat$dom_sp %in% guilds$scientificNameStd[guilds$dhole_pref == "Yes"],] # macaques! 
 
 
 

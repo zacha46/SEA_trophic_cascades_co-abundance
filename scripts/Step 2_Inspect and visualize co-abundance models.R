@@ -1194,7 +1194,7 @@ p =
              size = 5, shape = "triangle", alpha = .8, position = position_nudge(y = .08), inherit.aes = F)+
   geom_vline(aes(xintercept = 0), color = "black") +
   theme_ridges() +
-  coord_cartesian(xlim = c(min,max))+ # to remove all large carn fluff
+  # coord_cartesian(xlim = c(min,max))+ # to remove all large carn fluff
   scale_fill_manual(values = color_values_short) +
   scale_color_manual(values = color_values_short) +
   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = "Large carnivores are dominant upon preferred prey")
@@ -1243,13 +1243,13 @@ rm(small_dat)
 
 ## make the plot
 p = 
-  ggplot(ridge_dat, aes(x = mean, y = dom_sp, fill = neg_vs_pos2)) +
+  ggplot(ridge_dat[ridge_dat$dom_sp != "Canis_lupus_familiaris",], aes(x = mean, y = dom_sp, fill = neg_vs_pos2)) +
   geom_density_ridges(scale=.9, alpha = .8, jittered_points = TRUE, point_alpha=.5)+
-  geom_point(data = ridge_points, aes(x = mean, y = dom_sp, color = neg_vs_pos2), 
+  geom_point(data = ridge_points[ridge_points$dom_sp != "Canis_lupus_familiaris",], aes(x = mean, y = dom_sp, color = neg_vs_pos2), 
              size = 5, shape = "triangle", alpha = .8, position = position_nudge(y = .08), inherit.aes = F)+
   geom_vline(aes(xintercept = 0), color = "black") +
   theme_ridges() +
-  coord_cartesian(xlim = c(min,max))+ # to remove all large carn fluff
+  # coord_cartesian(xlim = c(min,max))+ # to remove all large carn fluff
   scale_fill_manual(values = color_values_short) +
   scale_color_manual(values = color_values_short) +
   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = "Large carnivores are dominant upon preferred prey")
@@ -1377,8 +1377,8 @@ p =
   scale_color_manual(values = color_values_short) +
   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = "Large carnivores are dominant upon preferred prey")
 ## Save it!
-ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_dominant_w_preferred_prey_and_NO_DOGS_and_outliers_removed_", date, ".png", sep = ""),
-       p, width = 10, height = 8, units = "in")
+# ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_dominant_w_preferred_prey_and_NO_DOGS_and_outliers_removed_", date, ".png", sep = ""),
+#        p, width = 10, height = 8, units = "in")
 
 ### Which preferred prey species are significant suppressed by tigers?
 dat = coeff[coeff$var == "Species_Interaction",]
@@ -2040,6 +2040,24 @@ sum_dom_large_carn_pref
 ## now merge w/ all results 
 sum_dom_LC = merge(sum_dom_large_carn, sum_dom_large_carn_pref, by = "dom_species")
 
+## but calculate percentages for ALL large carnivores too, just not preferred
+sum_dom_LC[6, "dom_species"] = "All_large_carnivores"
+sum_dom_LC[6, 2:6] = colSums(sum_dom_LC[1:5, 2:6])
+# percentages
+sum_dom_LC$percent_sig_neg[sum_dom_LC$dom_species == "All_large_carnivores"] = 
+  round(sum_dom_LC$num_sig_neg_int[sum_dom_LC$dom_species == "All_large_carnivores"] / 
+          sum_dom_LC$num_combos[sum_dom_LC$dom_species == "All_large_carnivores"] * 100, 3)
+sum_dom_LC$percent_sig_pos[sum_dom_LC$dom_species == "All_large_carnivores"] = 
+  round(sum_dom_LC$num_sig_pos_int[sum_dom_LC$dom_species == "All_large_carnivores"] / 
+          sum_dom_LC$num_combos[sum_dom_LC$dom_species == "All_large_carnivores"] * 100, 3)
+sum_dom_LC$percent_nonsig_neg[sum_dom_LC$dom_species == "All_large_carnivores"] = 
+  round(sum_dom_LC$num_nonsig_neg_int[sum_dom_LC$dom_species == "All_large_carnivores"] / 
+          sum_dom_LC$num_combos[sum_dom_LC$dom_species == "All_large_carnivores"] * 100, 3)
+sum_dom_LC$percent_nonsig_pos[sum_dom_LC$dom_species == "All_large_carnivores"] = 
+  round(sum_dom_LC$num_nonsig_pos_int[sum_dom_LC$dom_species == "All_large_carnivores"] / 
+          sum_dom_LC$num_combos[sum_dom_LC$dom_species == "All_large_carnivores"] * 100, 3)
+sum_dom_LC # good! 
+
 ## grab today's date
 day<-str_sub(Sys.Date(),-2)
 month<-str_sub(Sys.Date(),-5,-4)
@@ -2134,6 +2152,24 @@ sum_sub_large_carn_pref
 
 ## now merge w/ all results 
 sum_sub_LC = merge(sum_sub_large_carn, sum_sub_large_carn_pref, by = "sub_species")
+
+## but calculate percentages for ALL large carnivores too, just not preferred
+sum_sub_LC[6, "sub_species"] = "All_large_carnivores"
+sum_sub_LC[6, 2:6] = colSums(sum_sub_LC[1:5, 2:6])
+# percentages
+sum_sub_LC$percent_sig_neg[sum_sub_LC$sub_species == "All_large_carnivores"] = 
+  round(sum_sub_LC$num_sig_neg_int[sum_sub_LC$sub_species == "All_large_carnivores"] / 
+          sum_sub_LC$num_combos[sum_sub_LC$sub_species == "All_large_carnivores"] * 100, 3)
+sum_sub_LC$percent_sig_pos[sum_sub_LC$sub_species == "All_large_carnivores"] = 
+  round(sum_sub_LC$num_sig_pos_int[sum_sub_LC$sub_species == "All_large_carnivores"] / 
+          sum_sub_LC$num_combos[sum_sub_LC$sub_species == "All_large_carnivores"] * 100, 3)
+sum_sub_LC$percent_nonsig_neg[sum_sub_LC$sub_species == "All_large_carnivores"] = 
+  round(sum_sub_LC$num_nonsig_neg_int[sum_sub_LC$sub_species == "All_large_carnivores"] / 
+          sum_sub_LC$num_combos[sum_sub_LC$sub_species == "All_large_carnivores"] * 100, 3)
+sum_sub_LC$percent_nonsig_pos[sum_sub_LC$sub_species == "All_large_carnivores"] = 
+  round(sum_sub_LC$num_nonsig_pos_int[sum_sub_LC$sub_species == "All_large_carnivores"] / 
+          sum_sub_LC$num_combos[sum_sub_LC$sub_species == "All_large_carnivores"] * 100, 3)
+sum_sub_LC # good! 
 
 ## grab today's date
 day<-str_sub(Sys.Date(),-2)

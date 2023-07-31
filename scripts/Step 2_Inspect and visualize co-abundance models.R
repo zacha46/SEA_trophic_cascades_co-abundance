@@ -39,6 +39,13 @@ og_meta = read.csv("/Users/zachary_amir/Dropbox/CT capture histories database/As
 
 ## first, I will import the bundled data to generate a vector of relevant species pairs 
 bdata = readRDS("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_394_species_pairs_20230720.RDS")
+
+## There are even less species I am willing to include now, remove them! 
+bdata = bdata[!names(bdata) %in% names(bdata)[grepl("Canis_lupus_fam", names(bdata))]] # no more dogs
+bdata = bdata[!names(bdata) %in% names(bdata)[grepl("Bos_taur", names(bdata))]] # no more cattle 
+bdata = bdata[!names(bdata) %in% names(bdata)[grepl("Pongo_pygmaeus", names(bdata))]] # no more orangutans 
+bdata = bdata[!names(bdata) %in% names(bdata)[grepl("Macaca_ge", names(bdata))]] # no more un-ID'd macaques. 
+
 all_combos = names(bdata)
 
 
@@ -440,76 +447,78 @@ str(guilds)
 
 #### TBH, this should probably get added to step 1 when I generate the guilds DF anyway. 
 
-### The goal here is to determine if large carnivores have different effects 
-## when looking at 'preferred' prey species vs non-preferred species. 
-# Ideally, just add a yes-no column to the guilds dataframe for each large carnivore. 
-
-# Diet changes so much based on habitat, interactions, and time of year... 
-# All species seem to prefer to some degree Sus scrofa based on readings. 
-
-#### Tigers
-# https://zslpublications.onlinelibrary.wiley.com/doi/full/10.1111/j.1469-7998.2011.00871.x
-# suggests preferred weight range of 60-250 kg, and wil eat the largest available prey.... So anything >= 60 kg to accomodate tapir, gaur, and cattle
-guilds$tiger_pref = "No"
-guilds$tiger_pref[guilds$AdultBodyMass_g > 60000] = "Yes"
-guilds$tiger_pref[guilds$scientificNameStd == "Panthera_tigris"] = "NA" # no cannibals allowed. 
-# who is preferred?
-guilds$scientificNameStd[guilds$tiger_pref == "Yes"] # 8 species, ok
-# black bear made it in, and this MS says they are preyed upon by tigers in Laos: https://onlinelibrary.wiley.com/doi/full/10.1002/ece3.9067
-#who is missing?
-sort(guilds$scientificNameStd[guilds$tiger_pref == "No"]) # seems ok, 42 species
-
-#### Leopards 
-#  https://doi.org/10.1111/j.1469-7998.2006.00139.x
-# suggest preferred weight range of 10-40 kg. 
-# https://www.sciencedirect.com/science/article/pii/S0006320712005149 # langurs/primates, pigs when tigers are absent. 
-guilds$leopard_pref = "No"
-guilds$leopard_pref[guilds$AdultBodyMass_g > 10000 & guilds$AdultBodyMass_g <= 40000] = "Yes"
-guilds$tiger_pref[guilds$scientificNameStd == "Panthera_pardus"] = "NA" # no cannibals allowed. 
-# who is preferred?
-guilds$scientificNameStd[guilds$leopard_pref == "Yes"] # 5 species, mostly carnivores
-## exclude clouded leopards and dholes, leave dogs tho (evidence from india)
-guilds$leopard_pref[guilds$scientificNameStd %in% c("Cuon_alpinus","Neofelis_genus")] = "No"
-## also add primates and pigs based off readings
-guilds$leopard_pref[grepl("Macac", guilds$scientificNameStd)] = "Yes" # leopards dont overlap w/ langurs in our dataset, so only include macaques. 
-guilds$leopard_pref[guilds$scientificNameStd == "Sus_scrofa"] = "Yes"
-# who is preferred now?
-guilds$scientificNameStd[guilds$leopard_pref == "Yes"] # 8 species, much better! 
-
-
-#### Dholes
-# https://zslpublications.onlinelibrary.wiley.com/doi/10.1111/jzo.12171
-## Hayward style pref wieght range of 130–190 kg, and highlights sambar as important. 
-# https://www.ncbi.nlm.nih.gov/pmc/articles/PMC9388674/
-## scat analysis that emphasizes large deer (sambar + chital), pigs and muntjac were moderetly avoided but still consumed.
-# https://doi.org/10.1016/j.mambio.2013.08.007
-## lit review of scats and abundance: 40 and 60 kg weight range, sambar preferred most. 
-guilds$dhole_pref = "No"
-guilds$dhole_pref[guilds$AdultBodyMass_g > 40000 & guilds$AdultBodyMass_g < 190000 &
-                    guilds$TrophicLevel != "Carnivore"] = "Yes"
-# who is preferred?
-guilds$scientificNameStd[guilds$dhole_pref == "Yes"] # Some species here dont make sense: bears --> remove! Also some dont spatially overlap (orangutan)
-# remove bears + orangutans, no evidence for this! 
-guilds$dhole_pref[guilds$scientificNameStd %in% c("Helarctos_malayanus", "Ursus_thibetanus", "Pongo_pygmaeus")] = "No"
-## unsure if muntjac should be added here... adding for now because they are consumed
-guilds$dhole_pref[guilds$scientificNameStd %in% c("Muntiacus_genus")] = "Yes"
-# who is preferred?
-guilds$scientificNameStd[guilds$dhole_pref == "Yes"] # 5 species now... just ok. 
-
-
-#### Clouded leopards
-# https://onlinelibrary.wiley.com/doi/full/10.1002/ece3.9067 
-# Serow! Ungulates in particular. No evidence for primates in this citation,
-# but evidence from elsewhere for primates, and generally evidence for a varied and wide diet. 
-guilds$CL_pref = "No"
-guilds$CL_pref[guilds$AdultBodyMass_g > 7000 & guilds$AdultBodyMass_g < 190000 &
-                 guilds$TrophicGuild != "Large_Carnivore"] = "Yes"
-# who is preferred?
-guilds$scientificNameStd[guilds$CL_pref == "Yes"] # Remove some of the larger carnivores (e.g. bears, cats), but leaving binturong b/c evidence exists! 
-guilds$CL_pref[guilds$scientificNameStd %in% c("Catopuma_temminckii", "Helarctos_malayanus", "Ursus_thibetanus")] = "No"
-## this has 14 species, many more than other predators, but little info exists for them! 
-
-
+# ### The goal here is to determine if large carnivores have different effects 
+# ## when looking at 'preferred' prey species vs non-preferred species. 
+# # Ideally, just add a yes-no column to the guilds dataframe for each large carnivore. 
+# 
+# # Diet changes so much based on habitat, interactions, and time of year... 
+# # All species seem to prefer to some degree Sus scrofa based on readings. 
+# 
+# #### Tigers
+# # https://zslpublications.onlinelibrary.wiley.com/doi/full/10.1111/j.1469-7998.2011.00871.x
+# # suggests preferred weight range of 60-250 kg, and wil eat the largest available prey.... So anything >= 60 kg to accomodate tapir, gaur, and cattle
+# ### Change minimum wieght to 17 kg to include muntjac and cite eco-evo paper about it. 
+# guilds$tiger_pref = "No"
+# guilds$tiger_pref[guilds$AdultBodyMass_g > 17000] = "Yes"
+# guilds$tiger_pref[guilds$scientificNameStd == "Panthera_tigris"] = "NA" # no cannibals allowed. 
+# # who is preferred?
+# guilds$scientificNameStd[guilds$tiger_pref == "Yes"] # 10 species, ok
+# # black bear made it in, and this MS says they are preyed upon by tigers in Laos: https://onlinelibrary.wiley.com/doi/full/10.1002/ece3.9067
+# # Might as well leave sun bear in here too. 
+# #who is missing?
+# sort(guilds$scientificNameStd[guilds$tiger_pref == "No"]) # seems ok, 42 species
+# 
+# #### Leopards 
+# #  https://doi.org/10.1111/j.1469-7998.2006.00139.x
+# # suggest preferred weight range of 10-40 kg. 
+# # https://www.sciencedirect.com/science/article/pii/S0006320712005149 # langurs/primates, pigs when tigers are absent. 
+# guilds$leopard_pref = "No"
+# guilds$leopard_pref[guilds$AdultBodyMass_g > 10000 & guilds$AdultBodyMass_g <= 40000] = "Yes"
+# guilds$tiger_pref[guilds$scientificNameStd == "Panthera_pardus"] = "NA" # no cannibals allowed. 
+# # who is preferred?
+# guilds$scientificNameStd[guilds$leopard_pref == "Yes"] # 5 species, mostly carnivores
+# ## exclude clouded leopards and dholes, leave dogs tho (evidence from india)
+# guilds$leopard_pref[guilds$scientificNameStd %in% c("Cuon_alpinus","Neofelis_genus")] = "No"
+# ## also add primates and pigs based off readings
+# guilds$leopard_pref[grepl("Macac", guilds$scientificNameStd)] = "Yes" # leopards dont overlap w/ langurs in our dataset, so only include macaques. 
+# guilds$leopard_pref[guilds$scientificNameStd == "Sus_scrofa"] = "Yes"
+# # who is preferred now?
+# guilds$scientificNameStd[guilds$leopard_pref == "Yes"] # 8 species, much better! 
+# 
+# 
+# #### Dholes
+# # https://zslpublications.onlinelibrary.wiley.com/doi/10.1111/jzo.12171
+# ## Hayward style pref wieght range of 130–190 kg, and highlights sambar as important. 
+# # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC9388674/
+# ## scat analysis that emphasizes large deer (sambar + chital), pigs and muntjac were moderetly avoided but still consumed.
+# # https://doi.org/10.1016/j.mambio.2013.08.007
+# ## lit review of scats and abundance: 40 and 60 kg weight range, sambar preferred most. 
+# ### Drop down to 10 kg based on Mattehw suggesgtion, but wait for caitation
+# guilds$dhole_pref = "No"
+# guilds$dhole_pref[guilds$AdultBodyMass_g > 40000 & guilds$AdultBodyMass_g < 190000 &
+#                     guilds$TrophicLevel != "Carnivore"] = "Yes"
+# # who is preferred?
+# guilds$scientificNameStd[guilds$dhole_pref == "Yes"] # Some species here dont make sense: bears --> remove! Also some dont spatially overlap (orangutan)
+# # remove bears + orangutans, no evidence for this! 
+# guilds$dhole_pref[guilds$scientificNameStd %in% c("Helarctos_malayanus", "Ursus_thibetanus", "Pongo_pygmaeus")] = "No"
+# ## unsure if muntjac should be added here... adding for now because they are consumed
+# guilds$dhole_pref[guilds$scientificNameStd %in% c("Muntiacus_genus")] = "Yes"
+# # who is preferred?
+# guilds$scientificNameStd[guilds$dhole_pref == "Yes"] # 5 species now... just ok. 
+# 
+# 
+# #### Clouded leopards
+# # https://onlinelibrary.wiley.com/doi/full/10.1002/ece3.9067 
+# # Serow! Ungulates in particular. No evidence for primates in this citation,
+# # but evidence from elsewhere for primates, and generally evidence for a varied and wide diet. 
+# guilds$CL_pref = "No"
+# guilds$CL_pref[guilds$AdultBodyMass_g > 7000 & guilds$AdultBodyMass_g < 190000 &
+#                  guilds$TrophicGuild != "Large_Carnivore"] = "Yes"
+# # who is preferred?
+# guilds$scientificNameStd[guilds$CL_pref == "Yes"] # Remove some of the larger carnivores (e.g. bears, cats), but leaving binturong b/c evidence exists! 
+# guilds$CL_pref[guilds$scientificNameStd %in% c("Catopuma_temminckii", "Helarctos_malayanus", "Ursus_thibetanus")] = "No"
+# ## this has 14 species, many more than other predators, but little info exists for them! 
+# 
 
 #
 ##

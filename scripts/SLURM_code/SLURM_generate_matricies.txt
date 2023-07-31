@@ -20,7 +20,7 @@
 #SBATCH --time=1:00:00
 
 # SPECIFY THE JOB ARRAY-
-#SBATCH --array=1-51
+#SBATCH --array=1-44
 
 # SPECIFY THE JOB NAME
 #SBATCH --job-name=UMFs

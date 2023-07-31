@@ -1,7 +1,7 @@
 ---
 title: "Step 1_Prepare data for bundling"
 author: "Zachary Amir"
-date: "2023-07-18"
+date: "2023-07-31"
 output: html_document
 ---
 
@@ -216,11 +216,27 @@ length(keep$Species) # 106 species before any cleaning
 ### Clean up and combine some speices names
 
 # Hystrix
-sort(table(caps$Species[grepl("Hystrix", caps$Species)])) ## dont change crassispinis b/c we have enough! 
-caps$Species[caps$Species %in% c("Hystrix_brachyura", "Hystrix")] = "Hystrix_genus"
+sort(table(caps$Species[grepl("Hystrix", caps$Species)])) ## dont change crassispinis or brachyura b/c we have enough! 
+# caps$Species[caps$Species %in% c("Hystrix_brachyura", "Hystrix")] = "Hystrix_genus"
 
 # Muntjac
-sort(table(caps$Species[grepl("Munt", caps$Species)])) # ecologically very similar species, just combine, but maybe this is good supplementary information
+sort(table(caps$Species[grepl("Munt", caps$Species)])) # ecologically very similar species, but what about spatial distribution?
+## where do all these muntjacs come from?
+Ma = caps$cell_id_3km[caps$Species == "Muntiacus_atherodes"]
+unique(meta$Landscape[meta$cell_id_3km %in% Ma]) # Sarawak and Sabah.
+Mr = caps$cell_id_3km[caps$Species == "Muntiacus_reevesi"]
+unique(meta$Landscape[meta$cell_id_3km %in% Mr]) # Sarawak, Sabah, Sumatra, and S. Thailand...
+Mv = caps$cell_id_3km[caps$Species == "Muntiacus_vaginalis"]
+unique(meta$Landscape[meta$cell_id_3km %in% Mv]) # Thailand, Vietnam, China
+Mm = caps$cell_id_3km[caps$Species == "Muntiacus_muntjak"]
+sort(unique(meta$Landscape[meta$cell_id_3km %in% Mm])) # Laos, P_Malaysia, Sarawak, Sabah, Sumatra, Thailand (many)
+M = caps$cell_id_3km[caps$Species == "Muntiacus"]
+sort(unique(meta$Landscape[meta$cell_id_3km %in% M])) # Laos, Sarawak, Thailand (many), Vietnam.
+## These are all quite spatially distinct, so there is good motivation to combine these species into one
+# Make sure to save independent detections of all for supplementary materials later! 
+rm(Ma, Mr, Mv, Mm, M)
+
+## combine
 caps$Species[grepl("Munt", caps$Species)] = "Muntiacus_genus"
 
 # clouded leopards
@@ -244,9 +260,9 @@ sort(table(caps$Species[grepl("Canis_lup", caps$Species)])) #Just call these dog
 caps$Species[grepl("Canis_lup", caps$Species)] = "Canis_lupus_familiaris"
 
 # mongoose
-sort(table(caps$Species[grepl("Herpe", caps$Species)])) # Combine all species except for brachyurus b/c we have enough detections
+sort(table(caps$Species[grepl("Herpe", caps$Species)])) # Just stick with H_urva and H_brachyrus 
 caps$Species[caps$Species %in% c("Herpestes", "Herpestes_semitorquatus",
-                                 "Herpestes_urva")] = "Herpestes_genus"
+                                 "Herpestidae")] = "Herpestes_genus" # this will get excluded later anyway b/c we have more specific species, which is better. 
 
 # Murids
 unique(caps$Species[grepl("Muri", caps$Species)]) #only the family muridae
@@ -266,9 +282,9 @@ unique(caps$Species[grepl("Gallu", caps$Species)]) #analyze at genus level.
 caps$Species[startsWith(caps$Species, "Gallus")] = "Gallus_genus"
 
 ## attach genus to the other Genera names that need it to stay consistent
-caps$Species[caps$Species %in% c("Amaurornis", "Macaca", 
-                                 "Maxomys","Melogale", "Varanus")] = paste(caps$Species[caps$Species %in% c("Amaurornis", "Macaca", 
-                                 "Maxomys","Melogale", "Varanus")], "genus", sep = "_")
+caps$Species[caps$Species %in% c("Amaurornis", "Macaca", "Hystrix",
+                                 "Maxomys","Melogale", "Varanus")] = paste(caps$Species[caps$Species %in% c("Amaurornis", "Macaca",
+                                                                                                            "Hystrix","Maxomys","Melogale", "Varanus")], "genus", sep = "_")
 
 
 ### Make a new species count w/ updated species names
@@ -277,7 +293,7 @@ sp_count = ddply(caps, .(Species), summarize,
 keep = sp_count[sp_count$num_cap >= 100,]
 
 ## what did we get?
-sort(keep$Species) #reduced to 90 species
+sort(keep$Species) #reduced to 91 species
 
 # remove some of the not useful fluff
 keep = keep[!keep$Species %in% c("Aves", "Ghost", "Mammalia",
@@ -292,7 +308,7 @@ keep = keep[!endsWith(keep$Species, "_spp"),]
 keep = keep[! keep$Species %in% c("Scincidae","Small_mammal", "Herpestidae",
                                   "Phasianidae", "Rodentia","Scandentia"),]
 
-length(keep$Species) # 72 species after removing fluff. 
+length(keep$Species) # 76 species after removing fluff. 
 rm(sp_count)
 
 ### Looks good, but will remove more species once body weights are accounted for. 
@@ -305,7 +321,7 @@ keep = keep$Species
 
 ### Determine species traits
 
-Here I am generating all species data from the library(speciestraits) databases, cleaning where necessary, and generating trait data for combined genera based off representative species. Each species should have 1) a trophic level (i.e., carnivore, omnivore, herbivore), and body mass (in grams). I will try to include missing information from outside sources, but if none is available, species without trait data will be discarded.
+Here I am generating all species data from the library(speciestraits) databases, cleaning where necessary, and generating trait data for combined genera based off representative species. Each species should have 1) a trophic level (i.e., carnivore, omnivore, herbivore), and body mass (in grams). I will also add information about the dietary preferences for the 4 main large carnivores for each species, where the column will be a "Yes" or "No" if the literature supports it being a preferred prey species. I will try to include missing information from outside sources, but if none is available, species without trait data will be discarded.
 
 ```{r generate species trait data, include=FALSE}
 
@@ -398,8 +414,8 @@ setdiff(keep, traits$scientificNameStd) # 13, though mostly genera or a few typo
 traits$scientificNameStd[traits$scientificNameStd == "Taperus_indicus"] = "Tapirus_indicus"
 traits$scientificNameStd[traits$scientificNameStd == "Canis_lupus"] = "Canis_lupus_familiaris"
 
-## add 12 missing species to traits object
-traits[62:(62+10), "scientificNameStd"] = setdiff(keep, traits$scientificNameStd)
+## add 11 missing species to traits object
+traits[64:(64+10), "scientificNameStd"] = setdiff(keep, traits$scientificNameStd)
 
 ### re-load mam and pam to include other species
 # pan
@@ -501,6 +517,16 @@ traits = traits[traits$AdultBodyMass_g > 1000,]
 ## also remove anything over 1000 kg, which is too large to be preyed upon 
 sort(traits$scientificNameStd[traits$AdultBodyMass_g > 1000000])  # just elephants
 traits = traits[traits$AdultBodyMass_g < 1000000,]
+
+## We are also NOT interested in examining domestic animals, so remove them here
+traits = traits[! traits$scientificNameStd %in% c("Canis_lupus_familiaris", "Bos_taurus"), ]
+
+## There is also no point analyzing species that are ID'd at the genus level AND species level --> extra noise
+traits = traits[! traits$scientificNameStd %in% c("Herpestes_genus", "Hystrix_genus", "Macaca_genus", "Varanus_genus" ), ]
+
+## also do not include species that are primarily arboreal --> orangutans, langur, tufted squirrell any anyone else?
+traits = traits[! traits$scientificNameStd %in% c("Pongo_pygmaeus", "Presbytis_rubicunda", "Rheithrosciurus_macrotis"), ]
+
 # thin keep to match 
 keep = keep[keep %in% traits$scientificNameStd]
 
@@ -540,6 +566,107 @@ sort(table(traits$TrophicGuild[traits$TrophicLevel == "Carnivore"]))
 
 table(traits$TrophicGuild) # looks good! 
 ## many more small than large, but this is to be expected. 
+
+#
+##
+###
+#### Add dietary preferences of the large carnivores
+
+### The goal here is to determine if large carnivores have different effects 
+## when looking at 'preferred' prey species vs non-preferred species. 
+# Ideally, just add a yes-no column to the guilds dataframe for each large carnivore. 
+
+# Diet changes so much based on habitat, interactions, and time of year... 
+# All species seem to prefer to some degree Sus scrofa based on readings. 
+
+#### Tigers
+# https://zslpublications.onlinelibrary.wiley.com/doi/full/10.1111/j.1469-7998.2011.00871.x
+# suggests preferred weight range of 60-250 kg, and wil eat the largest available prey.... So anything >= 60 kg to accomodate tapir, gaur, and cattle
+### Change minimum wieght to 17 kg to include muntjac and cite eco-evo paper about it. 
+## and can cite Allan Rabinowitz about it: https://thesiamsociety.org/wp-content/uploads/2020/04/NHBSS_037_2k_Rabinowitz_TheDensityAndB.pdf
+traits$tiger_pref = "No"
+traits$tiger_pref[traits$AdultBodyMass_g > 17000] = "Yes"
+traits$tiger_pref[traits$scientificNameStd == "Panthera_tigris"] = "NA" # no cannibals allowed. 
+# who is preferred?
+sort(traits$scientificNameStd[traits$tiger_pref == "Yes"]) # 10 species, ok
+# black bear made it in, and this MS says they are preyed upon by tigers in Laos: https://onlinelibrary.wiley.com/doi/full/10.1002/ece3.9067
+# Might as well leave sun bear in here too. 
+#who is missing?
+sort(traits$scientificNameStd[traits$tiger_pref == "No"]) # seems ok, 33 species
+
+#### Leopards 
+#  https://doi.org/10.1111/j.1469-7998.2006.00139.x
+# suggest preferred weight range of 10-40 kg. 
+# https://www.sciencedirect.com/science/article/pii/S0006320712005149 
+# langurs/primates, pigs when tigers are absent. 
+# https://royalsocietypublishing.org/doi/10.1098/rsos.171187
+# suggest large prey (Banteng/Gaur) is possible in the absence of tigers, but not common and restricted to males. 
+# https://thesiamsociety.org/wp-content/uploads/2020/04/NHBSS_037_2k_Rabinowitz_TheDensityAndB.pdf
+# Muntjac (for tigers too), then primates, then pig == sambar == porcupines == hog badger 
+# https://thesiamsociety.org/wp-content/uploads/2020/04/NHBSS_047_1l_Grassman_EcologyAndBehavi.pdf
+# Suggests hog badger is important too. 
+
+traits$leopard_pref = "No"
+traits$leopard_pref[traits$AdultBodyMass_g > 10000 & traits$AdultBodyMass_g <= 40000] = "Yes"
+traits$tiger_pref[traits$scientificNameStd == "Panthera_pardus"] = "NA" # no cannibals allowed. 
+# who is preferred?
+traits$scientificNameStd[traits$leopard_pref == "Yes"] # 4 species, mostly carnivores
+## exclude clouded leopards and dholes, leave dogs tho (evidence from india)
+traits$leopard_pref[traits$scientificNameStd %in% c("Cuon_alpinus","Neofelis_genus")] = "No"
+## also add primates and pigs based off readings
+traits$leopard_pref[grepl("Macac", traits$scientificNameStd)] = "Yes" # only include macaques. 
+## include pigs and hog badger 
+traits$leopard_pref[traits$scientificNameStd %in% c("Sus_scrofa","Arctonyx_collaris")] = "Yes"
+# who is preferred now?
+sort(traits$scientificNameStd[traits$leopard_pref == "Yes"]) # 7 species, better! 
+#who is missing?
+sort(traits$scientificNameStd[traits$leopard_pref == "No"]) # seems ok, 38 species --> nothing obvious to include here. 
+
+
+#### Dholes
+# https://zslpublications.onlinelibrary.wiley.com/doi/10.1111/jzo.12171
+## Hayward style pref wieght range of 130–190 kg, and highlights sambar as important. 
+# https://www.ncbi.nlm.nih.gov/pmc/articles/PMC9388674/
+## scat analysis that emphasizes large deer (sambar + chital), pigs and muntjac were moderetly avoided but still consumed.
+# https://doi.org/10.1016/j.mambio.2013.08.007
+## lit review of scats and abundance: 40 and 60 kg weight range, sambar preferred most. 
+### Matthew suggests a drop down to 10 kg, but wait for citation from him --> would only add binturongs anyway... 
+traits$dhole_pref = "No"
+traits$dhole_pref[traits$AdultBodyMass_g > 40000 & traits$AdultBodyMass_g < 190000 &
+                    traits$TrophicGuild != "Large_Carnivore"] = "Yes"
+# who is preferred?
+traits$scientificNameStd[traits$dhole_pref == "Yes"] # Some species here dont make sense: bears --> remove! 
+# remove bears, no evidence for this! 
+traits$dhole_pref[traits$scientificNameStd %in% c("Helarctos_malayanus", "Ursus_thibetanus")] = "No"
+## Adding muntjac because they are consumed according to lit (eaten by everything)
+traits$dhole_pref[traits$scientificNameStd %in% c("Muntiacus_genus")] = "Yes"
+# who is preferred?
+traits$scientificNameStd[traits$dhole_pref == "Yes"] # 5 species now... just ok. 
+#who is missing?
+sort(traits$scientificNameStd[traits$dhole_pref == "No"]) # seems ok, 38 species --> nothing obvious to include here. 
+
+
+#### Clouded leopards
+# https://onlinelibrary.wiley.com/doi/full/10.1002/ece3.9067 
+# Serow! Ungulates in particular. No evidence for primates in this citation,
+# but evidence from elsewhere for primates, and generally evidence for a varied and wide diet. 
+# https://www.sciencedirect.com/science/article/pii/S235198941930976X#bib14
+# Evidence for small carnivores as prey --> vivverids (but not other cats) fit! 
+# chrome-extension://efaidnbmnnnibpcajpcglclefindmkaj/http://cloudedleopardpartners.org/wp-content/uploads/2021/03/2015-First-description-of-population-density-_-habitat-use-of-the-mainland-clouded-leopard-within-a-logged-primary-forest-in-South-East-Asia-PopulationEco.pdf
+# Evidence for prey < 10 kg, tho old outdated methods. 
+# Justification 
+traits$CL_pref = "No"
+traits$CL_pref[traits$AdultBodyMass_g > 7000 & traits$AdultBodyMass_g < 190000 &
+                 traits$TrophicGuild != "Large_Carnivore"] = "Yes"
+# who is preferred?
+traits$scientificNameStd[traits$CL_pref == "Yes"] # Remove some of the larger carnivores (e.g. bears, cats), but leaving binturong b/c evidence exists! https://www.researchgate.net/publication/271701967_First_record_of_a_clouded_leo-pard_predating_on_a_binturong
+traits$CL_pref[traits$scientificNameStd %in% c("Catopuma_temminckii", "Helarctos_malayanus", "Ursus_thibetanus")] = "No"
+
+# who is preferred?
+traits$scientificNameStd[traits$CL_pref == "Yes"] # 12 species now... more than tigers! b/c of small carnivores
+#who is missing?
+sort(traits$scientificNameStd[traits$CL_pref == "No"]) # seems ok, 32 species --> nothing obvious to include here. 
+
 
 
 ```
@@ -659,7 +786,7 @@ month<-str_sub(Sys.Date(),-5,-4)
 year<-str_sub(Sys.Date(),-10,-7)
 date = paste(year,month,day, sep = "")
 
-# ### Save all relevant files 
+# ### Save all relevant files
 # saveRDS(keep, paste("/Users/zachary_amir/Dropbox/Zach PhD/Trophic release project/SEA_trophic_cascades_co-abundance/data/send_to_HPC/species_vector_", length(keep), "_species_", date, ".RDS", sep = ""))
 # 
 # saveRDS(group_sp, paste("/Users/zachary_amir/Dropbox/Zach PhD/Trophic release project/SEA_trophic_cascades_co-abundance/data/send_to_HPC/group_living_", length(group_sp), "_species_vector_", date, ".RDS", sep = ""))
@@ -712,8 +839,7 @@ for(i in 1:length(files)){
 }
 rm(i,u,f,path, files)
 
-sort(names(umfs)) # looks good, except one typo b/c long species name
-names(umfs)[grepl("Canis_lupus", names(umfs))] = "Canis_lupus_familiaris"
+sort(names(umfs)) # looks good
 
 ## check if all species are present by importing old species vector
 setdiff(keep, names(umfs)) # present and accounted for! 
@@ -1104,7 +1230,7 @@ rm(i,l,sp_dom,sp_sub, sp_dom_dat, sp_sub_dat, obs, temp, z.dom, z.sub,
 
 ## flatten the list of lists into a single list
 bdata_list = unlist(bdata_list, recursive = FALSE)
-length(bdata_list) #394 combos after removing species that don't spatially overlap --> Nice! should allow faster testing as we reduce species. 
+length(bdata_list) #279 combos after removing species that don't spatially overlap and reducing nonsense species --> Nice! should allow faster testing as we reduce species. 
 names(bdata_list) # looks good! 
 
 ```

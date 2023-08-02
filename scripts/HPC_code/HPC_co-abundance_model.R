@@ -14,7 +14,7 @@ library(jagsUI)
 library(tidyverse)
 
 ## specify the number of cores to be uses, should be the same as the model 
-options(mc.cores = 3)
+options(mc.cores = 4)
 
 #### Read Job Array index value into R
 slurm = Sys.getenv("SLURM_ARRAY_TASK_ID")
@@ -273,23 +273,25 @@ inits = function() {
 
 # MCMC settings, based on assignment above
 if(setting == "SHORT"){
-  ni <- 3000; nt <- 20; nb <- 1000; nc <- 3 # quick test to make sure code works
+  ni <- 3000; na = 50; nt <- 20; nb <- 1000; nc <- 4 # quick test to make sure code works
 }
 if(setting == "MIDDLE"){
-  ni = 50000; nt = 50; nb = 10000 ; nc = 3 #examine parameter values--> use this for prelim testing.
+  ni = 50000; na = 100; nt = 50; nb = 10000 ; nc = 4 #examine parameter values--> use this for prelim testing.
 }
 if(setting == "LONG"){
-  ni <- 100000; nt <- 400; nb <- 15000; nc <- 3 # examine parameter values
+  ni = 300000; na = 300; nt <- 50; nb <- 60000; nc <- 4 # examine parameter values
 }
 if(setting == "PUBLICATION"){
-  ni <- 1000000; nt <- 80; nb <- 200000; nc <- 3 # publication-quality run, recommended by K&R
+  ni <- 1000000; na = 1000; nt <- 50; nb <- 200000; nc <- 4 # publication-quality run, recommended by K&R
 }
 
 start = Sys.time()
 
 ### Run the model 
 mod = jags(bdata, inits, params, "ZDA_Co_Abundance_Model_20230718.jags",
-            n.chains = nc, n.thin = nt, n.iter = ni, n.burnin = nb, parallel = T)
+           ## MCMC settings
+           n.chains = nc, n.adapt = na, n.thin = nt, 
+           n.iter = ni, n.burnin = nb, parallel = T)
 
 end = Sys.time()
 

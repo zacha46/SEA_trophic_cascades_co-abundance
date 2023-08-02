@@ -18,8 +18,8 @@ library(fs) # for moving files around
 library(ggridges) # for ridgeline plots 
 
 
-# library(leaflet) # for creating concepts of study map
-# library(colortools) # for nice colors in the map 
+library(leaflet) # for creating concepts of study map
+library(colortools) # for nice colors in the map
 # library(jagsUI) 
 # library(traitdata) # for species trait data
 
@@ -1571,7 +1571,7 @@ dat[dat$mean < 0 &
 
 ## keep it clean
 rm(dat, ridge_dat, ridge_points, order, p, color_values_short,
-   color_values_full, a,b, min,max,date)
+   color_values_full, a,b, min,max,date, hyp_colors)
 
 #
 ######### Visualize PPC plots ########
@@ -1893,8 +1893,8 @@ unique(dat$dom_species) # good.
 ## create a new dataframe
 sum_dom_large_carn_pref = data.frame("dom_species" = unique(dat$dom_species))
 ### and fill in row by row, but via loop
-prefs = c("tiger_pref","leopard_pref","dhole_pref","CL_pref","CL_pref") # repeated CL b/c its most inclusive for dogs 
-LC = c("Panthera_tigris", "Panthera_pardus","Cuon_alpinus","Neofelis_genus", "Canis_lupus_familiaris")
+prefs = c("tiger_pref","leopard_pref","dhole_pref","CL_pref") 
+LC = c("Panthera_tigris", "Panthera_pardus","Cuon_alpinus","Neofelis_genus")
 
 for(i in 1:length(LC)){
   
@@ -1940,9 +1940,9 @@ sum_dom_large_carn_pref
 ## now merge w/ all results 
 sum_dom_LC = merge(sum_dom_large_carn, sum_dom_large_carn_pref, by = "dom_species")
 
-## but calculate percentages for ALL large carnivores too, just not preferred
-sum_dom_LC[6, "dom_species"] = "All_large_carnivores"
-sum_dom_LC[6, 2:6] = colSums(sum_dom_LC[1:5, 2:6])
+## but calculate percentages for ALL large carnivores too,
+sum_dom_LC[5, "dom_species"] = "All_large_carnivores"
+sum_dom_LC[5, c(2:6, 11:15)] = colSums(sum_dom_LC[1:4, c(2:6, 11:15)])
 # percentages
 sum_dom_LC$percent_sig_neg[sum_dom_LC$dom_species == "All_large_carnivores"] = 
   round(sum_dom_LC$num_sig_neg_int[sum_dom_LC$dom_species == "All_large_carnivores"] / 
@@ -1956,6 +1956,19 @@ sum_dom_LC$percent_nonsig_neg[sum_dom_LC$dom_species == "All_large_carnivores"] 
 sum_dom_LC$percent_nonsig_pos[sum_dom_LC$dom_species == "All_large_carnivores"] = 
   round(sum_dom_LC$num_nonsig_pos_int[sum_dom_LC$dom_species == "All_large_carnivores"] / 
           sum_dom_LC$num_combos[sum_dom_LC$dom_species == "All_large_carnivores"] * 100, 3)
+## preferred now
+sum_dom_LC$percent_nonsig_pos_pref[sum_dom_LC$dom_species == "All_large_carnivores"] = 
+  round(sum_dom_LC$num_nonsig_pos_int_pref[sum_dom_LC$dom_species == "All_large_carnivores"] / 
+          sum_dom_LC$num_pref_sp[sum_dom_LC$dom_species == "All_large_carnivores"] * 100, 3)
+sum_dom_LC$percent_nonsig_neg_pref[sum_dom_LC$dom_species == "All_large_carnivores"] = 
+  round(sum_dom_LC$num_nonsig_neg_int_pref[sum_dom_LC$dom_species == "All_large_carnivores"] / 
+          sum_dom_LC$num_pref_sp[sum_dom_LC$dom_species == "All_large_carnivores"] * 100, 3)
+sum_dom_LC$percent_sig_pos_pref[sum_dom_LC$dom_species == "All_large_carnivores"] = 
+  round(sum_dom_LC$num_sig_pos_int_pref[sum_dom_LC$dom_species == "All_large_carnivores"] / 
+          sum_dom_LC$num_pref_sp[sum_dom_LC$dom_species == "All_large_carnivores"] * 100, 3)
+sum_dom_LC$percent_sig_neg_pref[sum_dom_LC$dom_species == "All_large_carnivores"] = 
+  round(sum_dom_LC$num_sig_neg_int_pref[sum_dom_LC$dom_species == "All_large_carnivores"] / 
+          sum_dom_LC$num_pref_sp[sum_dom_LC$dom_species == "All_large_carnivores"] * 100, 3)
 sum_dom_LC # good! 
 
 ## grab today's date
@@ -2006,8 +2019,8 @@ unique(dat$sub_species) # good.
 ## create a new dataframe
 sum_sub_large_carn_pref = data.frame("sub_species" = unique(dat$sub_species))
 ### and fill in row by row, but via loop
-prefs = c("tiger_pref","leopard_pref","dhole_pref","CL_pref","CL_pref") # repeated CL b/c its most inclusive for dogs 
-LC = c("Panthera_tigris", "Panthera_pardus","Cuon_alpinus","Neofelis_genus", "Canis_lupus_familiaris")
+prefs = c("tiger_pref","leopard_pref","dhole_pref","CL_pref") 
+LC = c("Panthera_tigris", "Panthera_pardus","Cuon_alpinus","Neofelis_genus")
 
 for(i in 1:length(LC)){
   
@@ -2054,8 +2067,8 @@ sum_sub_large_carn_pref
 sum_sub_LC = merge(sum_sub_large_carn, sum_sub_large_carn_pref, by = "sub_species")
 
 ## but calculate percentages for ALL large carnivores too, just not preferred
-sum_sub_LC[6, "sub_species"] = "All_large_carnivores"
-sum_sub_LC[6, 2:6] = colSums(sum_sub_LC[1:5, 2:6])
+sum_sub_LC[5, "sub_species"] = "All_large_carnivores"
+sum_sub_LC[5, c(2:6, 11:15)] = colSums(sum_sub_LC[1:4, c(2:6, 11:15)])
 # percentages
 sum_sub_LC$percent_sig_neg[sum_sub_LC$sub_species == "All_large_carnivores"] = 
   round(sum_sub_LC$num_sig_neg_int[sum_sub_LC$sub_species == "All_large_carnivores"] / 
@@ -2069,6 +2082,19 @@ sum_sub_LC$percent_nonsig_neg[sum_sub_LC$sub_species == "All_large_carnivores"] 
 sum_sub_LC$percent_nonsig_pos[sum_sub_LC$sub_species == "All_large_carnivores"] = 
   round(sum_sub_LC$num_nonsig_pos_int[sum_sub_LC$sub_species == "All_large_carnivores"] / 
           sum_sub_LC$num_combos[sum_sub_LC$sub_species == "All_large_carnivores"] * 100, 3)
+## preferred now
+sum_sub_LC$percent_nonsig_pos_pref[sum_sub_LC$sub_species == "All_large_carnivores"] = 
+  round(sum_sub_LC$num_nonsig_pos_int_pref[sum_sub_LC$sub_species == "All_large_carnivores"] / 
+          sum_sub_LC$num_pref_sp[sum_sub_LC$sub_species == "All_large_carnivores"] * 100, 3)
+sum_sub_LC$percent_nonsig_neg_pref[sum_sub_LC$sub_species == "All_large_carnivores"] = 
+  round(sum_sub_LC$num_nonsig_neg_int_pref[sum_sub_LC$sub_species == "All_large_carnivores"] / 
+          sum_sub_LC$num_pref_sp[sum_sub_LC$sub_species == "All_large_carnivores"] * 100, 3)
+sum_sub_LC$percent_sig_pos_pref[sum_sub_LC$sub_species == "All_large_carnivores"] = 
+  round(sum_sub_LC$num_sig_pos_int_pref[sum_sub_LC$sub_species == "All_large_carnivores"] / 
+          sum_sub_LC$num_pref_sp[sum_sub_LC$sub_species == "All_large_carnivores"] * 100, 3)
+sum_sub_LC$percent_sig_neg_pref[sum_sub_LC$sub_species == "All_large_carnivores"] = 
+  round(sum_sub_LC$num_sig_neg_int_pref[sum_sub_LC$sub_species == "All_large_carnivores"] / 
+          sum_sub_LC$num_pref_sp[sum_sub_LC$sub_species == "All_large_carnivores"] * 100, 3)
 sum_sub_LC # good! 
 
 ## grab today's date
@@ -2107,29 +2133,93 @@ nrow(og_captures[og_captures$Species %in% preform$sub_species,])
 
 
 #### We can also make a study map (coneptually) w/ the original metadata
+### But we should color our points based off which (or how many) large carnivores are present
 
-### Import NON-spatially re-sampled metadata for the map 
-non_resamp_meta = read_csv("/Users/zachary_amir/Dropbox/CT capture histories database/Asian ECL raw CT data/Step4_output_pre-resampling/Clean_independent_metadata_20230610.csv")
+## create a back up of og_captures for manipulation
+caps = distinct(select(og_captures, deployment_id, survey_id, Landscape, Species))
 
-## thin this to be a bit easier to work with 
-non_resamp_meta = select(non_resamp_meta, deployment_id, cell_id_3km, survey_id, Landscape, country, Latitude, Longitude)
+## Make each column manually by hand
+caps$tig_pres = "No"
+caps$tig_pres[caps$Landscape %in% unique(caps$Landscape[caps$Species == "Panthera tigris"])] = "Yes"
+caps$leo_pres = "No"
+caps$leo_pres[caps$Landscape %in% unique(caps$Landscape[caps$Species == "Panthera pardus"])] = "Yes"
+caps$CL_pres = "No"
+caps$CL_pres[caps$Landscape %in% unique(caps$Landscape[grepl("Neofelis", caps$Species )])] = "Yes"
+caps$dho_pres = "No"
+caps$dho_pres[caps$Landscape %in% unique(caps$Landscape[caps$Species == "Cuon alpinus"])] = "Yes"
+
+## reduce to minimal info 
+caps = distinct(select(caps, Landscape, tig_pres, leo_pres, CL_pres, dho_pres))
+
+# Create a new column to denote which species are present, thx Chat GPT
+species_present <- apply(caps[, -1], 1, function(row) {
+  species_names <- names(caps)[-1][row == "Yes"]
+  if (length(species_names) > 0) {
+    return(paste(species_names, collapse = ", "))
+  } else {
+    return("None")
+  }
+})
+
+# Add the new column to the dataframe
+caps$LC_pres = species_present
+rm(species_present)
+
+## clean up names to be nicer
+caps$LC_pres = gsub("tig_pres", "Panthera tigris", caps$LC_pres)
+caps$LC_pres = gsub("leo_pres", "Panthera pardus", caps$LC_pres)
+caps$LC_pres = gsub("CL_pres", "Neofelis genus", caps$LC_pres)
+caps$LC_pres = gsub("dho_pres", "Cuon alpinus", caps$LC_pres)
+
+## create a new col to count how many LC present
+caps$LC_count = str_count(caps$LC_pres, ",")
+## add 1 to those greater than zero to get the trailing species name 
+caps$LC_count[caps$LC_count > 0] = caps$LC_count[caps$LC_count > 0] + 1
+## and for those with only one species
+caps$LC_count[caps$LC_pres != "None" & caps$LC_count == 0] = 1
+
+## now thin to relevant info 
+LC_pres = distinct(select(caps, Landscape, LC_pres, LC_count))
+rm(caps)
 
 ## calculate average coords per landsacpe to visualize 
-avg_land = ddply(non_resamp_meta, .(Landscape), summarize,
+avg_land = ddply(og_meta, .(Landscape), summarize,
                  avg_lat = mean(Latitude),
                  avg_long = mean(Longitude))
+
+# verify all landscapes match
+setdiff(avg_land$Landscape, LC_pres$Landscape)
+setdiff(LC_pres$Landscape, avg_land$Landscape) # full match on both sides! 
+# now merge w/ LC pres
+avg_land = merge(avg_land, LC_pres, by = "Landscape")
+
 
 ## first make a map for the whole study area
 
 #Genereate colour scheme as factor
-category <- "Landscape" #What should we use as our category to generate colours for now survey ID
+category <- "LC_pres" #What should we use as our category to generate colours
 colour <- "lightgreen"# Define a colour from the R options to base the colourscheme
 
-## make it a factor now 
-avg_land$Landscape <- as.factor(avg_land$Landscape)
-col.cat <- wheel(colour, num = length(levels(avg_land$Landscape)))
-avg_land$Cols <- col.cat[avg_land$Landscape]
+## Manually set factor level so it displays nicely it a factor now 
+avg_land$LC_pres <- factor(avg_land$LC_pres, levels = c("Panthera tigris, Panthera pardus, Neofelis genus, Cuon alpinus", 
+                                                        "Panthera tigris, Panthera pardus, Cuon alpinus",
+                                                        "Panthera tigris, Neofelis genus, Cuon alpinus",
+                                                        "Panthera tigris, Neofelis genus",
+                                                        "Panthera pardus, Neofelis genus",
+                                                        "Neofelis genus, Cuon alpinus",
+                                                        "Cuon alpinus", "Neofelis genus", "None"))
+## Set the colors manually based off color brewer website 
+col.cat = c("Panthera tigris, Panthera pardus, Neofelis genus, Cuon alpinus" = "#7f2704", 
+            "Panthera tigris, Panthera pardus, Cuon alpinus" = "#a63603",
+            "Panthera tigris, Neofelis genus, Cuon alpinus"= "#d94801",
+            "Panthera tigris, Neofelis genus" = "#f16913",
+            "Panthera pardus, Neofelis genus" = "#fd8d3c",
+            "Neofelis genus, Cuon alpinus" = "#fdae6b",
+            "Cuon alpinus" = "#fdd0a2", "Neofelis genus" = "#fee6ce", "None" = "#fff5eb")
+avg_land$Cols <- col.cat[avg_land$LC_pres]
 
+## exclude data from E_Indo
+avg_land = avg_land[!grepl("E_Indo", avg_land$Landscape),]
 
 ## make the map! 
 leaflet() %>%
@@ -2140,10 +2230,10 @@ leaflet() %>%
                    color= avg_land$Cols
                    ) %>%
   # Add a legend
-  addLegend("topleft", colors = col.cat,
-            labels = levels(avg_land$Landscape),
-            title = category,
-            labFormat = labelFormat(prefix = "$"),
+  addLegend(position = "topright",
+            colors = col.cat,
+            labels = levels(avg_land$LC_pres),
+            title = "Large carnivores present",
             opacity = 1,
             group = "Legend") %>%
   # Add a scale bar
@@ -2155,9 +2245,14 @@ leaflet() %>%
     options = layersControlOptions(collapsed = FALSE)
   )
 ## Screen-shot'ed! 
+rm(col.cat, colour, category)
+
+### Save avg land for jon to do some map making
+# write.csv(avg_land, "results/summarized_results/average_landscapes_with_predators_present_20230702.cvs", row.names = F)
+
 
 ### Now subset the data for just the Thai E forest complex
-thai = non_resamp_meta[grepl("Thai_E_FC_", non_resamp_meta$Landscape),]
+thai = og_meta[grepl("Thai_E_FC_", og_meta$Landscape),]
 
 ### But goal is to visualize the hexagons for resampling, so summarize data by cell_id
 thai_cell = ddply(thai, .(cell_id_3km), summarize,
@@ -2183,9 +2278,127 @@ hex3 = st_make_grid(sf_data, cellsize = 1861.2, square = FALSE) %>%
 ggplot()+
   geom_sf(data = hex3)+
   geom_sf(data = sf_data)#, aes(color = num_cam))#[shape$deployment_id == p,])
+## screen shott'ed
+
+rm(hex3, sf_data, thai, thai_cell)
+
+### now make a histogram of the captures for Thai E forest complex to show how we brought it all together
+thai_caps = og_captures[grepl("Thai_E_FC", og_captures$Landscape),]
+## format dates
+thai_caps$Photo.Date = as.Date(thai_caps$Photo.Date, format = "%Y-%m-%d")
+summary(thai_caps$Photo.Date) # all g
+
+## set factor of landscape so it shows up nicely
+thai_caps$Landscape = factor(thai_caps$Landscape, levels = c("Thailand_Thai_E_FC_West", 
+                                                             "Thailand_Thai_E_FC_Center",
+                                                             "Thailand_Thai_E_FC_East"))
+
+## want to merge data source here too
+add = distinct(select(og_meta[og_meta$deployment_id %in% thai_caps$deployment_id,], deployment_id, source))
+thai_caps = merge(add, thai_caps, by = "deployment_id")
+
+length(unique(thai_caps$survey_id)) ## 84 surveys is not feasible to graph! use source instead
+
+# grab surv start and end dates tho 
+surv_dates = ddply(thai_caps, .(survey_id), summarize,
+                   start_date = min(Photo.Date), end_date = max(Photo.Date))
+
+# make the plot 
+p = 
+ggplot(thai_caps, aes(x = Photo.Date))+
+  geom_histogram(aes(y=after_stat(count), fill = source), colour="black", bins = 50)+
+  geom_density(alpha=.2, fill="#FF6666")+
+  theme_test()+
+  facet_wrap(~Landscape)+
+  labs(x = "Duration of Deployment", y="Number of Independent Detections", fill = "Data provider") 
+# ggsave("results/summarized_results/Thai_E_FC_histogram_20230802.png", p, width = 12, height = 3, units = "in")
+rm(thai_caps, p, surv_dates)
 
 
 
+####### Do the same, but for BBS since there are less surveys but from multiple sources
+
+## Screeshot from leaflet first
+bbs = og_meta[grepl("Bukit_Barisan_Sel", og_meta$Landscape),]
+
+## thin to relevant info
+bbs_map = distinct(select(bbs, placename, source, Longitude, Latitude))
+
+## add colors for source
+bbs_map$cols = "blue"
+bbs_map$cols[bbs_map$source == "Luskin"] = "orange"
+
+## make the map! 
+leaflet() %>%
+  # Add base map data
+  addProviderTiles(providers$Esri.WorldImagery, group="Satellite") %>%  
+  addCircleMarkers(lng= bbs_map$Longitude, #Add Longitude
+                   lat= bbs_map$Latitude, #Add latitude
+                   color= (bbs_map$cols)
+  ) %>%
+  # Add a scale bar
+  addScaleBar(
+    position = c("bottomleft"))
+## screenshotted! 
+
+### Now subset the data for just the Thai E forest complex
+bbs = og_meta[grepl("Bukit_Barisan_Sel", og_meta$Landscape),]
+
+### But goal is to visualize the hexagons for resampling, so summarize data by cell_id
+bbs_cell = ddply(bbs, .(cell_id_3km), summarize,
+                  num_cam = length(unique(deployment_id)),
+                  avg_lat = mean(Latitude),
+                  avg_long = mean(Longitude))
+
+# library(hexbin) # for hex bins
+library(sf) # make grids
+
+## Convert metadata to a spatial object using the coordinates
+sf_data = st_as_sf(bbs_cell, coords = c("avg_long", "avg_lat"), 
+                   crs = "+proj=longlat +datum=WGS84")
+
+# Ensure EPSG is 4087 via transformation
+sf_data = st_transform(sf_data, 4087)
+
+## 3km hex
+hex3 = st_make_grid(sf_data, cellsize = 1861.2, square = FALSE) %>%
+  st_sf() 
+
+## This will suffice for concept now 
+ggplot()+
+  geom_sf(data = hex3)+
+  geom_sf(data = sf_data)#, aes(color = num_cam))#[shape$deployment_id == p,])
+## screen shott'ed
+
+rm(hex3, sf_data, bbs, bbs_cell)
+
+### now make a histogram of the captures for Thai E forest complex to show how we brought it all together
+bbs_caps = og_captures[grepl("Bukit_Barisan_Sel", og_captures$Landscape),]
+## format dates
+bbs_caps$Photo.Date = as.Date(bbs_caps$Photo.Date, format = "%Y-%m-%d")
+summary(bbs_caps$Photo.Date) # all g
+
+## want to merge data source here too
+add = distinct(select(og_meta[og_meta$deployment_id %in% bbs_caps$deployment_id,], deployment_id, source))
+bbs_caps = merge(add, bbs_caps, by = "deployment_id")
+
+length(unique(bbs_caps$survey_id)) ## 15 surveys is more feasible to graph! 
+
+## clean up caps tho
+bbs_caps$survey_id = gsub('Bukit_Barisan_Selatan_NP', "BBSNP", bbs_caps$survey_id)
+
+## make the graph 
+p = 
+  ggplot(bbs_caps, aes(x = Photo.Date))+
+  geom_histogram(aes(y=after_stat(count), fill = survey_id), colour="black", bins = 50)+
+  geom_density(alpha=.2, fill="#FF6666")+
+  theme_test()+
+  facet_wrap(~Landscape)+
+  labs(x = "Duration of Deployment", y="Number of Independent Detections", fill = "survey_id") +
+  theme(legend.position="bottom")
+# ggsave("results/summarized_results/BBS_histogram_20230802.png", p, width = 10, height = 4, units = "in")
+
+rm(p, category, col.cat, colour, LC_pres, avg_land, add, bbs_map, bbs_caps)
 
 ##### Visualize interaction across community via matrix ######
 

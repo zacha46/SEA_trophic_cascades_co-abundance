@@ -8,22 +8,22 @@
 #SBATCH --nodes=1
 
 # Select 3 CPUS per node (one per MCMC chain)
-#SBATCH --ntasks=3
+#SBATCH --ntasks=4
 
-# Select 100,000 MB (100 GB) of memory per node 
-#SBATCH --mem=100000
+# Select 150,000 MB (150 GB) of memory per node 
+#SBATCH --mem=150000
 
 # Ensure we are in the general queue, not AI, debug, or GPU
 #SBATCH --partition=general
 
-# Select 100 hours (h:m:s format) of walltime for long models 
-#SBATCH --time=100:00:00
+# Select 200 hours (h:m:s format) of walltime for long models 
+#SBATCH --time=200:00:00
 
 # SPECIFY THE JOB ARRAY-
-#SBATCH --array=1-610
+#SBATCH --array=1-394
 
 # SPECIFY THE JOB NAME
-#SBATCH --job-name=co-ab_BIG
+#SBATCH --job-name=CoA_BIG
 
 # SPECIFY .err AND .out FILE LOCATIONS
 #SBATCH --output=OE/co-abundance/slurm-%A_%a.out

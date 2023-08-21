@@ -10,8 +10,8 @@
 # Select 3 CPUS per node (one per MCMC chain)
 #SBATCH --ntasks=4
 
-# Select 150,000 MB (150 GB) of memory per node 
-#SBATCH --mem=150000
+# Select 300,000 MB (300 GB) of memory per node 
+#SBATCH --mem=300000
 
 # Ensure we are in the general queue, not AI, debug, or GPU
 #SBATCH --partition=general
@@ -23,7 +23,7 @@
 #SBATCH --array=1-394
 
 # SPECIFY THE JOB NAME
-#SBATCH --job-name=CoA_BIG
+#SBATCH --job-name=CoA_LONG
 
 # SPECIFY .err AND .out FILE LOCATIONS
 #SBATCH --output=OE/co-abundance/slurm-%A_%a.out

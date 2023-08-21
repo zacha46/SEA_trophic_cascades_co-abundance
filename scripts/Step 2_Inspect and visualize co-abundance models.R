@@ -2248,7 +2248,7 @@ leaflet() %>%
 rm(col.cat, colour, category)
 
 ### Save avg land for jon to do some map making
-# write.csv(avg_land, "results/summarized_results/average_landscapes_with_predators_present_20230702.cvs", row.names = F)
+# write.csv(avg_land, "results/summarized_results/average_landscapes_with_predators_present_20230702.csv", row.names = F)
 
 
 ### Now subset the data for just the Thai E forest complex

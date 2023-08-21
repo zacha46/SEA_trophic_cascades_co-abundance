@@ -1,7 +1,7 @@
 ---
 title: "Step 1_Prepare data for bundling"
 author: "Zachary Amir"
-date: "2023-07-31"
+date: "2023-08-21"
 output: html_document
 ---
 
@@ -147,29 +147,42 @@ meta = meta[! grepl("E_Indonesia", meta$Landscape),]
 caps = caps[caps$survey_id %in% meta$survey_id,]
 
 
-#### To be conservative, lets thin the data surveys with more than 100 trap nights and more than 5 cams per survey. 
+#### To be conservative, lets thin the data surveys with enough data
 
-## import NON-resampled data to determine which surveys dont fit
-dat = read_csv("/Users/zachary_amir/Dropbox/CT capture histories database/Asian ECL raw CT data/Step4_output_pre-resampling/Clean_independent_captures_20230610.csv")
+## summarize info about surveys
+surv_summary = ddply(caps, .(survey_id), summarize,
+                     num_SU = length(unique(cell_id_3km)), # total number of sampling units
+                     max_cam = max(num_cams_active_at_date), # maximum number of cams active in a single sampling unit
+                     dur = difftime(max(Date), min(Date), units= "days")) # duration of the survey 
+## calculate trap nights 
+surv_summary$trap_nights = surv_summary$num_SU * surv_summary$dur
 
-## summarize info about new surveys
-surv_summary = ddply(dat, .(survey_id), summarize,
-                     num_cam = length(unique(deployment_id)),
-                     dur = difftime(max(Photo.Date), min(Photo.Date), units= "days"))
-surv_summary$trap_nights = surv_summary$num_cam * surv_summary$dur
+## inspect SUs
+summary(surv_summary$num_SU) # good spread, median is 9. 
+# how many surveys w/ < 3 SUs? ( ~ 75% of 1st quarter)
+length(surv_summary$survey_id[surv_summary$num_SU < 3]) / length(surv_summary$survey_id) * 100
+## lose 15% just based on SU.
+# A landscape should be at least 9 km2 to provide spatial variation, so lets stick with 3 as the minimum SUs.
+
+## inspect effort
+summary(as.numeric(surv_summary$trap_nights)) # good spread, median is 765
+# how many surveys w/ < 200 tn ( ~ 33% of 1st quarter)
+length(surv_summary$survey_id[surv_summary$trap_nights < 100]) / length(surv_summary$survey_id) * 100
+## lose 12% just based on effort, probably overlap w/ above. 
+# A survey should at least have 100 trapnights of effort as minimum for inclusion. 
 
 ## Extract surveys that do not meet inclusion criteria. 
 rm = surv_summary$survey_id[as.numeric(surv_summary$trap_nights) < 100] # less than 100 trap nights 
-rm2 = surv_summary$survey_id[(surv_summary$num_cam) < 5] # less than 5 cams in a survey 
+rm2 = surv_summary$survey_id[(surv_summary$num_SU) < 3] # less than 3 sampling units in a survey 
 rm = unique(c(rm,rm2))
 
 ## make a statement about it! 
-print(paste("The number of rows that will be excluded from analysis because it is a survey w/ less than 100 trap nights or less than 5 cameras in a survey are:", 
+print(paste("The number of rows that will be excluded from analysis because it is a survey w/ less than 100 trap nights or less than 3 sampling units in a survey are:", 
             dim(caps[caps$survey_id %in% rm,])[1],
             "and this represents:", 
             round(dim(caps[caps$survey_id %in% rm,])[1]  / dim(caps)[1] * 100, 3),
             "% of the full data."))
-# nice! minimal losses. 
+# nice! minimal losses. only 3.4% and 8882 rows removed from caps. 
 
 ## remove the data from caps
 caps = caps[!caps$survey_id %in% rm,]
@@ -178,7 +191,7 @@ caps = caps[!caps$survey_id %in% rm,]
 meta = meta[meta$survey_id %in% caps$survey_id,]
 
 ## keep environment clean
-rm(dat,surv_summary, rm,rm2)
+rm(surv_summary, rm,rm2)
 
 
 ## need survey year in covariates 
@@ -206,7 +219,7 @@ keep = sp_count[sp_count$num_cap >= 100,]
 
 ## what did we get?
 keep[order(keep$num_cap),] ## Awesome!! 
-length(keep$Species) # 106 species before any cleaning 
+length(keep$Species) # 105 species before any cleaning 
 
 
 ## Standardize muntjacs, tragulus, Hystrix (?), Neofelis, Capricornis, Tupaia, maybe Canis_lupus
@@ -240,7 +253,7 @@ rm(Ma, Mr, Mv, Mm, M)
 caps$Species[grepl("Munt", caps$Species)] = "Muntiacus_genus"
 
 # clouded leopards
-sort(table(caps$Species[grepl("Neof", caps$Species)])) #just geographical differences
+sort(table(caps$Species[grepl("Neof", caps$Species)])) #just geographical differences, but way more bornean than mainland! 
 caps$Species[grepl("Neof", caps$Species)] = "Neofelis_genus"
 
 # mousedeer
@@ -293,7 +306,7 @@ sp_count = ddply(caps, .(Species), summarize,
 keep = sp_count[sp_count$num_cap >= 100,]
 
 ## what did we get?
-sort(keep$Species) #reduced to 91 species
+sort(keep$Species) #reduced to 90 species
 
 # remove some of the not useful fluff
 keep = keep[!keep$Species %in% c("Aves", "Ghost", "Mammalia",
@@ -308,7 +321,7 @@ keep = keep[!endsWith(keep$Species, "_spp"),]
 keep = keep[! keep$Species %in% c("Scincidae","Small_mammal", "Herpestidae",
                                   "Phasianidae", "Rodentia","Scandentia"),]
 
-length(keep$Species) # 76 species after removing fluff. 
+length(keep$Species) # 73 species after removing fluff. 
 rm(sp_count)
 
 ### Looks good, but will remove more species once body weights are accounted for. 
@@ -408,14 +421,14 @@ rm(a,b,c)
 traits = rbind(mam_pan, rep_bird)
 
 ## check which species are missing 
-setdiff(keep, traits$scientificNameStd) # 13, though mostly genera or a few typos 
+setdiff(keep, traits$scientificNameStd) # 12, though mostly genera or a few typos 
 
 ## fix obvious typos first
 traits$scientificNameStd[traits$scientificNameStd == "Taperus_indicus"] = "Tapirus_indicus"
 traits$scientificNameStd[traits$scientificNameStd == "Canis_lupus"] = "Canis_lupus_familiaris"
 
-## add 11 missing species to traits object
-traits[64:(64+10), "scientificNameStd"] = setdiff(keep, traits$scientificNameStd)
+## add 10 missing species to traits object
+traits[64:(64+9), "scientificNameStd"] = setdiff(keep, traits$scientificNameStd)
 
 ### re-load mam and pam to include other species
 # pan
@@ -652,7 +665,7 @@ sort(traits$scientificNameStd[traits$dhole_pref == "No"]) # seems ok, 38 species
 # but evidence from elsewhere for primates, and generally evidence for a varied and wide diet. 
 # https://www.sciencedirect.com/science/article/pii/S235198941930976X#bib14
 # Evidence for small carnivores as prey --> vivverids (but not other cats) fit! 
-# chrome-extension://efaidnbmnnnibpcajpcglclefindmkaj/http://cloudedleopardpartners.org/wp-content/uploads/2021/03/2015-First-description-of-population-density-_-habitat-use-of-the-mainland-clouded-leopard-within-a-logged-primary-forest-in-South-East-Asia-PopulationEco.pdf
+# http://cloudedleopardpartners.org/wp-content/uploads/2021/03/2015-First-description-of-population-density-_-habitat-use-of-the-mainland-clouded-leopard-within-a-logged-primary-forest-in-South-East-Asia-PopulationEco.pdf
 # Evidence for prey < 10 kg, tho old outdated methods. 
 # Justification 
 traits$CL_pref = "No"
@@ -691,9 +704,9 @@ s2 = ddply(s, .(cell_id_3km), summarize,
 
 
 #That worked, now bring back the start and stops. Make sure you dont loose records
-dim(s2) #266192
+dim(s2) #264568
 t = merge(s2, s, by = "cell_id_3km")
-dim(t) #266192, good! 
+dim(t) #264568, good! 
 
 
 ## Add sequence from 1-n for each sampling unit
@@ -714,7 +727,7 @@ rm(d,i)
 
 #inspect
 str(res)
-dim(res) #266192, same as before! Good! 
+dim(res) #264568 , same as before! Good! 
 
 ## Make sure all cams got accounted for
 setdiff(res$cell_id_3km, unique(caps$cell_id_3km))
@@ -722,8 +735,8 @@ setdiff(unique(caps$cell_id_3km), res$cell_id_3km) # no difference
 
 ## merge the sequence with the captures
 t = merge(caps, res, by = c("cell_id_3km", "Date"))
-dim(caps) #258218
-dim(t) #258218, not exactly the same...
+dim(caps) #252228
+dim(t) #252128, not exactly the same...
 
 ## How much did we lose?
 print(paste("By adding the observation sequence to the captures, we lost ", 
@@ -770,7 +783,7 @@ hist(meta$cams_included_count) # classic Poisson
 ## > 7 cams per SU was causing probelms earlier... 
 # how many SUs do we lose by exclusing them?
 nrow(meta[meta$cell_id_3km %in% meta$cell_id_3km[meta$cams_included_count > 7],]) / nrow(meta) * 100
-# 4.3% of SUs, thats fine. 
+# 4% of SUs, thats fine. 
 
 
 ### Also verify key covariates we are intersted in are not strongly correlated 
@@ -789,7 +802,7 @@ date = paste(year,month,day, sep = "")
 # ### Save all relevant files
 # saveRDS(keep, paste("/Users/zachary_amir/Dropbox/Zach PhD/Trophic release project/SEA_trophic_cascades_co-abundance/data/send_to_HPC/species_vector_", length(keep), "_species_", date, ".RDS", sep = ""))
 # 
-# saveRDS(group_sp, paste("/Users/zachary_amir/Dropbox/Zach PhD/Trophic release project/SEA_trophic_cascades_co-abundance/data/send_to_HPC/group_living_", length(group_sp), "_species_vector_", date, ".RDS", sep = ""))
+# saveRDS(group_sp, paste("/Users/zachary_amir/Dropbox/Zach PhD/Trophic release project/SEA_trophic_cascades_co-abundance/data/send_to_HPC/group_living_", length(group_sp), "_species_", date, ".RDS", sep = ""))
 # 
 # write.csv(caps, paste("/Users/zachary_amir/Dropbox/Zach PhD/Trophic release project/SEA_trophic_cascades_co-abundance/data/send_to_HPC/clean_captures_to_make_UMFs_", date,".csv", sep = ""), row.names = F)
 # 

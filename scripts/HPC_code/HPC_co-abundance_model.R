@@ -30,7 +30,9 @@ setting = Sys.getenv("SETTING")
 # setting = "PUBLICATION"     # ~6000+ min ??
 
 #### Import the already formatted data
-dat = readRDS("data/co-abundance/Bundled_data_for_Bayes_co-abundance_mods_394_species_pairs_20230720.RDS")
+dat = readRDS(paste("data/co-abundance/", 
+                    list.files("data/co-abundance/")[grepl("Bundled_data_for_Bayes_co-abundance_mods", list.files("data/co-abundance/"))],
+                    sep = ""))
 
 ## Thin to a single species pair
 bdata = dat[[slurm]]
@@ -381,7 +383,7 @@ print(paste("Finished generating coefficent dataframe for: ", n, " at ", Sys.tim
 bdata = dat[[slurm]]
 
 ## We will need the metadata here to grab accurate landscape ID's 
-covars = read.csv("data/ZDA_UMF/clean_metadata_to_make_UMFs_20230718.csv")
+covars = read.csv("data/ZDA_UMF/clean_metadata_to_make_UMFs_20230731.csv")
 
 ## Thin covars to match sampling units in species matrixs
 covars = covars[covars$cell_id_3km %in% rownames(bdata$y.dom),]

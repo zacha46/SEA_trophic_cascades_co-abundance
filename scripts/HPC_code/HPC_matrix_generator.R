@@ -2,23 +2,39 @@
 #### it just takes too long on a regular comp,
 ### when I know it'll work on the HPC 
 
-## Submitted July 31st, 2023
+## Last edited August 31st, 2023
 # Z.amir@uq.edu.au
 
 library(tidyverse)
 library(vegan)
 
-#### import the data 
-species = readRDS("data/ZDA_UMF/species_vector_44_species_20230731.RDS")
-group_sp = readRDS("data/ZDA_UMF/group_living_9_species_vector_20230731.RDS")
-caps = read.csv("data/ZDA_UMF/clean_captures_to_make_UMFs_20230731.csv")
-meta = read.csv("data/ZDA_UMF/clean_metadata_to_make_UMFs_20230731.csv")
+#### import the data --> use relative file names so updates will work easily! 
+species = readRDS(paste("data/ZDA_UMF/", 
+                        list.files("data/ZDA_UMF/")[grepl("species_vector", list.files("data/ZDA_UMF/"))],
+                        sep = ""))
+group_sp = readRDS(paste("data/ZDA_UMF/", 
+                        list.files("data/ZDA_UMF/")[grepl("group_living", list.files("data/ZDA_UMF/"))],
+                        sep = ""))
+caps = read.csv(paste("data/ZDA_UMF/", 
+                      list.files("data/ZDA_UMF/")[grepl("clean_captures", list.files("data/ZDA_UMF/"))],
+                      sep = ""))
+meta = read.csv(paste("data/ZDA_UMF/", 
+                      list.files("data/ZDA_UMF/")[grepl("clean_metadata", list.files("data/ZDA_UMF/"))],
+                      sep = ""))
 
 # ### Local testing
-# species = readRDS("data/send_to_HPC/species_vector_72_species_20230615.RDS")
-# group_sp = readRDS("data/send_to_HPC/group_living_13_species_vector_20230615.RDS")
-# caps = read.csv("data/send_to_HPC/clean_captures_to_make_UMFs_20230615.csv")
-# meta = read.csv("data/send_to_HPC/clean_metadata_to_make_UMFs_20230616.csv")
+# species = readRDS(paste("data/send_to_HPC/", 
+#                         list.files("data/send_to_HPC/")[grepl("species_vector", list.files("data/send_to_HPC/"))],
+#                         sep = ""))
+# group_sp = readRDS(paste("data/send_to_HPC/", 
+#                          list.files("data/send_to_HPC/")[grepl("group_living", list.files("data/send_to_HPC/"))],
+#                          sep = ""))
+# caps = read.csv(paste("data/send_to_HPC/", 
+#                      list.files("data/send_to_HPC/")[grepl("clean_captures", list.files("data/send_to_HPC/"))],
+#                      sep = ""))
+# meta = read.csv(paste("data/send_to_HPC/", 
+#                      list.files("data/send_to_HPC/")[grepl("clean_metadata", list.files("data/send_to_HPC/"))],
+#                      sep = ""))
 
 ### Assign key variables a value
 

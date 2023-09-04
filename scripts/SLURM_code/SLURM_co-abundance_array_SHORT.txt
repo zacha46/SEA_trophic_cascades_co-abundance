@@ -7,23 +7,23 @@
 # Select 1 node per job
 #SBATCH --nodes=1
 
-# Select 3 CPUS per node (one per MCMC chain)
-#SBATCH --ntasks=3
+# Select 4 CPUS per node (one per MCMC chain)
+#SBATCH --ntasks=4
 
-# Select 20000 MB (20 GB) of memory per node 
-#SBATCH --mem=20000
+# Select 50000 MB (50 GB) of memory per node 
+#SBATCH --mem=50000
 
 # Ensure we are in the general queue, not AI, debug, or GPU
 #SBATCH --partition=general
 
-# Select 4 hours (h:m:s format) of walltime for small mods
-#SBATCH --time=4:00:00
+# Select 8 hours (h:m:s format) of walltime for small mods
+#SBATCH --time=8:00:00
 
 # SPECIFY THE JOB ARRAY-
-#SBATCH --array=1-435
+#SBATCH --array=1-279
 
 # SPECIFY THE JOB NAME
-#SBATCH --job-name=co-ab_short
+#SBATCH --job-name=CoA_SHORT
 
 # SPECIFY .err AND .out FILE LOCATIONS
 #SBATCH --output=OE/co-abundance/slurm-%A_%a.out

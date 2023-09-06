@@ -2118,6 +2118,25 @@ rm(path, p,i, title, n, n_split, gp, est, pred, day, month, year, date)
 
 ######## Summary statistics to describe overall interactions #####
 
+### firstly, how many top-down models did we run?
+length(preform$Species_Pair[grepl("DOM-Large_Carn",preform$guild_pair)]) #152
+
+### and how many bottom-up models?
+length(preform$Species_Pair[grepl("SUB-Large_Carn",preform$guild_pair)]) #127
+
+## how many subordinate species in top-down models per guild?
+ddply(preform[grepl("DOM-Large_Carn",preform$guild_pair), ], .(SUB_guild), summarise,
+      num_sp = length(unique(sub_species)))
+
+## how many detections did we get for our large carnivores?
+og_captures$Species = gsub(" ", "_", og_captures$Species)
+ddply(og_captures[og_captures$Species %in% c("Panthera_pardus", "Panthera_tigris", 
+                                             "Cuon_alpinus", "Neofelis_nebulosa", 
+                                             "Neofelis_diardi" ),], .(Species), summarize,
+      num_cap = length(Individuals))
+
+
+
 #### Summarize results by guild to clearly present them-
 sum = ddply(preform, .(guild_pair), summarize,
             num_sig_neg_int = sum(Interaction_Estimate < 0 & Significance == "Significant", na.rm = T), # number of significant negative interactions
@@ -2493,7 +2512,17 @@ sd(eff$dur) # sd = 30.16
 rm(eff)
 
 ### how many detections of our study species 
+og_captures$Species = gsub(" ", "_", og_captures$Species)
 nrow(og_captures[og_captures$Species %in% preform$sub_species,])
+
+## how many surveys before removal?
+length(unique(og_meta$survey_id)) #361
+
+## how many surveys after removal 
+length(unique(og_resamp_meta$survey_id)) #284
+
+## how many landscapes made the cut in the end?
+length(unique(og_resamp_meta$Landscape))
 
 
 #### We can also make a study map (coneptually) w/ the original metadata

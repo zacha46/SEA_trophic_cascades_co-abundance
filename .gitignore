@@ -47,3 +47,9 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+# dont want to sync up data or results files 
+data/*~
+figures/*~
+results/*~
+explore/*~

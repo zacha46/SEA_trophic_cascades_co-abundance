@@ -53,3 +53,18 @@ data/*~
 figures/*~
 results/*~
 explore/*~
+
+# Ignore data files
+data/
+*.csv
+*.txt
+
+# and OE files from HPC
+scripts/
+*.err
+*.out
+
+# Ignore figures
+figures/
+*.png
+*.pdf

@@ -40,15 +40,17 @@ og_meta = read.csv("/Users/zachary_amir/Dropbox/CT capture histories database/As
 ## first, I will import the bundled data to generate a vector of relevant species pairs 
 bdata = readRDS("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_279_species_pairs_20230821.RDS")
 
-## I renamed a few species to move from broad genera to specific species --> fix here to match old results
-names(bdata) = gsub("Hystrix_brachyura", "Hystrix_genus", names(bdata))
-names(bdata) = gsub("Herpestes_urva", "Herpestes_genus", names(bdata)) ## herpestes will be tricky because its just the genera level in old code, but split in two species in new code. 
+# ## I renamed a few species to move from broad genera to specific species --> fix here to match old results
+# names(bdata) = gsub("Hystrix_brachyura", "Hystrix_genus", names(bdata))
+# names(bdata) = gsub("Herpestes_urva", "Herpestes_genus", names(bdata)) ## herpestes will be tricky because its just the genera level in old code, but split in two species in new code. 
 
 ## save vector of relevant species pairs
 all_combos = names(bdata)
 
 
-
+# Initate data management-- 
+##
+###
 #### If you made a mistake and forgot to move old data to the OLD folder when importing from HPC, 
 ### use this code below to automatically look for duplicates and move the older files to the OLD folder. 
 ## This will do nothing if there are no duplicates, so its ok to run thru. 
@@ -82,15 +84,69 @@ for (name in duplicated_names) {
 rm(current_files, earliest_date, files_to_move, name, duplicated_names, file_names, file_list)
 
 
+#
+##
+###
+#### If you have imported files from the HPC but they are in the wrong folder,
+#### use this code to move them around 
+
+## key word to look for-
+key = "HALF_LONG_3Chain"
+
+# List all files in the relevant folders
+coef_files <- dir("results/LONG_testing_Sep_2023/coefficent_dataframes/", full.names = TRUE)
+ppc_files <- dir("results/LONG_testing_Sep_2023/PPC_dataframes/", full.names = TRUE)
+
+# extract relevant files
+coef_files = coef_files[grepl(key, coef_files)]
+ppc_files = ppc_files[grepl(key, ppc_files)]
+
+# combine into a list for easier looping
+files = list("coef" = coef_files, "ppc" = ppc_files)
+
+## for both directories
+for(i in 1:length(files)){
+  
+  # chose one directory
+  dir = files[[i]]
+  
+  for(l in 1:length(dir)){
+    
+    # select one file 
+    f = dir[[l]]
+    
+    # and move it to the relevant folder
+    if(names(files)[i] == "coef"){
+      
+      # and move it! 
+      file_move(f, "results/HALF_LONG_testing_Oct_2023/coefficent_dataframes/")
+      
+    }
+    
+    if(names(files)[i] == "ppc"){
+
+      # move it! 
+      file_move(f, "results/HALF_LONG_testing_Oct_2023/PPC_dataframes//")
+    }
+    
+    
+  } # end l 
+  
+} # end i 
+rm(i,l,f,dir,files,key,coef_files,ppc_files)
+
+
+
 ### Import coefficent dataframes
 
 # list all files
-files = list.files("results/coefficent_dataframes/")
+files = list.files("results/HALF_LONG_testing_Oct_2023/coefficent_dataframes/")
 files = files[!grepl("OLD", files)] # remove any old data 
 
 ## Have a few long and all middle files in this directory, subset for one
+files = files[grepl("HALF_LONG", files)]
 # files = files[grepl("LONG", files)]
-files = files[grepl("MIDDLE", files)]
+# files = files[grepl("MIDDLE", files)]
 # files = files[grepl("SHORT", files)]
 
 
@@ -100,7 +156,7 @@ coeff.res = list()
 # loop thru each file to import into list
 for(i in 1:length(files)){
 
-    d = read.csv(paste("results/coefficent_dataframes/", files[i], sep = ""))
+    d = read.csv(paste("results/HALF_LONG_testing_Oct_2023/coefficent_dataframes/", files[i], sep = ""))
     
     ## if there are pesky row.names, remove em!
     d$X = NULL
@@ -195,12 +251,13 @@ table(preform$mod_completion) # 0.5% of models have failed! Epic improvement.
 ## Make sure all_combos is loaded here! 
 
 # list all files
-files = list.files("results/PPC_dataframes/")
+files = list.files("results/HALF_LONG_testing_Oct_2023/PPC_dataframes/")
 files = files[!grepl("OLD", files)] # remove any old data 
 
 ## Subset files for one setting, especially if multiple are in the mix. 
+files = files[grepl("HALF_LONG", files)]
 # files = files[grepl("LONG", files)]
-files = files[grepl("MIDDLE", files)]
+# files = files[grepl("MIDDLE", files)]
 # files = files[grepl("SHORT", files)]
 
 ### Noticed a typo that included generated results for species that dont spatially overlap
@@ -241,7 +298,7 @@ ppc_res = list()
 for(i in 1:length(files)){
   
   ## read the file 
-  d = read.csv(paste("results/PPC_dataframes/", files[i], sep = ""))
+  d = read.csv(paste("results/HALF_LONG_testing_Oct_2023/PPC_dataframes/", files[i], sep = ""))
   
   ## save plotdata vs values in nested list. 
   if(grepl("plotdata", files[i])){
@@ -2511,6 +2568,12 @@ sd(eff$dur) # sd = 30.16
 
 rm(eff)
 
+## wait, why do these number differ?!
+summary(og_meta$effort)
+summary(og_resamp_meta$effort)
+ummary(og_resamp_meta$Cell_Effort)
+summary(og_resamp_meta$Avg_effort) # this is probably the most faithful data to include based on what was analyzed
+
 ### how many detections of our study species 
 og_captures$Species = gsub(" ", "_", og_captures$Species)
 nrow(og_captures[og_captures$Species %in% preform$sub_species,])
@@ -2524,6 +2587,12 @@ length(unique(og_resamp_meta$survey_id)) #284
 ## how many landscapes made the cut in the end?
 length(unique(og_resamp_meta$Landscape))
 
+## how mant cameras did we deploy at each landscape?
+info = ddply(og_resamp_meta, .(Landscape), summarize,
+             num_cam = length(unique(cell_id_3km)))
+summary(info$num_cam)
+mean(info$num_cam)
+sd(info$num_cam)
 
 #### We can also make a study map (coneptually) w/ the original metadata
 ### But we should color our points based off which (or how many) large carnivores are present

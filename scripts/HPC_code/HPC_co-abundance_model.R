@@ -29,10 +29,10 @@ slurm = as.numeric(slurm) #imports as character var, not numeric
 setting = Sys.getenv("SETTING")
 
 ### Determine what MCMC settings you want to run here-
-# setting = "SHORT"           # 2.5 hrs
-# setting = "MIDDLE"          # 36-49 hrs, with a few (3) models exceeding 85 hours! 
-# setting = "LONG"            # ?? hrs 
-# setting = "PUBLICATION"     # ~6000+ min ??
+# setting = "SHORT"            # 2.5 hrs
+# setting = "MIDDLE"           # 36-49 hrs, with a few (3) models exceeding 85 hours! 
+# setting = "HALF_LONG_3Chain" # hopefully <2 weeks! 
+# setting = "LONG"             # 2+ weeks! 
 
 #### Import the already formatted data
 dat = readRDS(paste("data/co-abundance/", 
@@ -283,17 +283,18 @@ inits = function() {
 ## Want burn-in to be ~20% of iterations and then thin = (ni - nb) / ideal n.eff (per chain), ideally 30000 in the long one. 
 ### Assess n.eff via (ni - nb)/nt * nc 
 if(setting == "SHORT"){
-  ni <- 3000;  nt <- 5; nb <- 60; nc <- 4; na = NULL         # quick test to make sure code works
+  ni <- 3000;  nt <- 5; nb <- 60; nc <- 4; na = NULL          # quick test to make sure code works
 }
 if(setting == "MIDDLE"){
   ni = 50000;  nt = 20; nb = 10000 ; nc <- 4; na = NULL       #examine parameter values--> use this for prelim testing.
 }
+if(setting == "HALF_LONG_3Chain"){
+  ni = 250000;  nt = 20; nb = 50000 ; nc <- 3; na = NULL       #Longer than middle, but shorter than long... 
+}
 if(setting == "LONG"){
-  ni = 500000; nt <- 55; nb <- 100000; nc <- 4; na = NULL     # examine parameter values, should ideally produce an overall n.eff of 30,000 
+  ni = 500000; nt <- 55; nb <- 100000; nc <- 4; na = NULL     # Publication quality, but takes too long to finish!! 
 }
-if(setting == "PUBLICATION"){
-  ni <- 1000000; nt <- 120; nb <- 200000; nc <- 4; na = NULL  # publication-quality run, recommended by K&R
-}
+
 
 start = Sys.time()
 

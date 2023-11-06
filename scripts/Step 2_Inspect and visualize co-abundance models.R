@@ -38,11 +38,13 @@ og_meta = read.csv("/Users/zachary_amir/Dropbox/CT capture histories database/As
 ######## Import co-abundance coefficent dataframes ######
 
 ## first, I will import the bundled data to generate a vector of relevant species pairs 
-bdata = readRDS("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_279_species_pairs_20230821.RDS")
+# bdata = readRDS("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_279_species_pairs_20230821.RDS")
+bdata = readRDS("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_260_species_pairs_20231106.RDS")
+
 
 # ## I renamed a few species to move from broad genera to specific species --> fix here to match old results
-# names(bdata) = gsub("Hystrix_brachyura", "Hystrix_genus", names(bdata))
-# names(bdata) = gsub("Herpestes_urva", "Herpestes_genus", names(bdata)) ## herpestes will be tricky because its just the genera level in old code, but split in two species in new code. 
+names(bdata) = gsub("Hystrix_brachyura", "Hystrix_genus", names(bdata))
+names(bdata) = gsub("Herpestes_urva", "Herpestes_genus", names(bdata)) ## herpestes will be tricky because its just the genera level in old code, but split in two species in new code.
 
 ## save vector of relevant species pairs
 all_combos = names(bdata)
@@ -140,13 +142,14 @@ rm(i,l,f,dir,files,key,coef_files,ppc_files)
 ### Import coefficent dataframes
 
 # list all files
-files = list.files("results/HALF_LONG_testing_Oct_2023/coefficent_dataframes/")
+# files = list.files("results/HALF_LONG_testing_Oct_2023/coefficent_dataframes/")
+files = list.files("results/MIDDLE_testing_Jul_2023/coefficent_dataframes/")
 files = files[!grepl("OLD", files)] # remove any old data 
 
 ## Have a few long and all middle files in this directory, subset for one
-files = files[grepl("HALF_LONG", files)]
+# files = files[grepl("HALF_LONG", files)]
 # files = files[grepl("LONG", files)]
-# files = files[grepl("MIDDLE", files)]
+files = files[grepl("MIDDLE", files)]
 # files = files[grepl("SHORT", files)]
 
 
@@ -155,18 +158,19 @@ coeff.res = list()
 
 # loop thru each file to import into list
 for(i in 1:length(files)){
-
-    d = read.csv(paste("results/HALF_LONG_testing_Oct_2023/coefficent_dataframes/", files[i], sep = ""))
-    
-    ## if there are pesky row.names, remove em!
-    d$X = NULL
-    
-    coeff.res[[i]] = d
-    
-    if(ncol(d) != 10){
-      print(paste("The file", files[i], "with the index value of", i, 
-                  "has the wrong number of columns and wont combine well. INVESTIGTE!"))
-    }
+  
+  # d = read.csv(paste("results/HALF_LONG_testing_Oct_2023/coefficent_dataframes/", files[i], sep = ""))
+  d = read.csv(paste("results/MIDDLE_testing_Jul_2023/coefficent_dataframes/", files[i], sep = ""))
+  
+  ## if there are pesky row.names, remove em!
+  d$X = NULL
+  
+  coeff.res[[i]] = d
+  
+  if(ncol(d) != 10){
+    print(paste("The file", files[i], "with the index value of", i, 
+                "has the wrong number of columns and wont combine well. INVESTIGTE!"))
+  }
 }
 rm(d,i, files)
 
@@ -178,15 +182,21 @@ head(coeff)
 str(coeff)
 rm(coeff.res)
 
+## thin to include only updated mods from bdata 
+coeff = coeff[coeff$Species_Pair %in% names(bdata), ]
+length(unique(coeff$Species_Pair)) # just missing 2, thats ok and expected
+
+
 ## inspect effective sample size
 summary(coeff$n.eff[coeff$var == "Species_Interaction"]) # not good! Getting better w/ mid settings tho 
 ## which models lack sufficent sample size for the species interaction parameter?
-sort(unique(coeff$Species_Pair[coeff$n.eff < 100 & coeff$var == "Species_Interaction"])) #163 models! 
+sort(unique(coeff$Species_Pair[coeff$n.eff < 100 & coeff$var == "Species_Interaction"])) #97 models @ middle settings 
 ## vis n.eff
 hist(coeff$n.eff[coeff$var == "Species_Interaction"]) # a lot of small ones! Not good! 
 
-summary(coeff$Rhat[coeff$var == "Species_Interaction"]) # The Meidan is good! but some high values exist, 3rd quart is still too high. 
-sort(unique(coeff$Species_Pair[coeff$Rhat > 1.2 & coeff$var == "Species_Interaction"])) #120 models! 
+## how is convergence around the species interaction parameter?
+summary(coeff$Rhat[coeff$var == "Species_Interaction"]) # MIDDLE- The Meidan is good! but some high values exist, 3rd quart is still too high. 
+sort(unique(coeff$Species_Pair[coeff$Rhat > 1.2 & coeff$var == "Species_Interaction"])) #65 models! 
 
 ## vis Rhat
 hist(coeff$Rhat[coeff$var == "Species_Interaction"]) # thankfully most are small, but some biggies exist! 
@@ -204,7 +214,7 @@ coeff$sub_sp = gsub("SUB-", "", coeff$sub_sp)
 ### Inspect which species pairs are present/missing, 20230829, MIDDLE settings
 
 setdiff(all_combos, coeff$Species_Pair) # only 2 missing models!! This is a huge improvement, but still check. 
-which(all_combos == "SUB-Varanus_salvator~DOM-Neofelis_genus")    # Check OE file number 86
+which(all_combos == "SUB-Panthera_tigris~DOM-Paradoxurus_hermaphroditus")    # Check OE file number 86
 which(all_combos == "SUB-Paradoxurus_hermaphroditus~DOM-Panthera_tigris")  # Check OE file number 157
 
 ### Long-story-short, I found out they all had problem SUs from DVCA that contained 14+ active cams 
@@ -251,13 +261,14 @@ table(preform$mod_completion) # 0.5% of models have failed! Epic improvement.
 ## Make sure all_combos is loaded here! 
 
 # list all files
-files = list.files("results/HALF_LONG_testing_Oct_2023/PPC_dataframes/")
+# files = list.files("results/HALF_LONG_testing_Oct_2023/PPC_dataframes/")
+files = list.files("results/MIDDLE_testing_Jul_2023/PPC_dataframes/")
 files = files[!grepl("OLD", files)] # remove any old data 
 
 ## Subset files for one setting, especially if multiple are in the mix. 
-files = files[grepl("HALF_LONG", files)]
+# files = files[grepl("HALF_LONG", files)]
 # files = files[grepl("LONG", files)]
-# files = files[grepl("MIDDLE", files)]
+files = files[grepl("MIDDLE", files)]
 # files = files[grepl("SHORT", files)]
 
 ### Noticed a typo that included generated results for species that dont spatially overlap
@@ -298,7 +309,9 @@ ppc_res = list()
 for(i in 1:length(files)){
   
   ## read the file 
-  d = read.csv(paste("results/HALF_LONG_testing_Oct_2023/PPC_dataframes/", files[i], sep = ""))
+  # d = read.csv(paste("results/HALF_LONG_testing_Oct_2023/PPC_dataframes/", files[i], sep = ""))
+  d = read.csv(paste("results/MIDDLE_testing_Jul_2023/PPC_dataframes/", files[i], sep = ""))
+  
   
   ## save plotdata vs values in nested list. 
   if(grepl("plotdata", files[i])){
@@ -327,13 +340,18 @@ str(ppc_values) # looks good!
 
 ## quicky inspect parameter convergence for species interaction parameter
 summary(ppc_values$Rhat) # looks decent! some big values tho! 
-nrow(ppc_values[ppc_values$Rhat > 1.2,])/nrow(ppc_values) * 100 # 23% of mods have bad interaction param --> better after removing non-relevant species! 
+nrow(ppc_values[ppc_values$Rhat > 1.2,])/nrow(ppc_values) * 100 # 25% of mods have bad interaction param --> better after removing non-relevant species! 
 # how about sample size?
 summary(coeff$n.eff[coeff$var == "Species_Interaction"]) # this could certainly be improved! 
 length(coeff$n.eff[coeff$var == "Species_Interaction" & 
                      coeff$n.eff < 100]) / length(coeff$n.eff[coeff$var == "Species_Interaction"]) * 100 
 # 76% of mods have small (< 100) sample size on short settings
 # 36% of mods have small (< 100) sample size on middle settings
+
+## summary of SIV
+summary(ppc_values$Interaction_Estimate) # who are the crazy ones?
+ppc_values[ppc_values$Interaction_Estimate < -3, ] # two odd balls! Will figure out how to address them in the future. 
+ppc_values[ppc_values$Interaction_Estimate > 3, ] # nothing! 
 
 # remove list now that were all stored in dfs. 
 rm(ppc_res)

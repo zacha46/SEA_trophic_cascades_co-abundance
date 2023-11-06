@@ -1,7 +1,7 @@
 ---
 title: "Step 1_Prepare data for bundling"
 author: "Zachary Amir"
-date: "2023-08-21"
+date: "2023-11-06"
 output: html_document
 ---
 
@@ -752,7 +752,7 @@ rm(t, s, s2, res)
 
 ```
 
-In the past, particularly the Eco & Evo co-abundance publication, I assigned "natural absences" as landscapes where the species was not found in either the Anthropocene or the Holocene by assigning NA values for landscapes based on 4 broad distributions: Borneo, Sumatra, and North/South Mainland (based on the Isthmus of Kra). However, I am not doing this anymore because we are interested in prey abundance with or without predators, regardless of historical distributions. Therefore, there is no longer any need to generate an "extirpation_DF" to assign landscapes as present, absent or NA because we are using data from ALL sites.
+In the past, particularly the Eco & Evo co-abundance publication, I assigned "natural absences" as landscapes where the species was not found in either the Anthropocene or the Holocene by assigning NA values for landscapes based on 4 broad distributions: Borneo, Sumatra, and North/South Mainland (based on the Isthmus of Kra). However, I am not doing this anymore because we are interested in prey abundance with or without predators, regardless of historical distributions. Therefore, there is no longer any need to generate an "extirpation_DF" to assign landscapes as present, absent or NA because we are using data from ALL sites. However, from a purley computational stance, subsetting to sites where species are historically present/absent should expedite the analysis by removing many rows! 
 
 Generating the data bundles on a regular computer will take hours, so instead I will send the information to the High Performance Computers (HPC) to run much faster. Before sending off the data, I will determine which species need to be analyzed as groups (because of very large group sizes, e.g. dholes and macaques).
 
@@ -917,6 +917,35 @@ for(i in 1:length(umfs)){ # repeat for each first speices
     # 2nd species is the subordinate! 
     sp_sub = all_else[l]
     sp_sub_dat = umfs[[sp_sub]]
+    
+    ##### Add a conditional to verify there are a combined total of 100 detections
+    ##### shared across the landscapes where BOTH species were detected. 
+    
+    ## Grab landscapes present for each species
+    dom_land = unique(caps$Landscape[caps$Species == sp_dom])
+    sub_land = unique(caps$Landscape[caps$Species == sp_sub])
+    ## and only save the ones where they intersect 
+    lands = intersect(dom_land, sub_land)
+    rm(dom_land, sub_land)
+    
+    ## gather number of detections at shared landscapes for both species
+    dom_det = nrow(caps[caps$Species == sp_dom &
+                          caps$Landscape %in% lands,])
+    sub_det = nrow(caps[caps$Species == sp_sub &
+                          caps$Landscape %in% lands,])
+    
+    ## if there are less than 100 detections of both species from shared landscapes, 
+    if(dom_det + sub_det < 100){
+      # let us know
+      print(paste("The species combo of", sp_sub, "~", sp_dom, 
+                  "have less than 100 detections in shared landscapes! This pair was skipped."))
+      # and skip the probelmatic pair
+      next
+      
+    } # end 100 detection conditional 
+    rm(dom_det, sub_det, lands)
+    ## this conditional will also catch species pairs that dont spatially overlap, 
+    ## where a conditonal does that below and isnt needed anymore, but leaving for saftey. 
     
     #
     ##
@@ -1243,7 +1272,7 @@ rm(i,l,sp_dom,sp_sub, sp_dom_dat, sp_sub_dat, obs, temp, z.dom, z.sub,
 
 ## flatten the list of lists into a single list
 bdata_list = unlist(bdata_list, recursive = FALSE)
-length(bdata_list) #279 combos after removing species that don't spatially overlap and reducing nonsense species --> Nice! should allow faster testing as we reduce species. 
+length(bdata_list) #260 combos after removing species that have less than 100 detections in shared landscapes and reducing nonsense species --> Nice! should allow faster testing as we reduce species. 
 names(bdata_list) # looks good! 
 
 ```
@@ -1265,3 +1294,64 @@ rm(day,month,year)
 
 
 ```
+
+
+### Generate data bundles for sensetivity testing
+
+After some preliminary tests, some species pairs are generating wild species interaction values (SIV), such as |5|, or are consistently failing to preform in terms of Bayes p-values. The goal here is to grab at least three species pairs, and play with the data to explore how SIVs and bayes p-vales change based on the underlying data. These three models will include-
+1) poor SIV & bayes p-value and rare: "SUB-Lophura_ignita~DOM-Panthera_pardus"  (the inverse, SUB = leopard, is also crazy) (both < 1000 detections)
+Other options--
+
+SUB-Trichys_fasciculata~DOM-Panthera_tigris (just over 100 shared detections)
+SUB-Macaca_fascicularis~DOM-Cuon_alpinus (< 100 shared detections each)
+
+
+
+
+2) good SIV & bayes p-value and common (and supports a hypothesis): "SUB-Muntiacus_genus~DOM-Panthera_tigris" (both > 1000 detections)
+
+Seems like a mismatch between sample sizes (one really common, one rare), or both rare species tend to produce issues, tho this is not always the case! 
+
+```{r generate testing bundles, echo=FALSE}
+
+# # how many detections for probelm species? Added a few additional problem critters, but wont explore further. 
+# sp_count = ddply(caps[caps$Species %in% c("Lophura_ignita","Muntiacus_genus", "Herpestes_brachyurus", "Trichys_fasciculata",
+#                                           "Panthera_tigris", "Panthera_pardus", "Cuon_alpinus", "Neofelis_genus"),], .(Species), summarize,
+#                  num_cap = length(Species),
+#                  num_lands = length(unique(Landscape)))
+# sp_count
+# 
+# 
+# ## Create a vector of conditions that will be met when making bundled data. 
+# conditions = c("2x_SUB", "2x_DOM", # multiple counts by two
+#                "8x_SUB", "8x_DOM", # multiple counts by eight
+#                "2/SUB", "2/DOM",   # subtract counts by two 
+#                "8/SUB", "8/DOM"    # subtract counts by two 
+#                )
+# 
+# ## save the relevant species pairs 
+# pairs = c("SUB-Lophura_ignita~DOM-Panthera_pardus", "SUB-Muntiacus_genus~DOM-Panthera_tigris")
+# 
+# ## just double check which landscapes BOTH species are detected at. 
+# leo_lands = unique(caps$Lanscape[caps$Species == "Panthera_pardus"]) 
+# bird_lands = unique(caps$Landscape[caps$Species == "Lophura_ignita"]) ## this isnt supposed to overlap w/ leopards... 
+# unique(caps$survey_id[caps$Species == "Lophura_ignita" &
+#                         grepl("P_", caps$Landscape)]) # four surveys @ pasoh
+# nrow(caps[caps$Species == "Lophura_ignita" &
+#                         grepl("P_", caps$Landscape),]) #12 detections! 
+# 
+# 
+# 
+# other_lands = unique(caps$Landscape[caps$Species == "Trichys_fasciculata"]) ## IUCN says this isnt in thailand... 
+# 
+# unique(caps$survey_id[caps$Species == "Trichys_fasciculata" &
+#                         grepl("Thai", caps$Landscape)]) # two surveys
+# nrow(caps[caps$Species == "Trichys_fasciculata" &
+#                         grepl("Thai", caps$Landscape),]) # 16 detections! 
+# 
+# 
+# 
+# # Trichys_fasciculata
+
+```
+

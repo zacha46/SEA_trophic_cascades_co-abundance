@@ -349,6 +349,18 @@ ggsave("explore/SIV_preformance_3_settings_facet_per_pair_pt2_20231102.png", p, 
 rm(test,hl,fl,dw,p)
 
 
+#### Examine which species pairs are consistently producing poor SIVs 
+check = siv[siv$mean > 3 | siv$mean < -3,]
+## Visual comparison 
+
+## save all of these problem pairs!
+prob_pairs = unique(check$Species_Pair)
+
+siv[siv$Species_Pair == "SUB-Lophura_ignita~DOM-Panthera_pardus",] # this is a crazy one, consistent across settings. 
+siv[siv$Species_Pair == "SUB-Muntiacus_genus~DOM-Panthera_tigris",] # this is a good one, consistent across settings. 
+
+
+
 ###### Visualize PPC #####
 
 ## interested in BPV & Chat 
@@ -707,4 +719,182 @@ p=
 
 
 
+
+
+######## Inspect problematic species pairs ######
+
+### import the captures to check back w/ OG data
+caps = read.csv("data/send_to_HPC/clean_captures_to_make_UMFs_20230821.csv")
+## need to bind landscapes here too, import the meta
+meta = read.csv("data/send_to_HPC/clean_metadata_to_make_UMFs_20230821.csv")
+add = select(meta, cell_id_3km, Landscape)
+caps = merge(caps, add, by = "cell_id_3km")
+rm(add)
+
+#### Examine which species pairs are consistently producing poor SIVs 
+check = siv[siv$mean > 3 | siv$mean < -3,]
+## save all of these problem pairs!
+prob_pairs = unique(check$Species_Pair)
+
+## inspect pair of good vs bad pairs for testing. 
+siv[siv$Species_Pair == "SUB-Lophura_ignita~DOM-Panthera_pardus",] # this is a crazy one, consistent across settings. 
+siv[siv$Species_Pair == "SUB-Muntiacus_genus~DOM-Panthera_tigris",] # this is a good one, consistent across settings. 
+
+
+## I have a suspicion that most of these problematic pairs have a small amount of spaital overlap, 
+## thus producing crazy estimates. 
+### BUT, best to check with all species pairs and compare 
+
+## store results here
+land_inspection = data.frame(matrix(NA, ncol = 8, nrow = length(unique(siv$Species_Pair))))
+names(land_inspection) = c("Species_Pair", "dom_species", "sub_species", 
+                           "num_intersecting_landscapes", 
+                           "dom_det_intersect", "sub_det_intersect",
+                           "dom_indiv_intersect", "sub_indiv_intersect")
+land_inspection$Species_Pair = unique(siv$Species_Pair)
+
+## check every single pair! 
+for(i in 1:length(unique(siv$Species_Pair))){
+  
+  ## split apart pairs
+  pair = str_split(unique(siv$Species_Pair)[i], "~")[[1]]
+  dom_sp = pair[grepl("DOM", pair)]
+  dom_sp = gsub("DOM-", "", dom_sp) # for easier indexing
+  sub_sp = pair[grepl("SUB", pair)]
+  sub_sp = gsub("SUB-", "", sub_sp) # for easier indexing
+  
+  ## grab dominant landscapes
+  dom_land = unique(caps$Landscape[caps$Species == dom_sp])
+  ## grab subordinate landscapes
+  sub_land = unique(caps$Landscape[caps$Species == sub_sp])
+  
+  ## grab only the matching landscapes
+  lands = intersect(dom_land, sub_land)
+  
+  ## how many detections for each species across all shared landscapes?
+  dom_det = nrow(caps[caps$Species == dom_sp &
+                        caps$Landscape %in% lands,])
+  sub_det = nrow(caps[caps$Species == sub_sp &
+                        caps$Landscape %in% lands,])
+  
+  ## how many individuals for each species across all shared landscapes?
+  dom_indiv = sum(caps$total_indiv_records[caps$Species == dom_sp &
+                        caps$Landscape %in% lands])
+  sub_indiv = sum(caps$total_indiv_records[caps$Species == sub_sp &
+                        caps$Landscape %in% lands])
+
+  ## save all this info 
+  land_inspection$dom_species[land_inspection$Species_Pair == unique(siv$Species_Pair)[i]] = dom_sp
+  land_inspection$sub_species[land_inspection$Species_Pair == unique(siv$Species_Pair)[i]] = sub_sp
+  land_inspection$num_intersecting_landscapes[land_inspection$Species_Pair == unique(siv$Species_Pair)[i]] = length(lands)
+  land_inspection$dom_det_intersect[land_inspection$Species_Pair == unique(siv$Species_Pair)[i]] = dom_det
+  land_inspection$sub_det_intersect[land_inspection$Species_Pair == unique(siv$Species_Pair)[i]] = sub_det
+  land_inspection$dom_indiv_intersect[land_inspection$Species_Pair == unique(siv$Species_Pair)[i]] = dom_indiv
+  land_inspection$sub_indiv_intersect[land_inspection$Species_Pair == unique(siv$Species_Pair)[i]] = sub_indiv
+  
+}
+rm(i, pair, dom_sp, dom_land, dom_det, dom_indiv, 
+   sub_indiv, sub_det, sub_land, sub_sp, lands)
+
+## account for crazy mods
+land_inspection$crazy_mod = F
+land_inspection$crazy_mod[land_inspection$Species_Pair %in% prob_pairs] = T
+
+## remove rows w/ non relevant species
+land_inspection = land_inspection[! land_inspection$sub_species %in% c("Bos_taurus", "Macaca_genus",
+                                                                       "Hystrix_genus", "Presbytis_rubicunda",
+                                                                       "Herpestes_genus", "Rheithrosciurus_macrotis",
+                                                                       "Macaca_genus"),]
+land_inspection = land_inspection[! land_inspection$dom_species %in% c("Bos_taurus", "Macaca_genus",
+                                                                       "Hystrix_genus", "Presbytis_rubicunda",
+                                                                       "Herpestes_genus", "Rheithrosciurus_macrotis",
+                                                                       "Macaca_genus"),]
+## total number of detections-
+land_inspection$total_det = land_inspection$dom_det_intersect + land_inspection$sub_det_intersect
+# and individuals! 
+land_inspection$total_indiv = land_inspection$dom_indiv_intersect + land_inspection$sub_indiv_intersect
+
+## remove data w/ no detections
+land_inspection = land_inspection[land_inspection$total_det != 0, ] # for removing old data for non relevant species
+
+## inspect detections
+summary(land_inspection$total_det)
+summary(land_inspection$total_det[land_inspection$crazy_mod == T]) # much lower values 
+
+## insepct individuals
+summary(land_inspection$total_indiv)
+summary(land_inspection$total_indiv[land_inspection$crazy_mod == T]) # higher values than detections (obviously)
+
+
+## Inspect mods that should have failed... how did these work?!
+land_inspection[land_inspection$Species_Pair == "SUB-Cuon_alpinus~DOM-Sus_barbatus",]
+siv[siv$Species_Pair == "SUB-Cuon_alpinus~DOM-Sus_barbatus",] # this should have failed! Not significant tho. Maybe ample sample size of dom saved the day. 
+ppc[ppc$Species_Pair == "SUB-Cuon_alpinus~DOM-Sus_barbatus",] # Amazed that this passed the thresholds too. 
+# check the inverse here
+land_inspection[land_inspection$Species_Pair == "SUB-Sus_barbatus~DOM-Cuon_alpinus",]
+siv[siv$Species_Pair == "SUB-Sus_barbatus~DOM-Cuon_alpinus",] # parameter did not converge --> not enough dominant individuals 
+ppc[ppc$Species_Pair == "SUB-Sus_barbatus~DOM-Cuon_alpinus",] # good fit tho... go figure. 
+
+land_inspection[land_inspection$Species_Pair == "SUB-Lophura_diardi~DOM-Panthera_pardus",] 
+siv[siv$Species_Pair == "SUB-Lophura_diardi~DOM-Panthera_pardus",] # Huuuge SE --> not good. 
+ppc[ppc$Species_Pair == "SUB-Lophura_diardi~DOM-Panthera_pardus",] # would have failed here. 
+
+land_inspection[land_inspection$Species_Pair == "SUB-Viverra_tangalunga~DOM-Panthera_tigris",]
+siv[siv$Species_Pair == "SUB-Viverra_tangalunga~DOM-Panthera_tigris",] # large SE
+ppc[ppc$Species_Pair == "SUB-Viverra_tangalunga~DOM-Panthera_tigris",] # Its a decent fit! 
+
+
+## inspect various conditions in the data 
+select(land_inspection[land_inspection$total_det < 100,], Species_Pair, dom_det_intersect, sub_det_intersect, crazy_mod)
+# at both 100 and 200, there are still true and false crazy mods, tho more true the lower you go
+#  make 103 shared detection the relevant threshold --> essentially 100, but captures crazy mongoose-tiger mod. 
+
+nrow(land_inspection[land_inspection$total_det < 100,]) # 20 mods
+nrow(land_inspection[land_inspection$total_indiv < 100,]) # 18 mods
+## probs better to be more inclusive and use total_det
+
+
+## grab all pairs w/ less than 100 shared detections
+low_det = land_inspection[land_inspection$total_det < 100,]
+## but check which low_det are good
+low_det_good = low_det[low_det$crazy_mod == F,]
+low_det_good # no preferred prey. Check SIV and BPV next 
+
+siv[siv$Species_Pair %in% low_det_good$Species_Pair,]
+# no pairs are significant for either hypothesis. 
+## SUB-Hemigalus_derbyanus~DOM-Cuon_alpinus is significant and a good fit, but positive relationship --> unsupportive of top-down hypothesis. 
+# most have fairly high SEs as well. 
+
+as.data.frame(ppc[ppc$Species_Pair %in% low_det_good$Species_Pair, ])
+## most, but not all, do not have a good model fit. 
+
+## now check the opposite, enough detections but still crazy mods
+high_det_bad = land_inspection[land_inspection$total_det >= 100 & land_inspection$crazy_mod == T, ]
+high_det_bad # tapir and dhole should be considered, but they are not a preferred pred-prey pair. 
+
+siv[siv$Species_Pair %in% high_det_bad$Species_Pair, ] # the only mods w/out crazy estimates have failed parameters
+ppc[ppc$Species_Pair %in% high_det_bad$Species_Pair, ] # surprisingly, sub-tapir, dom-dhole have a good fit! Doesnt matter tho, parameter didnt converge. 
+
+## inspect SUB-Panthera_pardus~DOM-Paradoxurus_hermaphroditus b/c it became signficant and converged and (almost) a good fit. 
+table(caps$Landscape[caps$Species == "Panthera_pardus"])
+table(caps$Landscape[caps$Species == "Paradoxurus_hermaphroditus" & 
+                       caps$Landscape %in% unique(caps$Landscape[caps$Species == "Panthera_pardus"])])
+## quite complementary! 
+## I say we leave it for now and see how we go. 
+
+## andother inspection: SUB-Hemigalus_derbyanus~DOM-Cuon_alpinus --> should have failed but didnt and is a good fit. 
+table(caps$Landscape[caps$Species == "Cuon_alpinus" & caps$Landscape %in% unique(caps$Landscape[caps$Species == "Hemigalus_derbyanus"])])
+table(caps$Landscape[caps$Species == "Hemigalus_derbyanus" & 
+                       caps$Landscape %in% unique(caps$Landscape[caps$Species == "Cuon_alpinus"])])
+## very comparable for Kerinci seblat. 
+
+
+###### MOVING FORWARD-->
+## Only generate species pairs if there are at least 100 detections for both species across landscapes where both species are detected! 
+
+summary(siv$mean[siv$Species_Pair %in% land_inspection$Species_Pair[land_inspection$total_det > 100] &
+                   siv$MCMC == "HALF_LONG"]) ## this is a good range! but these mods are only half done! 
+
+## end it on a clean note. 
+rm(check, high_det_bad, land_inspection, low_det, low_det_good, prob_pairs)
 

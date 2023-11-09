@@ -895,6 +895,91 @@ table(caps$Landscape[caps$Species == "Hemigalus_derbyanus" &
 summary(siv$mean[siv$Species_Pair %in% land_inspection$Species_Pair[land_inspection$total_det > 100] &
                    siv$MCMC == "HALF_LONG"]) ## this is a good range! but these mods are only half done! 
 
+#
+##
+###
+####
+##### Further testing has revealed two supported models (good PPC, SIV significnat and in correct direction)
+##### But they have large SIVs and a large SE... inspect the og data!
+siv[siv$Species_Pair == "SUB-Macaca_fascicularis~DOM-Cuon_alpinus",];ppc[ppc$Species_Pair == "SUB-Macaca_fascicularis~DOM-Cuon_alpinus",]
+siv[siv$Species_Pair == "SUB-Trichys_fasciculata~DOM-Panthera_tigris",];ppc[ppc$Species_Pair == "SUB-Macaca_fascicularis~DOM-Cuon_alpinus",]
+
+## check spatial overlap
+land_inspection[land_inspection$Species_Pair %in% c("SUB-Trichys_fasciculata~DOM-Panthera_tigris",
+                                                    "SUB-Macaca_fascicularis~DOM-Cuon_alpinus"),] 
+# on the lower end of detections, but not too wild. Doms both have more detections...
+
+## inspect one at a time. 
+table(caps$Landscape[caps$Species == "Cuon_alpinus" & caps$Landscape %in% unique(caps$Landscape[caps$Species == "Macaca_fascicularis"])])
+table(caps$Landscape[caps$Species == "Macaca_fascicularis" & 
+                       caps$Landscape %in% unique(caps$Landscape[caps$Species == "Cuon_alpinus"])])
+## Many dhole in Thai_E_FC, but only 1 macaque detection there. Also, LOTS of dhole at kao laem and v few macaques there. 
+## conversley, 58 macaque detections at Kerinci and only 4 dhole there. 
+
+## inspect thai macaques
+caps[caps$Landscape %in% c("Thailand_Thai_E_FC_East", "Thailand_Khao_Laem_NP") & 
+       caps$Species == "Macaca_fascicularis",] # rare monkey at N limit of range. always 1 individual record
+##inspect dhole at same landscapes
+summary(caps$total_indiv_records[caps$Species == "Cuon_alpinus" & caps$Landscape == "Thailand_Khao_Laem_NP"])
+summary(caps$total_indiv_records[caps$Species == "Cuon_alpinus" & caps$Landscape == "Thailand_Thai_E_FC_East"]) # big packs here with many detections! 
+
+## save thai cams that detected macaques 
+cams = caps$cell_id_3km[caps$Landscape %in% c("Thailand_Thai_E_FC_East", "Thailand_Khao_Laem_NP") & 
+              caps$Species == "Macaca_fascicularis"] 
+summary(caps$total_indiv_records[caps$Species == "Cuon_alpinus" & caps$cell_id_3km %in% cams])
+caps[caps$cell_id_3km %in% cams & caps$Species == "Cuon_alpinus",]
+## dhole were only detected at 1 of these cams, but there were 8 individuals there, compared to 1 macaque. 
+## also, while no dhole were detected at other two cams, its from the landscape where they were detected the most, so each cell has a non-zero dhole abundance. 
+
+###### Explain weird model "SUB-Macaca_fascicularis~DOM-Cuon_alpinus" like this --> 
+##### There could be an interaction taking place, but given the divergent detections from each species at the limits of thier range
+#### i.e. few dholes in the south, more in the north & few macaques in the north, more in the south. And both rare at other landscapes
+### The large effect size could be an artificat of sampling very differnet populations in the same modelling framework -->
+## Strength of interaciton likley varies across geographical space, which is not well accounted for in this model (i.e. no regional RE)
+
+
+#### 2nd weird model: "SUB-Trichys_fasciculata~DOM-Panthera_tigris"
+table(caps$Landscape[caps$Species == "Panthera_tigris" & caps$Landscape %in% unique(caps$Landscape[caps$Species == "Trichys_fasciculata"])])
+table(caps$Landscape[caps$Species == "Trichys_fasciculata" & 
+                       caps$Landscape %in% unique(caps$Landscape[caps$Species == "Panthera_tigris"])])
+## across all landscapes (n = 3, all sumatran), there are more tiger detections than porcupines. only 21 porcupine detections
+
+## inspect sumatran porcupines
+caps[caps$Landscape %in% c("Sumatra_Bukit_Barisan_Selatan_NP",
+                           "Sumatra_Gunung_Leuser_NP","Sumatra_Kerinci_Seblat_NP") & 
+       caps$Species == "Trichys_fasciculata",] ## only one was ever recorded at a time. 
+
+##inspect dhole at same landscapes
+summary(caps$total_indiv_records[caps$Species == "Panthera_tigris" & caps$Landscape == "Sumatra_Bukit_Barisan_Selatan_NP"]) # this one has 2
+summary(caps$total_indiv_records[caps$Species == "Panthera_tigris" & caps$Landscape == "Sumatra_Gunung_Leuser_NP"]) 
+summary(caps$total_indiv_records[caps$Species == "Panthera_tigris" & caps$Landscape == "Sumatra_Kerinci_Seblat_NP"]) # but all others are one
+
+
+## save sumatra cams that detected porcupines 
+cams = caps$cell_id_3km[caps$Landscape %in% c("Sumatra_Bukit_Barisan_Selatan_NP",
+                                              "Sumatra_Gunung_Leuser_NP","Sumatra_Kerinci_Seblat_NP" ) & 
+                          caps$Species == "Trichys_fasciculata"] 
+summary(caps$total_indiv_records[caps$Species == "Panthera_tigris" & caps$cell_id_3km %in% cams]) # just one
+caps[caps$cell_id_3km %in% cams & caps$Species == "Panthera_tigris",]
+## tigers were only detected at 1 of these cams and only 1 individual was detected. 
+
+## how many pocupine detections per landscape for all landscapes?
+sort(table(caps$Landscape[caps$Species == "Trichys_fasciculata"])) 
+# detected from HELLA landscapes, and sumatra is at the bottom of the list. 
+## Therefore, when examining the tiger-porcupine relationship only at sites where there are tigers, 
+## and those sites have very few porcupines and they are so abundant at other sites,
+## the effect of tigers is VERY strong at reducing their abundnace. 
+
+
+
+## also, while no dhole were detected at other two cams, its from the landscape where they were detected the most, 
+## so each cell has a non-zero dhole abundance. 
+
+
+
 ## end it on a clean note. 
 rm(check, high_det_bad, land_inspection, low_det, low_det_good, prob_pairs)
+
+
+
 

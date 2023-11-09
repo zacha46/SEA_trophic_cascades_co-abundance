@@ -607,6 +607,9 @@ sort(traits$scientificNameStd[traits$tiger_pref == "Yes"]) # 10 species, ok
 #who is missing?
 sort(traits$scientificNameStd[traits$tiger_pref == "No"]) # seems ok, 33 species
 
+## are leopards a preferred prey species for tigers? There is all sorts of literature saying they are subordinate, so maybe yes
+traits$tiger_pref[traits$scientificNameStd == "Panthera_pardus"] = "Yes"
+
 #### Leopards 
 #  https://doi.org/10.1111/j.1469-7998.2006.00139.x
 # suggest preferred weight range of 10-40 kg. 

@@ -5,7 +5,7 @@
 ## Import dataframes, not complete models b/c theyre too heavy
 
 # Zachary Amir, Z.Amir@uq.edu.au
-# Last updated on Sep 4th, 2023
+# Last updated on Nov 10th, 2023
 
 ## start fresh
 rm(list = ls())
@@ -13,14 +13,14 @@ rm(list = ls())
 ## load libs 
 library(tidyverse)
 library(plyr)
-library(fs) # for moving files around 
-library(ggridges) # for ridgeline plots 
 
-
+# library(ggpubr);library(cowplot) # for fancy histo + density plots 
+# library(fs) # for moving files around 
+# library(ggridges) # for ridgeline plots 
 # library(reshape2) # for making checkerboard matrix 
 # library(leaflet) # for creating concepts of study map
 # library(colortools) # for nice colors in the map
-# library(jagsUI) 
+# library(jagsUI) # for running co-abundance mods and inspecting jags output 
 # library(traitdata) # for species trait data
 
 ## set WD (should be automatic b/c RProj, but being safe anyway)
@@ -601,7 +601,8 @@ table(preform$parameter_valid) # majority is valid! Should be better w/ more rep
 ## Which species pairs involved large carnivores significantly regulating the abundance of other critters?
 preform$Species_Pair[preform$Interaction_Estimate < 0 & 
                        preform$Significance == "Significant" &
-                       preform$mod_valid == "Yes" &
+                       preform$parameter_valid == "Yes" & 
+                       preform$BPV_valid == "Yes" & 
                        grepl("DOM-Large_Carnivore", preform$guild_pair)] 
 ## Curious to see what happens w/ mods w/ higher MCMC settings. 
 
@@ -803,7 +804,7 @@ rm(p,n,gp,i,path,day,month,year,date)
 rm(sp_pair_coeff_plots)
 
 
-######### Visualize species interaction coefficient via histograms #######
+######### Visualize species interaction value (SIV) via histograms #######
 
 ### These graphs are not useful anymore, consider it depreciated! 
 ## leaving code here for now, but its all hashed out. 
@@ -1008,7 +1009,7 @@ rm(sp_pair_coeff_plots)
 # rm(p, dat, date)
 
 
-######### Visualize SIV via ridgeline plots ######
+######### Visualize SIV via ridgeline or frequency plots ######
 
 ### these plots are good for examining relationships at the species-level
 
@@ -1117,9 +1118,9 @@ p =
 #        p, width = 7, height = 3, units = "in")
 
 ## A frequency distribution, colored per category
-p= 
+# p= 
   ggplot(ridge_dat2[ridge_dat2$rel_species == "All_large_carnivores", ], aes(x = Interaction_Estimate, fill = direction))+
-  geom_histogram(aes(y=after_stat(count)), colour="black", bins = 80, alpha = 1)+
+  geom_histogram(aes(y=after_stat(count)), colour="black", bins = 20, alpha = 1)+#, position = "dodge")+
   # geom_density(alpha=.6, bw = .1)+
   theme_test()+
   scale_fill_manual(values = new_colors) +
@@ -1128,7 +1129,7 @@ p=
 #        p, width = 7, height = 3, units = "in")
 
 ## A frequency distribution with density overlaid
-p=
+# p=
   ggplot(ridge_dat2[ridge_dat2$rel_species == "All_large_carnivores", ], aes(x = Interaction_Estimate, fill = direction))+
   geom_histogram(aes(y=after_stat(count)), colour="black", bins = 80, alpha = 1)+
   geom_density(alpha=.8, bw = .1)+
@@ -1139,7 +1140,7 @@ p=
 #        p, width = 7, height = 3, units = "in")
 
 ## a regular gg density plot
-p=
+# p=
   ggplot(ridge_dat2[ridge_dat2$rel_species == "All_large_carnivores", ], aes(x = Interaction_Estimate, fill = direction))+
   geom_density(bw = .1, alpha=.8, )+
   theme_test()+
@@ -1149,7 +1150,7 @@ p=
 #        p, width = 7, height = 3, units = "in")
 
 ## density plot with only one category, so the area under the curve MUST be 1
-p=
+# p=
   ggplot(ridge_dat2[ridge_dat2$rel_species == "All_large_carnivores", ], aes(x = Interaction_Estimate))+#, fill = direction))+
   geom_density(bw = .1, alpha=.8, )+
   # geom_histogram(aes(y=after_stat(count)), colour="black", bins = 80, alpha = 1)+
@@ -1158,6 +1159,44 @@ p=
   labs(x = "Species Interaction Value", y = "Density", fill = NULL, color = NULL, title = "all mods")
 # ggsave(paste("explore/SIV_distribution_density_plot_one_level_",date, ".png", sep = ""),
 #        p, width = 7, height = 3, units = "in")
+
+
+### Try to overlay the one-category density plot with the frequency plot 
+
+# Frequency plot 
+f_plot = 
+  ggplot(ridge_dat2[ridge_dat2$rel_species == "All_large_carnivores", ], 
+         aes(x = Interaction_Estimate, fill = direction))+
+  geom_histogram(aes(y=after_stat(count)), colour="black", bins = 80, alpha = 1)+ #, position = "dodge")+
+  scale_fill_manual(values = new_colors) +
+  geom_vline(aes(xintercept = 0), linetype = "dashed", alpha = 0.6)+
+  theme_classic()+
+  labs(x = "Species Interaction Value", y = "Frequency") 
+# Density plot
+d_plot = ggdensity(ridge_dat2[ridge_dat2$rel_species == "All_large_carnivores", ], 
+                   
+                   x = "Interaction_Estimate")+
+  geom_vline(aes(xintercept = 0), linetype = "dashed", alpha = 0.6)+
+  theme_classic()+
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05)), position = "right")+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks")
+
+## put them together! 
+# f_plot + d_plot
+# plot_grid(f_plot, d_plot, align = "hv", axis = "tblr")
+# plot_grid(f_plot, d_plot, align = "v", axis = "l")
+ggarrange(f_plot, d_plot, ncol = 1, nrow = 2)
+
+## This code is supposed to overlay the two plots, 
+## but will not work --> 2nd plot always overwrite the first. 
+aligned_plots = align_plots(f_plot,d_plot, align="hv", axis="tblr")
+ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+rm(f_plot, d_plot, aligned_plots, p, a)
+
 
 
 
@@ -1181,10 +1220,13 @@ b$dom_sp = "All_large_carnivores"
 ridge_dat = rbind(a,b)
 rm(a,b)
 
-## Set factor level manually based off weights from guild dataframe 
-ridge_dat$dom_sp = factor(ridge_dat$dom_sp, levels = c("Neofelis_genus","Cuon_alpinus", 
-                                                       "Panthera_pardus","Panthera_tigris",
-                                                       "All_large_carnivores"))
+# # Set factor level manually based off weights from guild dataframe
+# ridge_dat$dom_sp = factor(ridge_dat$dom_sp, levels = c("Neofelis_genus","Cuon_alpinus",
+#                                                        "Panthera_pardus","Panthera_tigris",
+#                                                        "All_large_carnivores"))
+# ridge_dat$dom_sp = factor(ridge_dat$dom_sp, levels = c("All_large_carnivores","Panthera_tigris",
+#                                                        "Panthera_pardus","Cuon_alpinus", 
+#                                                        "Neofelis_genus"))
 
 ## try to group into two levels to reduce few data points
 ridge_dat$hyp_support[ridge_dat$Species_Pair %in% preform$Species_Pair[preform$support == "Unsupported_3"]] = "Unsupported_3"
@@ -1198,63 +1240,102 @@ hyp_colors = c("Unsupported_1" = "gray87",
                "Unsupported_3" = "gray32",
                "Supported" = "#af8dc3") # top-down is purp, bottom up is #7fbf7b green
 
+## ridgeline plot verision
+{
+  # ###### UPDATE --> geom_density_ridges() will EXCLUDE data if there are <= 2 data points for it! 
+  # #### Potential solution is to graph those points WITH the regular ridgeline, 
+  # ## but include them just as points, NOT in the full density distribution. 
+  # 
+  # ##### Subset records that wont fit in density estimation (i.e. <= 2 values in neg_vs_pos2 OR hyp_support)
+  # 
+  # ## first grab all dom_species and take note of which need subsetting. 
+  # small_dat = ddply(ridge_dat, .(dom_sp, hyp_support), summarize,
+  #                   num_levls = length((hyp_support)))
+  # ## then remove all that dont need subsetting
+  # small_dat = small_dat[small_dat$num_levls <= 2,]
+  # 
+  # ## merge small_dat and ridge_dat based on common columns dom_sp and neg_vs_pos2 to ensure no repeats are added
+  # ridge_points <- merge(ridge_dat[ridge_dat$dom_sp %in% small_dat$dom_sp,], small_dat, by = c("dom_sp", "hyp_support"))
+  # 
+  # ## verify we have the proper number of records 
+  # nrow(ridge_points) == sum(small_dat$num_levls) ## MUST BE TRUE 
+  # rm(small_dat)
+  
+  
+  # ### Visualize levels of non-support across all large carnivore top-down models. 
+  # p =
+  # ggplot(ridge_dat[ridge_dat$hyp_support != "Supported", ], 
+  #        aes(x = mean, y = dom_sp, fill = hyp_support, 
+  #            height = after_stat(density))) +
+  #   geom_density_ridges(stat = "density", scale=.9, alpha = .8, point_alpha=.5)+
+  #   geom_vline(aes(xintercept = 0), color = "black") +
+  #   ## points wont plot when using after_stat(density), but leaving here for future inspiration anyway. 
+  #   geom_point(data = ridge_points[ridge_points$hyp_support != "Supported", ], aes(x = mean, y = dom_sp, color = hyp_support),
+  #              size = 5, shape = "circle", alpha = .8, position = position_nudge(y = 0.08))+
+  #   theme_ridges() +
+  #   scale_fill_manual(values = hyp_colors[names(hyp_colors) != "Supported"]) +
+  #   scale_color_manual(values = hyp_colors[names(hyp_colors) != "Supported"]) + 
+  #   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL, 
+  #        title = "Large carnivores are dominant")
+  # ## save it!
+  # # ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_UNSUPPORTED_scaled_species_interaction_large_carnivores_dominant_",date, ".png", sep = ""),
+  # #        p, width = 10, height = 8, units = "in")
+  # 
+  # ### Scaled version looks very similar to non-scaled version, except for the points. 
+  # p=
+  # ggplot(ridge_dat[ridge_dat$hyp_support != "Supported", ], aes(x = mean, y = dom_sp, fill = hyp_support)) +
+  #   geom_density_ridges( scale=.9, alpha = .8, jittered_points = TRUE, point_alpha=.5)+
+  #   geom_point(data = ridge_points[ridge_points$hyp_support != "Supported", ], aes(x = mean, y = dom_sp, color = hyp_support),
+  #              size = 5, shape = "circle", alpha = .8, position = position_nudge(y = .08), inherit.aes = F)+
+  #   geom_vline(aes(xintercept = 0), color = "black") +
+  #   theme_ridges() +
+  #   # coord_cartesian(xlim = c(min,max))+ # to remove all large carn fluff
+  #   scale_fill_manual(values = hyp_colors[names(hyp_colors) != "Supported"]) +
+  #   scale_color_manual(values = hyp_colors[names(hyp_colors) != "Supported"]) +
+  #   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL,
+  #        title = "Large carnivores are dominant")
+  # ## save it!
+  # # ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_UNSUPPORTED_non-scaled_species_interaction_large_carnivores_dominant_",date, ".png", sep = ""),
+  # #        p, width = 10, height = 8, units = "in")
+  
+}
 
-###### UPDATE --> geom_density_ridges() will EXCLUDE data if there are <= 2 data points for it! 
-#### Potential solution is to graph those points WITH the regular ridgeline, 
-## but include them just as points, NOT in the full density distribution. 
+## frequency plot version --> make one for each species 
+plot_list = list()
+order = c("All_large_carnivores","Panthera_tigris","Panthera_pardus", 
+          "Cuon_alpinus", "Neofelis_genus")
+# grab min and max vals 
+min_val = min(ridge_dat$mean[ridge_dat$hyp_support != "Supported"])
+max_val = max(ridge_dat$mean[ridge_dat$hyp_support != "Supported"])
+for(i in 1:length(order)){
+  
+  # subset the data
+  d = ridge_dat[ridge_dat$hyp_support != "Supported" &
+                  ridge_dat$dom_sp == order[i], ]
+  
+  # make the plot 
+  p = ggplot(d, aes(x = mean, fill = hyp_support))+
+    geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .08, alpha = 1)+#, position = "dodge")+
+    # theme_minimal()+
+    # theme_test()+
+    theme_classic()+
+    geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+    scale_fill_manual(values = hyp_colors) +
+    coord_cartesian(xlim = c(min_val, max_val))+
+    labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])
+  
+  # save it! 
+  plot_list[[i]] = p
+  
+}
+rm(d,p,i, min_val, max_val)
 
-##### Subset records that wont fit in density estimation (i.e. <= 2 values in neg_vs_pos2 OR hyp_support)
-
-## first grab all dom_species and take note of which need subsetting. 
-small_dat = ddply(ridge_dat, .(dom_sp, hyp_support), summarize,
-                  num_levls = length((hyp_support)))
-## then remove all that dont need subsetting
-small_dat = small_dat[small_dat$num_levls <= 2,]
-
-## merge small_dat and ridge_dat based on common columns dom_sp and neg_vs_pos2 to ensure no repeats are added
-ridge_points <- merge(ridge_dat[ridge_dat$dom_sp %in% small_dat$dom_sp,], small_dat, by = c("dom_sp", "hyp_support"))
-
-## verify we have the proper number of records 
-nrow(ridge_points) == sum(small_dat$num_levls) ## MUST BE TRUE 
-rm(small_dat)
-
-
-### Visualize levels of non-support across all large carnivore top-down models. 
-p =
-ggplot(ridge_dat[ridge_dat$hyp_support != "Supported", ], 
-       aes(x = mean, y = dom_sp, fill = hyp_support, 
-           height = after_stat(density))) +
-  geom_density_ridges(stat = "density", scale=.9, alpha = .8, point_alpha=.5)+
-  geom_vline(aes(xintercept = 0), color = "black") +
-  ## points wont plot when using after_stat(density), but leaving here for future inspiration anyway. 
-  geom_point(data = ridge_points[ridge_points$hyp_support != "Supported", ], aes(x = mean, y = dom_sp, color = hyp_support),
-             size = 5, shape = "circle", alpha = .8, position = position_nudge(y = 0.08))+
-  theme_ridges() +
-  scale_fill_manual(values = hyp_colors[names(hyp_colors) != "Supported"]) +
-  scale_color_manual(values = hyp_colors[names(hyp_colors) != "Supported"]) + 
-  labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL, 
-       title = "Large carnivores are dominant")
-## save it!
-# ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_UNSUPPORTED_scaled_species_interaction_large_carnivores_dominant_",date, ".png", sep = ""),
-#        p, width = 10, height = 8, units = "in")
-
-### Scaled version looks very similar to non-scaled version, except for the points. 
-p=
-ggplot(ridge_dat[ridge_dat$hyp_support != "Supported", ], aes(x = mean, y = dom_sp, fill = hyp_support)) +
-  geom_density_ridges( scale=.9, alpha = .8, jittered_points = TRUE, point_alpha=.5)+
-  geom_point(data = ridge_points[ridge_points$hyp_support != "Supported", ], aes(x = mean, y = dom_sp, color = hyp_support),
-             size = 5, shape = "circle", alpha = .8, position = position_nudge(y = .08), inherit.aes = F)+
-  geom_vline(aes(xintercept = 0), color = "black") +
-  theme_ridges() +
-  # coord_cartesian(xlim = c(min,max))+ # to remove all large carn fluff
-  scale_fill_manual(values = hyp_colors[names(hyp_colors) != "Supported"]) +
-  scale_color_manual(values = hyp_colors[names(hyp_colors) != "Supported"]) +
-  labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL,
-       title = "Large carnivores are dominant")
-## save it!
-# ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_UNSUPPORTED_non-scaled_species_interaction_large_carnivores_dominant_",date, ".png", sep = ""),
-#        p, width = 10, height = 8, units = "in")
-
+## arrange them vertically 
+p = plot_grid(plotlist = plot_list, align = "v", 
+              ncol = 1, nrow = length(plot_list))
+# and save it! 
+# ggsave(paste("figures/Grouped Histograms/Histogram_UNSUPPORTED_species_interaction_large_carnivores_dominant_",date, ".png", sep = ""),
+#                p, width = 10, height = 10, units = "in")
 
 ### Save top-down ridge_data to combine w/ bottom-up data
 top_down_ridges = ridge_dat[ridge_dat$hyp_support == "Supported",]
@@ -1276,6 +1357,8 @@ top_down_nonsupport$num_total[top_down_nonsupport$dom_sp == "All_large_carnivore
   sum(top_down_nonsupport$num_lvl[top_down_nonsupport$dom_sp == "All_large_carnivores"])
 # finally calulate the percent-
 top_down_nonsupport$percent = top_down_nonsupport$num_lvl / top_down_nonsupport$num_total * 100
+# save it for fig making 
+# write.csv(top_down_nonsupport, paste("results/summarized_results/percetnages_for_unsupported_top-down_histogram_fig_", date, ".csv", sep = ""), row.names = F)
 
 
 
@@ -1295,11 +1378,7 @@ b$sub_sp = "All_large_carnivores"
 
 ## and combine
 ridge_dat = rbind(a,b)
-
-## Set factor level to match other graphs 
-ridge_dat$sub_sp = factor(ridge_dat$sub_sp, levels = c("Neofelis_genus","Cuon_alpinus", 
-                                                       "Panthera_pardus","Panthera_tigris",
-                                                       "All_large_carnivores"))
+rm(a,b,dat)
 
 ## try to group into two levels to reduce few data points
 ridge_dat$hyp_support[ridge_dat$Species_Pair %in% preform$Species_Pair[preform$support == "Unsupported_3"]] = "Unsupported_3"
@@ -1312,78 +1391,127 @@ hyp_colors = c("Unsupported_1" = "gray87",
                "Unsupported_2" = "gray55",
                "Unsupported_3" = "gray32",
                "Supported" = "#7fbf7b") # top-down is purp, bottom up is #7fbf7b green
-
-## there are a few examples (e.g.  SUB-Cuon_alpinus~DOM-Panthera_tigris) where the coding is bottom-up, but we know better that its top-down
-## in this instance, remove all values that are positive AND unsupported_1
-rm = ridge_dat[ridge_dat$mean > 0 & ridge_dat$hyp_support == "Unsupported_1",]
-ridge_dat = ridge_dat[! ridge_dat$Species_Pair %in% rm$Species_Pair,]
-rm(rm)
-
-##### Subset records that wont fit in density estimation (i.e. <= 2 values in neg_vs_pos2 OR hyp_support)
-
-## first grab all dom_species and take note of which need subsetting. 
-small_dat = ddply(ridge_dat, .(sub_sp, hyp_support), summarize,
-                  num_levls = length((hyp_support)))
-## then remove all that dont need subsetting
-small_dat = small_dat[small_dat$num_levls <= 2,]
-
-## merge small_dat and ridge_dat based on common columns dom_sp and neg_vs_pos2 to ensure no repeats are added
-ridge_points <- merge(ridge_dat[ridge_dat$sub_sp %in% small_dat$sub_sp,], small_dat, by = c("sub_sp", "hyp_support"))
-
-## verify we have the proper number of records 
-nrow(ridge_points) == sum(small_dat$num_levls) ## MUST BE TRUE 
-rm(small_dat)
-
-## some non-support values have crazy numbers, so exclude them from the graph to make it look better
-# min_value = min(ridge_dat$mean[ridge_dat$hyp_support != "Supported" & ridge_dat$mean > -3])
-# max_value = max(ridge_dat$mean[ridge_dat$hyp_support != "Supported" & ridge_dat$mean > -3])
-
-## better yet, to make the graph look cleaner, just remove these records from the data
+## insepct values
+summary(ridge_dat$mean) # huge negatives!
+# To make the graph look cleaner, just remove these records from the data
 ridge_dat2 = ridge_dat[ridge_dat$mean > -3, ]
-ridge_points2 = ridge_points[ridge_points$mean > -3, ]
 
+## ridgeline plot verision
+{
+  # ## Set factor level to match other graphs 
+  # ridge_dat$sub_sp = factor(ridge_dat$sub_sp, levels = c("Neofelis_genus","Cuon_alpinus", 
+  #                                                        "Panthera_pardus","Panthera_tigris",
+  #                                                        "All_large_carnivores"))
+  ## there are a few examples (e.g.  SUB-Cuon_alpinus~DOM-Panthera_tigris) where the coding is bottom-up, but we know better that its top-down
+  ## in this instance, remove all values that are positive AND unsupported_1
+  # rm = ridge_dat[ridge_dat$mean > 0 & ridge_dat$hyp_support == "Unsupported_1",]
+  # ridge_dat = ridge_dat[! ridge_dat$Species_Pair %in% rm$Species_Pair,]
+  # rm(rm)
+  # 
+  # ##### Subset records that wont fit in density estimation (i.e. <= 2 values in neg_vs_pos2 OR hyp_support)
+  # 
+  # ## first grab all dom_species and take note of which need subsetting. 
+  # small_dat = ddply(ridge_dat, .(sub_sp, hyp_support), summarize,
+  #                   num_levls = length((hyp_support)))
+  # ## then remove all that dont need subsetting
+  # small_dat = small_dat[small_dat$num_levls <= 2,]
+  # 
+  # ## merge small_dat and ridge_dat based on common columns dom_sp and neg_vs_pos2 to ensure no repeats are added
+  # ridge_points <- merge(ridge_dat[ridge_dat$sub_sp %in% small_dat$sub_sp,], small_dat, by = c("sub_sp", "hyp_support"))
+  # 
+  # ## verify we have the proper number of records 
+  # nrow(ridge_points) == sum(small_dat$num_levls) ## MUST BE TRUE 
+  # rm(small_dat)
+  # 
+  # ## some non-support values have crazy numbers, so exclude them from the graph to make it look better
+  # # min_value = min(ridge_dat$mean[ridge_dat$hyp_support != "Supported" & ridge_dat$mean > -3])
+  # # max_value = max(ridge_dat$mean[ridge_dat$hyp_support != "Supported" & ridge_dat$mean > -3])
+  # 
+  # ## better yet, to make the graph look cleaner, just remove these records from the data
+  # ridge_dat2 = ridge_dat[ridge_dat$mean > -3, ]
+  # ridge_points2 = ridge_points[ridge_points$mean > -3, ]
+  # 
+  # 
+  # ### Visualize levels of non-support across all large carnivore top-down models. 
+  # p =
+  #   ggplot(ridge_dat2[ridge_dat2$hyp_support != "Supported", ], 
+  #          aes(x = mean, y = sub_sp, fill = hyp_support, 
+  #              height = after_stat(density))) +
+  #   geom_density_ridges(stat = "density", scale=.9, alpha = .8, point_alpha=.5)+
+  #   geom_vline(aes(xintercept = 0), color = "black") +
+  #   ## points wont plot when using after_stat(density), but leaving here for future inspiration anyway. 
+  #   geom_point(data = ridge_points2[ridge_points2$hyp_support != "Supported", ], aes(x = mean, y = sub_sp, color = hyp_support),
+  #              size = 5, shape = "circle", alpha = .8, position = position_nudge(y = 0.08), inherit.aes = F)+
+  #   theme_ridges() +
+  #   # coord_cartesian(xlim = c(min_value,max_value))+ # to remove all large carn fluff
+  #   scale_fill_manual(values = hyp_colors[names(hyp_colors) != "Supported"]) +
+  #   scale_color_manual(values = hyp_colors[names(hyp_colors) != "Supported"]) + 
+  #   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL, 
+  #        title = "Large carnivores are subordinate")
+  # 
+  # ## and save it!
+  # # ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_UNSUPPORTED_scaled_species_interaction_large_carnivores_subordinate_",date, ".png", sep = ""),
+  # #        p, width = 10, height = 8, units = "in")
+  # 
+  # ### Scaled version looks very similar to non-scaled version, except for the points. 
+  # p=
+  #   ggplot(ridge_dat2[ridge_dat2$hyp_support != "Supported", ], aes(x = mean, y = sub_sp, fill = hyp_support)) +
+  #   geom_density_ridges( scale=.9, alpha = .8, jittered_points = TRUE, point_alpha=.5)+
+  #   geom_point(data = ridge_points2[ridge_points2$hyp_support != "Supported", ], aes(x = mean, y = sub_sp, color = hyp_support),
+  #              size = 5, shape = "circle", alpha = .8, position = position_nudge(y = .08), inherit.aes = F)+
+  #   geom_vline(aes(xintercept = 0), color = "black") +
+  #   theme_ridges() +
+  #   # coord_cartesian(xlim = c(min_value,max_value))+ # to remove all large carn fluff
+  #   scale_fill_manual(values = hyp_colors[names(hyp_colors) != "Supported"]) +
+  #   scale_color_manual(values = hyp_colors[names(hyp_colors) != "Supported"]) +
+  #   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL,
+  #        title = "Large carnivores are subordinate")
+  # 
+  # ## save it!
+  # # ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_UNSUPPORTED_non-scaled_species_interaction_large_carnivores_subordiante_",date, ".png", sep = ""),
+  # #        p, width = 10, height = 8, units = "in")
+  # 
+  # ## keep it clean! 
+  # rm(ridge_dat2, ridge_points2, p, dat, hyp_colors, ridge_points,a,b)
+  
+}
 
-### Visualize levels of non-support across all large carnivore top-down models. 
-p =
-  ggplot(ridge_dat2[ridge_dat2$hyp_support != "Supported", ], 
-         aes(x = mean, y = sub_sp, fill = hyp_support, 
-             height = after_stat(density))) +
-  geom_density_ridges(stat = "density", scale=.9, alpha = .8, point_alpha=.5)+
-  geom_vline(aes(xintercept = 0), color = "black") +
-  ## points wont plot when using after_stat(density), but leaving here for future inspiration anyway. 
-  geom_point(data = ridge_points2[ridge_points2$hyp_support != "Supported", ], aes(x = mean, y = sub_sp, color = hyp_support),
-             size = 5, shape = "circle", alpha = .8, position = position_nudge(y = 0.08), inherit.aes = F)+
-  theme_ridges() +
-    # coord_cartesian(xlim = c(min_value,max_value))+ # to remove all large carn fluff
-  scale_fill_manual(values = hyp_colors[names(hyp_colors) != "Supported"]) +
-  scale_color_manual(values = hyp_colors[names(hyp_colors) != "Supported"]) + 
-  labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL, 
-       title = "Large carnivores are subordinate")
+## frequency plot version --> make one for each species 
+plot_list = list()
+order = c("All_large_carnivores","Panthera_tigris","Panthera_pardus", 
+          "Cuon_alpinus", "Neofelis_genus")
+# grab min and max vals 
+min_val = min(ridge_dat2$mean[ridge_dat2$hyp_support != "Supported"])
+max_val = max(ridge_dat2$mean[ridge_dat2$hyp_support != "Supported"])
+for(i in 1:length(order)){
+  
+  # subset the data
+  d = ridge_dat2[ridge_dat2$hyp_support != "Supported" &
+                  ridge_dat2$sub_sp == order[i], ]
+  
+  # make the plot 
+  p = ggplot(d, aes(x = mean, fill = hyp_support))+
+    geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .08, alpha = 1)+#, position = "dodge")+
+    # theme_minimal()+
+    # theme_test()+
+    theme_classic()+
+    geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+    scale_fill_manual(values = hyp_colors) +
+    coord_cartesian(xlim = c(min_val, max_val))+
+    labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])
+  
+  # save it! 
+  plot_list[[i]] = p
+  
+}
+rm(d,p,i, min_val, max_val)
 
-## and save it!
-# ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_UNSUPPORTED_scaled_species_interaction_large_carnivores_subordinate_",date, ".png", sep = ""),
-#        p, width = 10, height = 8, units = "in")
-
-### Scaled version looks very similar to non-scaled version, except for the points. 
-p=
-  ggplot(ridge_dat2[ridge_dat2$hyp_support != "Supported", ], aes(x = mean, y = sub_sp, fill = hyp_support)) +
-  geom_density_ridges( scale=.9, alpha = .8, jittered_points = TRUE, point_alpha=.5)+
-  geom_point(data = ridge_points2[ridge_points2$hyp_support != "Supported", ], aes(x = mean, y = sub_sp, color = hyp_support),
-             size = 5, shape = "circle", alpha = .8, position = position_nudge(y = .08), inherit.aes = F)+
-  geom_vline(aes(xintercept = 0), color = "black") +
-  theme_ridges() +
-  # coord_cartesian(xlim = c(min_value,max_value))+ # to remove all large carn fluff
-  scale_fill_manual(values = hyp_colors[names(hyp_colors) != "Supported"]) +
-  scale_color_manual(values = hyp_colors[names(hyp_colors) != "Supported"]) +
-  labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL,
-       title = "Large carnivores are subordinate")
-
-## save it!
-# ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_UNSUPPORTED_non-scaled_species_interaction_large_carnivores_subordiante_",date, ".png", sep = ""),
-#        p, width = 10, height = 8, units = "in")
-
-## keep it clean! 
-rm(ridge_dat2, ridge_points2, p, dat, hyp_colors, ridge_points,a,b)
+## arrange them vertically 
+p = plot_grid(plotlist = plot_list, align = "v", 
+              ncol = 1, nrow = length(plot_list))
+# and save it! 
+# ggsave(paste("figures/Grouped Histograms/Histogram_UNSUPPORTED_species_interaction_large_carnivores_subordinate_",date, ".png", sep = ""),
+#                p, width = 10, height = 10, units = "in")
 
 
 ### Save bottom-up ridge_data to combine w/ top-down data 
@@ -1406,6 +1534,8 @@ bottom_up_nonsupport$num_total[bottom_up_nonsupport$sub_sp == "All_large_carnivo
   sum(bottom_up_nonsupport$num_lvl[bottom_up_nonsupport$sub_sp == "All_large_carnivores"])
 # finally calulate the percent-
 bottom_up_nonsupport$percent = bottom_up_nonsupport$num_lvl / bottom_up_nonsupport$num_total * 100
+# save it for fig making 
+# write.csv(bottom_up_nonsupport, paste("results/summarized_results/percetnages_for_unsupported_bottom-up_histogram_fig_", date, ".csv", sep = ""), row.names = F)
 
 
 
@@ -1431,77 +1561,118 @@ support$dom_sp = as.character(support$dom_sp)
 support$rel_species[support$direction == "top-down"] = support$dom_sp[support$direction == "top-down"]
 support$rel_species[support$direction == "bottom-up"] = support$sub_sp[support$direction == "bottom-up"]
 
-
-##### Subset records that wont fit in density estimation (i.e. <= 2 values)
-
-## first grab all dom_species and take note of which need subsetting.
-small_dat = ddply(support, .(rel_species, direction), summarize,
-                  num_levls = length((direction)))
-## then remove all that dont need subsetting
-small_dat = small_dat[small_dat$num_levls <= 2,]
-
-## merge small_dat and ridge_dat based on common columns dom_sp and neg_vs_pos2 to ensure no repeats are added
-ridge_points <- merge(support[support$rel_species %in% small_dat$rel_species,], small_dat, by = c("rel_species", "direction"))
-
-## verify we have the proper number of records
-nrow(ridge_points) == sum(small_dat$num_levls) ## MUST BE TRUE
-rm(small_dat)
-
-## fix a tricky typo for double large-carn interaction in both dataframes! 
-ridge_points$direction[ridge_points$Species_Pair == "SUB-Panthera_pardus~DOM-Panthera_tigris"] = "top-down"
+## fix tricky typo
 support$direction[support$Species_Pair == "SUB-Panthera_pardus~DOM-Panthera_tigris"] = "top-down"
 
-### need to add an empty row for clouded leopard
-ridge_points = ridge_points %>%
-  add_row(rel_species = "Neofelis_genus", direction = "bottom-up")
-support = support %>%
-  add_row(rel_species = "Neofelis_genus", direction = "bottom-up")
 
-## Set factor level to match other graphs 
-support$rel_species = factor(support$rel_species, levels = c("Neofelis_genus","Cuon_alpinus", 
-                                                             "Panthera_pardus","Panthera_tigris",
-                                                             "All_large_carnivores"))
-ridge_points$rel_species = factor(ridge_points$rel_species, levels = c("Neofelis_genus","Cuon_alpinus", 
-                                                             "Panthera_pardus","Panthera_tigris",
-                                                             "All_large_carnivores"))
+## ridgeline plot verision
+{
+  # ##### Subset records that wont fit in density estimation (i.e. <= 2 values)
+  # 
+  # ## first grab all dom_species and take note of which need subsetting.
+  # small_dat = ddply(support, .(rel_species, direction), summarize,
+  #                   num_levls = length((direction)))
+  # ## then remove all that dont need subsetting
+  # small_dat = small_dat[small_dat$num_levls <= 2,]
+  # 
+  # ## merge small_dat and ridge_dat based on common columns dom_sp and neg_vs_pos2 to ensure no repeats are added
+  # ridge_points <- merge(support[support$rel_species %in% small_dat$rel_species,], small_dat, by = c("rel_species", "direction"))
+  # 
+  # ## verify we have the proper number of records
+  # nrow(ridge_points) == sum(small_dat$num_levls) ## MUST BE TRUE
+  # rm(small_dat)
+  # 
+  # ## fix a tricky typo for double large-carn interaction in both dataframes! 
+  # ridge_points$direction[ridge_points$Species_Pair == "SUB-Panthera_pardus~DOM-Panthera_tigris"] = "top-down"
+  # support$direction[support$Species_Pair == "SUB-Panthera_pardus~DOM-Panthera_tigris"] = "top-down"
+  # 
+  # ### need to add an empty row for clouded leopard
+  # ridge_points = ridge_points %>%
+  #   add_row(rel_species = "Neofelis_genus", direction = "bottom-up")
+  # support = support %>%
+  #   add_row(rel_species = "Neofelis_genus", direction = "bottom-up")
+  # 
+  # ## Set factor level to match other graphs 
+  # support$rel_species = factor(support$rel_species, levels = c("Neofelis_genus","Cuon_alpinus", 
+  #                                                              "Panthera_pardus","Panthera_tigris",
+  #                                                              "All_large_carnivores"))
+  # ridge_points$rel_species = factor(ridge_points$rel_species, levels = c("Neofelis_genus","Cuon_alpinus", 
+  #                                                                        "Panthera_pardus","Panthera_tigris",
+  #                                                                        "All_large_carnivores"))
+  # 
+  # #### Make the scaled plot
+  # p =
+  #   ggplot(support, aes(x = mean, y = rel_species, fill = direction, height = after_stat(density))) +
+  #   geom_density_ridges(stat = "density", scale=.9, alpha = .8,  point_alpha=.5)+
+  #   geom_vline(aes(xintercept = 0), color = "black") +
+  #   geom_point(data = ridge_points, aes(x = mean, y = rel_species, color = direction),
+  #              size = 5, shape = "circle", alpha = .8, position = position_nudge(y = 0.08), inherit.aes = F)+
+  #   theme_ridges() +
+  #   scale_fill_manual(values = dir_colors) +
+  #   scale_color_manual(values = dir_colors) +
+  #   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL,
+  #        title = "All species with support")
+  # ## this looks like poo! Save it anyway 
+  # # ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_SUPPORTED_scaled_species_interaction_both_directions_all_species_",date, ".png", sep = ""),
+  # #        p, width = 10, height = 8, units = "in")
+  # 
+  # 
+  # ## make again w.out the scaling effect
+  # p =
+  #   ggplot(support, aes(x = mean, y = rel_species, fill = direction)) +
+  #   geom_density_ridges(scale=.6, alpha = .8, jittered_points = TRUE, point_alpha=.5)+
+  #   geom_point(data = ridge_points, aes(x = mean, y = rel_species, color = direction),
+  #              size = 5, shape = "circle", alpha = .8, position = position_nudge(y = .08), inherit.aes = F)+
+  #   geom_vline(aes(xintercept = 0), color = "black") +
+  #   theme_ridges() +
+  #   # coord_cartesian(xlim = c(min,max))+ # to remove all large carn fluff
+  #   scale_fill_manual(values = dir_colors) +
+  #   scale_color_manual(values = dir_colors) +
+  #   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL,
+  #        title = "All species with support")
+  # ## looks way better
+  # # ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_SUPPORTED_non-scaled_species_interaction_both_directions_all_species_",date, ".png", sep = ""),
+  # #        p, width = 10, height = 8, units = "in")
+}
 
-#### Make the scaled plot
-p =
-ggplot(support, aes(x = mean, y = rel_species, fill = direction, height = after_stat(density))) +
-  geom_density_ridges(stat = "density", scale=.9, alpha = .8,  point_alpha=.5)+
-  geom_vline(aes(xintercept = 0), color = "black") +
-  geom_point(data = ridge_points, aes(x = mean, y = rel_species, color = direction),
-             size = 5, shape = "circle", alpha = .8, position = position_nudge(y = 0.08), inherit.aes = F)+
-  theme_ridges() +
-  scale_fill_manual(values = dir_colors) +
-  scale_color_manual(values = dir_colors) +
-  labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL,
-       title = "All species with support")
-## this looks like poo! Save it anyway 
-# ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_SUPPORTED_scaled_species_interaction_both_directions_all_species_",date, ".png", sep = ""),
-#        p, width = 10, height = 8, units = "in")
+## frequency plot version --> make one for each species 
+plot_list = list()
+order = c("All_large_carnivores","Panthera_tigris","Panthera_pardus", 
+          "Cuon_alpinus", "Neofelis_genus")
+# grab min and max vals 
+min_val = min(support$mean)
+max_val = max(support$mean)
+for(i in 1:length(order)){
+  
+  # subset the data
+  d = support[support$rel_species == order[i], ]
+  
+  # make the plot 
+  p = ggplot(d, aes(x = mean, fill = direction))+
+    geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .08, alpha = 1)+#, position = "dodge")+
+    # theme_minimal()+
+    # theme_test()+
+    theme_classic()+
+    geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+    scale_fill_manual(values = dir_colors) +
+    coord_cartesian(xlim = c(min_val, max_val))+
+    labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])
+  
+  # save it! 
+  plot_list[[i]] = p
+  
+}
+rm(d,p,i, min_val, max_val)
+
+## arrange them vertically 
+p = plot_grid(plotlist = plot_list, align = "v", 
+              ncol = 1, nrow = length(plot_list)) # will get warning b/c clouded leopard has no data --> fix in ppt
+# and save it! 
+# ggsave(paste("figures/Grouped Histograms/Histogram_SUPPORTED_species_interaction_all_models_",date, ".png", sep = ""),
+#                p, width = 8, height = 10, units = "in")
 
 
-## make again w.out the scaling effect
-p =
-  ggplot(support, aes(x = mean, y = rel_species, fill = direction)) +
-  geom_density_ridges(scale=.6, alpha = .8, jittered_points = TRUE, point_alpha=.5)+
-  geom_point(data = ridge_points, aes(x = mean, y = rel_species, color = direction),
-             size = 5, shape = "circle", alpha = .8, position = position_nudge(y = .08), inherit.aes = F)+
-  geom_vline(aes(xintercept = 0), color = "black") +
-  theme_ridges() +
-  # coord_cartesian(xlim = c(min,max))+ # to remove all large carn fluff
-  scale_fill_manual(values = dir_colors) +
-  scale_color_manual(values = dir_colors) +
-  labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL,
-       title = "All species with support")
-## looks way better
-# ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_SUPPORTED_non-scaled_species_interaction_both_directions_all_species_",date, ".png", sep = ""),
-#        p, width = 10, height = 8, units = "in")
-
-
-### now thin this down to only examine preferred prey species 
-# support_pref = support # direct copy first
+ ### now thin this down to only examine preferred prey species 
 
 ## leopards can get a tiger preference, which was omitted in step 1 --> notes added there
 guilds$tiger_pref[guilds$scientificNameStd == "Panthera_pardus"] = "Yes"
@@ -1521,7 +1692,7 @@ c = support[support$dom_sp %in% guilds$scientificNameStd[guilds$CL_pref == "Yes"
               support$sub_sp %in% guilds$scientificNameStd[guilds$CL_pref == "Yes"], ]
 c = c[c$rel_species == "Neofelis_genus", ]
 # c is nothing, so add a NA observation so it will plot
-c[1, c("rel_species", "direction") ] = c("Neofelis_genus", "bottom-up")
+# c[1, c("rel_species", "direction") ] = c("Neofelis_genus", "bottom-up")
 
 ## subset for dhole preferences
 d = support[support$dom_sp %in% guilds$scientificNameStd[guilds$dhole_pref == "Yes"] |
@@ -1539,74 +1710,113 @@ support_pref = rbind(e,f)
 rm(a,b,c,d,e,f)
 
 
-##### Subset records that wont fit in density estimation (i.e. <= 2 values)
+## ridgeline plot version
+{
+  # ##### Subset records that wont fit in density estimation (i.e. <= 2 values)
+  # 
+  # ## first grab all dom_species and take note of which need subsetting.
+  # small_dat = ddply(support_pref, .(rel_species, direction), summarize,
+  #                   num_levls = length((direction)))
+  # ## then remove all that dont need subsetting
+  # small_dat = small_dat[small_dat$num_levls <= 2,] # for the non-scaled plot
+  # # small_dat = small_dat[small_dat$num_levls <= 1,] # for the scaled plot
+  # 
+  # 
+  # ## merge small_dat and ridge_dat based on common columns dom_sp and neg_vs_pos2 to ensure no repeats are added
+  # ridge_points <- merge(support_pref[support_pref$rel_species %in% small_dat$rel_species,], small_dat, by = c("rel_species", "direction"))
+  # 
+  # ## verify we have the proper number of records
+  # nrow(ridge_points) == sum(small_dat$num_levls) ## MUST BE TRUE
+  # rm(small_dat)
+  # 
+  # ## fix a tricky typo for double large-carn interaction in both dataframes! 
+  # ridge_points$direction[ridge_points$Species_Pair == "SUB-Panthera_pardus~DOM-Panthera_tigris"] = "top-down"
+  # support_pref$direction[support_pref$Species_Pair == "SUB-Panthera_pardus~DOM-Panthera_tigris"] = "top-down"
+  # 
+  # ### need to add an empty row for clouded leopard
+  # ridge_points = ridge_points %>%
+  #   add_row(rel_species = "Neofelis_genus", direction = "bottom-up")
+  # # support_pref = support_pref %>%
+  # #   add_row(rel_species = "Neofelis_genus", direction = "bottom-up")
+  # 
+  # ## Set factor level to match other graphs 
+  # support_pref$rel_species = factor(support_pref$rel_species, levels = c("Neofelis_genus","Cuon_alpinus", 
+  #                                                                        "Panthera_pardus","Panthera_tigris",
+  #                                                                        "All_large_carnivores"))
+  # ridge_points$rel_species = factor(ridge_points$rel_species, levels = c("Neofelis_genus","Cuon_alpinus", 
+  #                                                                        "Panthera_pardus","Panthera_tigris",
+  #                                                                        "All_large_carnivores"))
+  # 
+  # #### Make the scaled plot
+  # p =
+  #   ggplot(support_pref, aes(x = mean, y = rel_species, fill = direction, height = after_stat(density))) +
+  #   geom_density_ridges(stat = "density", scale=.9, alpha = .8,  point_alpha=.5)+
+  #   geom_vline(aes(xintercept = 0), color = "black") +
+  #   geom_point(data = ridge_points, aes(x = mean, y = rel_species, color = direction),
+  #              size = 5, shape = "circle", alpha = .8, position = position_nudge(y = 0.08), inherit.aes = F)+
+  #   theme_ridges() +
+  #   scale_fill_manual(values = dir_colors) +
+  #   scale_color_manual(values = dir_colors) +
+  #   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL,
+  #        title = "Preferred prey with support")
+  # ## this looks like poo! Save it anyway 
+  # # ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_SUPPORTED_scaled_species_interaction_both_directions_preferred_prey_",date, ".png", sep = ""),
+  # #        p, width = 10, height = 8, units = "in")
+  # 
+  # 
+  # ## make again w.out the scaling effect
+  # p =
+  #   ggplot(support_pref, aes(x = mean, y = rel_species, fill = direction)) +
+  #   geom_density_ridges(scale=.6, alpha = .8, jittered_points = TRUE, point_alpha=.5)+
+  #   geom_point(data = ridge_points, aes(x = mean, y = rel_species, color = direction),
+  #              size = 5, shape = "circle", alpha = .8, position = position_nudge(y = .08), inherit.aes = F)+
+  #   geom_vline(aes(xintercept = 0), color = "black") +
+  #   theme_ridges() +
+  #   # coord_cartesian(xlim = c(min,max))+ # to remove all large carn fluff
+  #   scale_fill_manual(values = dir_colors) +
+  #   scale_color_manual(values = dir_colors) +
+  #   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL,
+  #        title = "Preferred prey with support")
+  # ## looks way better --> but suuuper small sample size might dictate a new data vis method... 
+  # # ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_SUPPORTED_non-scaled_species_interaction_both_directions_preferred_prey_",date, ".png", sep = ""),
+  # #        p, width = 10, height = 8, units = "in") 
+}
 
-## first grab all dom_species and take note of which need subsetting.
-small_dat = ddply(support_pref, .(rel_species, direction), summarize,
-                  num_levls = length((direction)))
-## then remove all that dont need subsetting
-small_dat = small_dat[small_dat$num_levls <= 2,] # for the non-scaled plot
-# small_dat = small_dat[small_dat$num_levls <= 1,] # for the scaled plot
+## Frequency plot verison --> make one for each species 
+plot_list = list()
+order = c("All_large_carnivores","Panthera_tigris","Panthera_pardus", 
+          "Cuon_alpinus", "Neofelis_genus")
+# grab min and max vals 
+min_val = min(support_pref$mean)
+max_val = max(support_pref$mean)
+for(i in 1:length(order)){
+  
+  # subset the data
+  d = support_pref[support_pref$rel_species == order[i], ]
+  
+  # make the plot 
+  p = ggplot(d, aes(x = mean, fill = direction))+
+    geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .08, alpha = 1)+#, position = "dodge")+
+    # theme_minimal()+
+    # theme_test()+
+    theme_classic()+
+    geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+    scale_fill_manual(values = dir_colors) +
+    coord_cartesian(xlim = c(min_val, max_val))+
+    labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])
+  
+  # save it! 
+  plot_list[[i]] = p
+  
+}
+rm(d,p,i, min_val, max_val)
 
-
-## merge small_dat and ridge_dat based on common columns dom_sp and neg_vs_pos2 to ensure no repeats are added
-ridge_points <- merge(support_pref[support_pref$rel_species %in% small_dat$rel_species,], small_dat, by = c("rel_species", "direction"))
-
-## verify we have the proper number of records
-nrow(ridge_points) == sum(small_dat$num_levls) ## MUST BE TRUE
-rm(small_dat)
-
-## fix a tricky typo for double large-carn interaction in both dataframes! 
-ridge_points$direction[ridge_points$Species_Pair == "SUB-Panthera_pardus~DOM-Panthera_tigris"] = "top-down"
-support_pref$direction[support_pref$Species_Pair == "SUB-Panthera_pardus~DOM-Panthera_tigris"] = "top-down"
-
-### need to add an empty row for clouded leopard
-ridge_points = ridge_points %>%
-  add_row(rel_species = "Neofelis_genus", direction = "bottom-up")
-# support_pref = support_pref %>%
-#   add_row(rel_species = "Neofelis_genus", direction = "bottom-up")
-
-## Set factor level to match other graphs 
-support_pref$rel_species = factor(support_pref$rel_species, levels = c("Neofelis_genus","Cuon_alpinus", 
-                                                             "Panthera_pardus","Panthera_tigris",
-                                                             "All_large_carnivores"))
-ridge_points$rel_species = factor(ridge_points$rel_species, levels = c("Neofelis_genus","Cuon_alpinus", 
-                                                                       "Panthera_pardus","Panthera_tigris",
-                                                                       "All_large_carnivores"))
-
-#### Make the scaled plot
-p =
-  ggplot(support_pref, aes(x = mean, y = rel_species, fill = direction, height = after_stat(density))) +
-  geom_density_ridges(stat = "density", scale=.9, alpha = .8,  point_alpha=.5)+
-  geom_vline(aes(xintercept = 0), color = "black") +
-  geom_point(data = ridge_points, aes(x = mean, y = rel_species, color = direction),
-             size = 5, shape = "circle", alpha = .8, position = position_nudge(y = 0.08), inherit.aes = F)+
-  theme_ridges() +
-  scale_fill_manual(values = dir_colors) +
-  scale_color_manual(values = dir_colors) +
-  labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL,
-       title = "Preferred prey with support")
-## this looks like poo! Save it anyway 
-# ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_SUPPORTED_scaled_species_interaction_both_directions_preferred_prey_",date, ".png", sep = ""),
-#        p, width = 10, height = 8, units = "in")
-
-
-## make again w.out the scaling effect
-p =
-  ggplot(support_pref, aes(x = mean, y = rel_species, fill = direction)) +
-  geom_density_ridges(scale=.6, alpha = .8, jittered_points = TRUE, point_alpha=.5)+
-  geom_point(data = ridge_points, aes(x = mean, y = rel_species, color = direction),
-             size = 5, shape = "circle", alpha = .8, position = position_nudge(y = .08), inherit.aes = F)+
-  geom_vline(aes(xintercept = 0), color = "black") +
-  theme_ridges() +
-  # coord_cartesian(xlim = c(min,max))+ # to remove all large carn fluff
-  scale_fill_manual(values = dir_colors) +
-  scale_color_manual(values = dir_colors) +
-  labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL,
-       title = "Preferred prey with support")
-## looks way better --> but suuuper small sample size might dictate a new data vis method... 
-# ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_SUPPORTED_non-scaled_species_interaction_both_directions_preferred_prey_",date, ".png", sep = ""),
-#        p, width = 10, height = 8, units = "in")
+## arrange them vertically 
+p = plot_grid(plotlist = plot_list, align = "v", 
+              ncol = 1, nrow = length(plot_list)) # This is shiiiit! Will look better w/ unsupported data 
+# and save it! 
+# ggsave(paste("figures/Grouped Histograms/Histogram_SUPPORTED_species_interaction_preferred_prey_",date, ".png", sep = ""),
+#                p, width = 8, height = 10, units = "in")
 
 
 ### determine percentages in each category
@@ -1687,83 +1897,127 @@ bu_ridge_dat$direction = "bottom-up"
 ridge_dat = rbind(td_ridge_dat, bu_ridge_dat)
 rm(td_ridge_dat, bu_ridge_dat)
 
-## do it manually b/c order is silly on graph
-ridge_dat$rel_species = factor(ridge_dat$rel_species, levels = c("Neofelis_genus","Cuon_alpinus", 
-                                                                 "Panthera_pardus","Panthera_tigris",
-                                                                 "All_large_carnivores"))
-
 ### edit direction to allow for unsupported mods
 ridge_dat$direction[grepl("Unsupported", ridge_dat$support)] = "Unsupported"
 table(ridge_dat$direction)
+# make direction lowercase to be consistent
+ridge_dat$direction[ridge_dat$direction == "Unsupported"] = "unsupported"
 
-##### Subset records that wont fit in density estimation (i.e. <= 2 values)
-
-## first grab all dom_species and take note of which need subsetting.
-small_dat = ddply(ridge_dat, .(rel_species, direction), summarize,
-                  num_levls = length((direction)))
-## then remove all that dont need subsetting
-small_dat = small_dat[small_dat$num_levls <= 2,] # for the non-scaled plot
-# small_dat = small_dat[small_dat$num_levls <= 1,] # for the scaled plot
-
-
-## merge small_dat and ridge_dat based on common columns dom_sp and neg_vs_pos2 to ensure no repeats are added
-ridge_points <- merge(ridge_dat[ridge_dat$rel_species %in% small_dat$rel_species,], small_dat, by = c("rel_species", "direction"))
-
-## verify we have the proper number of records
-nrow(ridge_points) == sum(small_dat$num_levls) ## MUST BE TRUE
-rm(small_dat)
-
-nrow(ridge_points) # two!
-
+### set up the colors 
+new_colors = c("unsupported" = "grey48",
+               "top-down" = "orange3",
+               "bottom-up" = "olivedrab3")
 
 ## remove NA values from ridge_dat --> from non-completed mods
 ridge_dat = ridge_dat[! is.na(ridge_dat$Interaction_Estimate), ]
 
 ## for plotting sake, remove anything < -3
-ridge_dat2 = ridge_dat[ridge_dat$Interaction_Estimate > -3,]
+ridge_dat = ridge_dat[ridge_dat$Interaction_Estimate > -3,]
+
+## ridgeline plot verision
+{
+  # ## do it manually b/c order is silly on graph
+  # ridge_dat$rel_species = factor(ridge_dat$rel_species, levels = c("Neofelis_genus","Cuon_alpinus", 
+  #                                                                  "Panthera_pardus","Panthera_tigris",
+  #                                                                  "All_large_carnivores"))
+  # 
+  # ##### Subset records that wont fit in density estimation (i.e. <= 2 values)
+  # 
+  # ## first grab all dom_species and take note of which need subsetting.
+  # small_dat = ddply(ridge_dat, .(rel_species, direction), summarize,
+  #                   num_levls = length((direction)))
+  # ## then remove all that dont need subsetting
+  # small_dat = small_dat[small_dat$num_levls <= 2,] # for the non-scaled plot
+  # # small_dat = small_dat[small_dat$num_levls <= 1,] # for the scaled plot
+  # 
+  # 
+  # ## merge small_dat and ridge_dat based on common columns dom_sp and neg_vs_pos2 to ensure no repeats are added
+  # ridge_points <- merge(ridge_dat[ridge_dat$rel_species %in% small_dat$rel_species,], small_dat, by = c("rel_species", "direction"))
+  # 
+  # ## verify we have the proper number of records
+  # nrow(ridge_points) == sum(small_dat$num_levls) ## MUST BE TRUE
+  # rm(small_dat)
+  # 
+  # nrow(ridge_points) # two!
+  # 
+  # 
+  # 
+  # 
+  # 
+  # ## set factors so unsupported is in the back 
+  # ridge_dat2$direction = factor(ridge_dat2$direction, levels = c("Unsupported", "top-down", "bottom-up"  ))
+  # 
+  # 
+  # #### Make the scaled plot
+  # p =
+  #   ggplot(ridge_dat2, aes(x = Interaction_Estimate, y = rel_species, fill = direction, height = stat(density))) +
+  #   geom_density_ridges(stat = "density", scale=.9, alpha = .8, adjust = 2)+
+  #   geom_point(data = ridge_points, aes(x = Interaction_Estimate, y = rel_species, color = direction),
+  #              size = 5, shape = "circle", alpha = .8, position = position_nudge(y = .08), inherit.aes = F)+
+  #   geom_vline(aes(xintercept = 0), color = "black") +
+  #   theme_ridges() +
+  #   scale_fill_manual(values = new_colors) +
+  #   scale_color_manual(values = new_colors) +
+  #   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL,
+  #        title = "All models")
+  # ## this looks like poo! Save it anyway 
+  # # ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_scaled_species_interaction_both_directions_and_unsupported_all_mods_",date, ".png", sep = ""),
+  # #        p, width = 10, height = 8, units = "in")
+  # 
+  # 
+  # ## make again w.out the scaling effect
+  # p =
+  #   ggplot(ridge_dat2, aes(x = Interaction_Estimate, y = rel_species, fill = direction)) +
+  #   geom_density_ridges(scale=.8, alpha = .8, jittered_points = TRUE, point_alpha=.3)+
+  #   geom_point(data = ridge_points, aes(x = Interaction_Estimate, y = rel_species, color = direction),
+  #              size = 5, shape = "circle", alpha = .9, position = position_nudge(y = .08), inherit.aes = F)+
+  #   geom_vline(aes(xintercept = 0), color = "black") +
+  #   theme_ridges() +
+  #   scale_fill_manual(values = new_colors) +
+  #   scale_color_manual(values = new_colors) +
+  #   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL,
+  #        title = "all mods")
+  # ## looks way better --> 
+  # # ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_NON-scaled_species_interaction_both_directions_and_unsupported_all_mods_",date, ".png", sep = ""),
+  # #        p, width = 10, height = 8, units = "in")
+}
 
 
-### set up the colors 
-new_colors = c("Unsupported" = "grey48",
-               "top-down" = "orange3",
-               "bottom-up" = "olivedrab3")
+## Frequency plot version
+plot_list = list()
+order = c("All_large_carnivores","Panthera_tigris","Panthera_pardus", 
+          "Cuon_alpinus", "Neofelis_genus")
+# grab min and max vals 
+min_val = min(ridge_dat$Interaction_Estimate)
+max_val = max(ridge_dat$Interaction_Estimate)
+for(i in 1:length(order)){
+  
+  # subset the data
+  d = ridge_dat[ridge_dat$rel_species == order[i], ]
+  
+  # make the plot 
+  p = ggplot(d, aes(x = Interaction_Estimate, fill = direction))+
+    geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .08, alpha = 1)+#, position = "dodge")+
+    # theme_minimal()+
+    # theme_test()+
+    theme_classic()+
+    geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+    scale_fill_manual(values = new_colors) +
+    coord_cartesian(xlim = c(min_val, max_val))+
+    labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])
+  
+  # save it! 
+  plot_list[[i]] = p
+  
+}
+rm(d,p,i, min_val, max_val)
 
-## set factors so unsupported is in the back 
-ridge_dat2$direction = factor(ridge_dat2$direction, levels = c("Unsupported", "top-down", "bottom-up"  ))
-
-
-#### Make the scaled plot
-p =
-ggplot(ridge_dat2, aes(x = Interaction_Estimate, y = rel_species, fill = direction, height = stat(density))) +
-  geom_density_ridges(stat = "density", scale=.9, alpha = .8, adjust = 2)+
-  geom_point(data = ridge_points, aes(x = Interaction_Estimate, y = rel_species, color = direction),
-             size = 5, shape = "circle", alpha = .8, position = position_nudge(y = .08), inherit.aes = F)+
-  geom_vline(aes(xintercept = 0), color = "black") +
-  theme_ridges() +
-  scale_fill_manual(values = new_colors) +
-  scale_color_manual(values = new_colors) +
-  labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL,
-       title = "All models")
-## this looks like poo! Save it anyway 
-# ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_scaled_species_interaction_both_directions_and_unsupported_all_mods_",date, ".png", sep = ""),
-#        p, width = 10, height = 8, units = "in")
-
-
-## make again w.out the scaling effect
-p =
-ggplot(ridge_dat2, aes(x = Interaction_Estimate, y = rel_species, fill = direction)) +
-  geom_density_ridges(scale=.8, alpha = .8, jittered_points = TRUE, point_alpha=.3)+
-  geom_point(data = ridge_points, aes(x = Interaction_Estimate, y = rel_species, color = direction),
-             size = 5, shape = "circle", alpha = .9, position = position_nudge(y = .08), inherit.aes = F)+
-  geom_vline(aes(xintercept = 0), color = "black") +
-  theme_ridges() +
-  scale_fill_manual(values = new_colors) +
-  scale_color_manual(values = new_colors) +
-  labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL,
-       title = "all mods")
-## looks way better --> 
-# ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_NON-scaled_species_interaction_both_directions_and_unsupported_all_mods_",date, ".png", sep = ""),
-#        p, width = 10, height = 8, units = "in")
+## arrange them vertically 
+p = plot_grid(plotlist = plot_list, align = "v", 
+              ncol = 1, nrow = length(plot_list)) # This is shiiiit! Will look better w/ unsupported data 
+# and save it! 
+# ggsave(paste("figures/Grouped Histograms/Histogram_both_unsupported_and_supported_species_interaction_all_mods_",date, ".png", sep = ""),
+#                p, width = 8, height = 10, units = "in")
 
 
 ### determine percentages in each category
@@ -1786,7 +2040,7 @@ perc_table$percent = perc_table$num_lvl / perc_table$num_total * 100
 # write.csv(perc_table, paste("results/summarized_results/percetnages_for_histogram_fig_", date, ".csv", sep = ""), row.names = F)
 
 
-rm(ridge_dat2, p, perc_table, a)
+rm(ridge_dat, p, perc_table, a)
 
 #
 ##
@@ -1858,82 +2112,124 @@ bu_ridge_dat$direction = "bottom-up"
 ridge_dat = rbind(td_ridge_dat, bu_ridge_dat)
 rm(td_ridge_dat, bu_ridge_dat)
 
-## do it manually b/c order is silly on graph
-ridge_dat$rel_species = factor(ridge_dat$rel_species, levels = c("Neofelis_genus","Cuon_alpinus", 
-                                                                 "Panthera_pardus","Panthera_tigris",
-                                                                 "All_large_carnivores"))
+## remove NA values from ridge_dat --> from non-completed mods
+ridge_dat = ridge_dat[! is.na(ridge_dat$Interaction_Estimate), ]
+summary(ridge_dat$Interaction_Estimate) # small range
+
 ### edit direction to allow for unsupported mods
 ridge_dat$direction[grepl("Unsupported", ridge_dat$support)] = "Unsupported"
 table(ridge_dat$direction)
-
-##### Subset records that wont fit in density estimation (i.e. <= 2 values)
-
-## first grab all dom_species and take note of which need subsetting.
-small_dat = ddply(ridge_dat, .(rel_species, direction), summarize,
-                  num_levls = length((direction)))
-## then remove all that dont need subsetting
-small_dat = small_dat[small_dat$num_levls <= 2,] # for the non-scaled plot
-# small_dat = small_dat[small_dat$num_levls <= 1,] # for the scaled plot
+# make direction lowercase to be consistent
+ridge_dat$direction[ridge_dat$direction == "Unsupported"] = "unsupported"
 
 
-## merge small_dat and ridge_dat based on common columns dom_sp and neg_vs_pos2 to ensure no repeats are added
-ridge_points <- merge(ridge_dat[ridge_dat$rel_species %in% small_dat$rel_species,], small_dat, by = c("rel_species", "direction"))
+## ridgeline plot version
+{
+  # ## do it manually b/c order is silly on graph
+  # ridge_dat$rel_species = factor(ridge_dat$rel_species, levels = c("Neofelis_genus","Cuon_alpinus", 
+  #                                                                  "Panthera_pardus","Panthera_tigris",
+  #                                                                  "All_large_carnivores"))
+  # ### edit direction to allow for unsupported mods
+  # ridge_dat$direction[grepl("Unsupported", ridge_dat$support)] = "Unsupported"
+  # table(ridge_dat$direction)
+  # 
+  # ##### Subset records that wont fit in density estimation (i.e. <= 2 values)
+  # 
+  # ## first grab all dom_species and take note of which need subsetting.
+  # small_dat = ddply(ridge_dat, .(rel_species, direction), summarize,
+  #                   num_levls = length((direction)))
+  # ## then remove all that dont need subsetting
+  # small_dat = small_dat[small_dat$num_levls <= 2,] # for the non-scaled plot
+  # # small_dat = small_dat[small_dat$num_levls <= 1,] # for the scaled plot
+  # 
+  # 
+  # ## merge small_dat and ridge_dat based on common columns dom_sp and neg_vs_pos2 to ensure no repeats are added
+  # ridge_points <- merge(ridge_dat[ridge_dat$rel_species %in% small_dat$rel_species,], small_dat, by = c("rel_species", "direction"))
+  # 
+  # ## verify we have the proper number of records
+  # nrow(ridge_points) == sum(small_dat$num_levls) ## MUST BE TRUE
+  # rm(small_dat)
+  # 
+  # nrow(ridge_points) # 6!
+  # 
+  # ## inspect values
+  # summary(ridge_dat$Interaction_Estimate) # small range, all good!
+  # 
+  # 
+  # ## set factors so unsupported is in the back 
+  # ridge_dat$direction = factor(ridge_dat$direction, levels = c("Unsupported", "top-down", "bottom-up"  ))
+  # 
+  # 
+  # #### Make the scaled plot
+  # p =
+  #   ggplot(ridge_dat, aes(x = Interaction_Estimate, y = rel_species, fill = direction, height = stat(density))) +
+  #   geom_density_ridges(stat = "density", scale=.9, alpha = .8, adjust = 2)+
+  #   # geom_point(data = ridge_points, aes(x = Interaction_Estimate, y = rel_species, color = direction),
+  #   #            size = 5, shape = "circle", alpha = .8, position = position_nudge(y = .08), inherit.aes = F)+
+  #   geom_vline(aes(xintercept = 0), color = "black") +
+  #   theme_ridges() +
+  #   scale_fill_manual(values = new_colors) +
+  #   # scale_color_manual(values = new_colors) +
+  #   labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL,
+  #        title = "preferred prey")
+  # ## this looks like poo! Save it anyway 
+  # # ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_scaled_species_interaction_both_directions_and_unsupported_preferred_prey_",date, ".png", sep = ""),
+  # #        p, width = 10, height = 8, units = "in")
+  # 
+  # 
+  # ## make again w.out the scaling effect
+  # p =
+  #   ggplot(ridge_dat, aes(x = Interaction_Estimate, y = rel_species, fill = direction)) +
+  #   geom_density_ridges(scale=.8, alpha = .8, jittered_points = TRUE, point_alpha=.3)+
+  #   geom_point(data = ridge_points, aes(x = Interaction_Estimate, y = rel_species, color = direction),
+  #              size = 5, shape = "circle", alpha = .9, position = position_nudge(y = .08), inherit.aes = F)+
+  #   geom_vline(aes(xintercept = 0), color = "black") +
+  #   theme_ridges() +
+  #   scale_fill_manual(values = new_colors) +
+  #   scale_color_manual(values = new_colors) +
+  #   labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL,
+  #        title = "preferred prey")
+  # ## looks way better --> 
+  # # ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_NON-scaled_species_interaction_both_directions_and_unsupported_preferred_prey_",date, ".png", sep = ""),
+  # #        p, width = 10, height = 8, units = "in")
+  # 
+}
 
-## verify we have the proper number of records
-nrow(ridge_points) == sum(small_dat$num_levls) ## MUST BE TRUE
-rm(small_dat)
+## Frequency plot version
+plot_list = list()
+order = c("All_large_carnivores","Panthera_tigris","Panthera_pardus", 
+          "Cuon_alpinus", "Neofelis_genus")
+# grab min and max vals 
+min_val = min(ridge_dat$Interaction_Estimate)
+max_val = max(ridge_dat$Interaction_Estimate)
+for(i in 1:length(order)){
+  
+  # subset the data
+  d = ridge_dat[ridge_dat$rel_species == order[i], ]
+  
+  # make the plot 
+  p = ggplot(d, aes(x = Interaction_Estimate, fill = direction))+
+    geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .08, alpha = 1)+#, position = "dodge")+
+    # theme_minimal()+
+    # theme_test()+
+    theme_classic()+
+    geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+    scale_fill_manual(values = new_colors) +
+    coord_cartesian(xlim = c(min_val, max_val))+
+    labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])
+  
+  # save it! 
+  plot_list[[i]] = p
+  
+}
+rm(d,p,i, min_val, max_val)
 
-nrow(ridge_points) # 6!
-
-## remove NA values from ridge_dat --> from non-completed mods
-ridge_dat = ridge_dat[! is.na(ridge_dat$Interaction_Estimate), ]
-
-## inspect values
-summary(ridge_dat$Interaction_Estimate) # small range, all good!
-
-
-### set up the colors 
-new_colors = c("Unsupported" = "grey48",
-               "top-down" = "orange3",
-               "bottom-up" = "olivedrab3")
-
-## set factors so unsupported is in the back 
-ridge_dat$direction = factor(ridge_dat$direction, levels = c("Unsupported", "top-down", "bottom-up"  ))
-
-
-#### Make the scaled plot
-p =
-  ggplot(ridge_dat, aes(x = Interaction_Estimate, y = rel_species, fill = direction, height = stat(density))) +
-  geom_density_ridges(stat = "density", scale=.9, alpha = .8, adjust = 2)+
-  # geom_point(data = ridge_points, aes(x = Interaction_Estimate, y = rel_species, color = direction),
-  #            size = 5, shape = "circle", alpha = .8, position = position_nudge(y = .08), inherit.aes = F)+
-  geom_vline(aes(xintercept = 0), color = "black") +
-  theme_ridges() +
-  scale_fill_manual(values = new_colors) +
-  # scale_color_manual(values = new_colors) +
-  labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL,
-       title = "preferred prey")
-## this looks like poo! Save it anyway 
-# ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_scaled_species_interaction_both_directions_and_unsupported_preferred_prey_",date, ".png", sep = ""),
-#        p, width = 10, height = 8, units = "in")
-
-
-## make again w.out the scaling effect
-p =
-  ggplot(ridge_dat, aes(x = Interaction_Estimate, y = rel_species, fill = direction)) +
-  geom_density_ridges(scale=.8, alpha = .8, jittered_points = TRUE, point_alpha=.3)+
-  geom_point(data = ridge_points, aes(x = Interaction_Estimate, y = rel_species, color = direction),
-             size = 5, shape = "circle", alpha = .9, position = position_nudge(y = .08), inherit.aes = F)+
-  geom_vline(aes(xintercept = 0), color = "black") +
-  theme_ridges() +
-  scale_fill_manual(values = new_colors) +
-  scale_color_manual(values = new_colors) +
-  labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL,
-       title = "preferred prey")
-## looks way better --> 
-# ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_NON-scaled_species_interaction_both_directions_and_unsupported_preferred_prey_",date, ".png", sep = ""),
-#        p, width = 10, height = 8, units = "in")
-
+## arrange them vertically 
+p = plot_grid(plotlist = plot_list, align = "v", 
+              ncol = 1, nrow = length(plot_list)) # This is shiiiit! Will look better w/ unsupported data 
+# and save it! 
+# ggsave(paste("figures/Grouped Histograms/Histogram_both_unsupported_and_supported_species_interaction_preferred_prey_",date, ".png", sep = ""),
+#                p, width = 8, height = 10, units = "in")
 
 ### determine percentages in each category
 perc_table = ddply(ridge_dat, .(rel_species, direction), summarize,
@@ -1955,8 +2251,11 @@ perc_table$percent = perc_table$num_lvl / perc_table$num_total * 100
 # save it for fig making 
 # write.csv(perc_table, paste("results/summarized_results/percetnages_for_histogram_fig_preferred_prey_", date, ".csv", sep = ""), row.names = F)
 
-
-rm(ridge_dat2, p, perc_table, a, ridge_dat)
+## Clean up enviro after finishing plots! 
+rm(ridge_dat2, p, perc_table, a, ridge_dat,
+   dir_colors, hyp_colors, new_colors, order, date, 
+   support_pref, support, p, perc_table, perc_pref_table, 
+   plot_list)
 
 # 
 # 

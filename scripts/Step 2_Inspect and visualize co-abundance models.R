@@ -366,6 +366,7 @@ setdiff(all_combos, ppc_plotdat$Species_Pair) #89 missing models, same as above
 
 #### UPDATE--> In order to save ram and files, I have stopped generating these. 
 #### When presenting final results, I can re-make these on the HPC later. 
+### We will only want to generate very specific plots anyway, no need for all. 
 
 ## I forgot to delete old data in predictions results folder on HPC
 ## and now all middle/long results are mingling with the new short ones
@@ -725,6 +726,18 @@ table(preform$support_liberal[!is.na(preform$Interaction_Estimate)]);anyNA(prefo
 preform[preform$support_liberal == "Supported", ] # mostly bottom up! Also lots of random species pairings here... 
 
 
+### This is a super useful dataframe, will need to share this in the supplmentary tables section
+## save it! 
+# grab the date
+day<-str_sub(Sys.Date(),-2)
+month<-str_sub(Sys.Date(),-5,-4)
+year<-str_sub(Sys.Date(),-10,-7)
+date = paste(year,month,day, sep = "")
+rm(year,month,day)
+
+# write.csv(preform, paste("results/summarized_results/model_performance_and_SIVs_", date, ".csv", sep =""))
+
+
 ######### Visualize coefficient effect sizes ###### 
 
 #### ONLY RUN THRU THIS ONCE ALL MODELS ARE COMPLETED! 
@@ -774,8 +787,10 @@ for(i in 1:length(unique(coeff$Species_Pair))){
   dat = coeff[coeff$Species_Pair == unique(coeff$Species_Pair)[i],]
   
   ## subset for relevant variables 
-  dat = dat[dat$var %in% c("Abundance_intercept","FLII","HFP","Elevation","Hunting",
-                           "Species_Interaction","Detection_intercept","Active_cams"),]
+  # dat = dat[dat$var %in% c("Abundance_intercept","FLII","HFP","Elevation","Hunting",
+  #                          "Species_Interaction","Detection_intercept","Active_cams"),]
+  dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
+                           "Species_Interaction","Active_cams"),] # removing intercepts b/c they skew graphs
   
   ## replace _ with space for vars for clean x-vars
   dat$var = gsub("_", " ", dat$var)
@@ -785,14 +800,16 @@ for(i in 1:length(unique(coeff$Species_Pair))){
   
   ## order the factor levels for each variable
   dat$var = factor(dat$var, levels = c("Species Interaction","FLII","HFP", "Hunting", # state vars
-                                       "Elevation", "Abundance intercept", # more state vars
-                                       "Detection intercept","Effort")) # then det vars. 
+                                       "Elevation", # more state vars
+                                       "Effort")) # then det vars. 
   
   # Add a column for significance marker
   dat$marker <- ifelse(dat$sig == "Significant", "*", "")
   
   # Find the position of "Abundance intercept" on the x-axis to add the dashed line. 
-  split_position <- which(levels(dat$var) == "Abundance intercept")
+  # split_position <- which(levels(dat$var) == "Abundance intercept")
+  split_position <- which(levels(dat$var) == "Elevation")
+  
   
   # specify the distance were spacing error bars and stars
   dodge_width = 0.8
@@ -801,9 +818,9 @@ for(i in 1:length(unique(coeff$Species_Pair))){
   dat$prefix <- sub("^(SUB|DOM).*", "\\1", dat$species)
   
   # specify the colors for dominant and subordinate species based on prefix 
-  dat$color[dat$prefix == "SUB"] = "mediumslateblue"
-  dat$color[dat$prefix == "DOM"] = "mediumseagreen"
-  
+  dat$color[dat$prefix == "SUB"] = "wheat3"
+  dat$color[dat$prefix == "DOM"] = "tan3"
+
   # Clean up species name for clarity 
   dat$species_name = sub("^(SUB|DOM)-", "", dat$species)
   
@@ -1077,14 +1094,17 @@ rm(sp_pair_coeff_plots)
 # rm(p, dat, date)
 
 
-######### Visualize SIV via ridgeline or frequency plots ######
+######### Visualize SIV via frequency plots ######
 
 ### these plots are good for examining relationships at the species-level
 
-# first we need to add guild pairs to coeff
-add = distinct(select(preform, Species_Pair, guild_pair))
-coeff = merge(coeff, add, by = "Species_Pair")
-rm(add)
+# # first we need to add guild pairs to coeff
+# add = distinct(select(preform, Species_Pair, guild_pair))
+# coeff = merge(coeff, add, by = "Species_Pair")
+# rm(add)
+
+### not needed anymore b/c were using the preform dataset for these graphs
+## same stuff anyway. 
 
 
 ### Prepare the data for plotting-
@@ -1123,8 +1143,8 @@ plot_dat = rbind(td_plot_dat, bu_plot_dat)
 rm(td_plot_dat, bu_plot_dat)
 
 ## do it manually b/c order is silly on graph
-plot_dat$rel_species = factor(plot_dat$rel_species, levels = c("Neofelis_genus","Cuon_alpinus", 
-                                                                 "Panthera_pardus","Panthera_tigris",
+plot_dat$rel_species = factor(plot_dat$rel_species, levels = c("Neofelis_genus","Cuon_alpinus",
+                                                               "Panthera_pardus","Panthera_tigris",
                                                                  "All_large_carnivores"))
 
 ## create a new column for simple groupings: top-down, bottom-up and unsupported
@@ -1144,10 +1164,12 @@ table(plot_dat$support_simple_liberal)
 plot_dat = plot_dat[! is.na(plot_dat$Interaction_Estimate), ]
 
 ## Check if there are extreme species interaction values (> |3|)
-summary(plot_dat$Interaction_Estimate) # all good! -2 to 2. 
+summary(plot_dat$Interaction_Estimate) 
+## Problematic species pair: SUB-Panthera_pardus~DOM-Paradoxurus_hermaphroditus
+## good model fit, but unsupported_1 (SIV in wrong direction). Remove for plotting
 
 ## for plotting sake, remove anything < -3
-# plot_dat2 = plot_dat[plot_dat$Interaction_Estimate > -3,]
+plot_dat = plot_dat[plot_dat$Interaction_Estimate > -3,]
 
 
 ### set up the colors 
@@ -1167,7 +1189,7 @@ plot_dat$support_simple_liberal[plot_dat$Species_Pair == "SUB-Neofelis_genus~DOM
 ##
 ###
 ####
-#####
+####
 ###### Explore the different kinds of plots that can be generated, using all large carn as the example
 {
   ## first grab today's date for saving plots
@@ -2048,9 +2070,8 @@ plot_dat$support_liberal[plot_dat$support_liberal == "Supported" & plot_dat$dire
 
 ## make letters all lowercase
 plot_dat$support= tolower(plot_dat$support)
-plot_dat$support_liberal = tolower(plot_dat$support_liberal, levels = c("top-down", "bottom-up", 
-                                                                        "unsupported_1", "unsupported_2",
-                                                                        "unsupported_3"))
+plot_dat$support_liberal = tolower(plot_dat$support_liberal)
+
 ## and set factor level 
 plot_dat$support = factor(plot_dat$support, levels = c("top-down", "bottom-up", 
                                                        "unsupported_1", "unsupported_2",
@@ -2127,7 +2148,7 @@ p = plot_grid(plotlist = plot_list_lib, align = "v",
               ncol = 1, nrow = length(plot_list_lib)) #
 # and save it! 
 # ggsave(paste("figures/Grouped Histograms/Histogram_multi_unsupported_and_supported_LIBERAL_species_interaction_all_mods_HALF_LONG_",date, ".png", sep = ""),
-#                p, width = 8, height = 10, units = "in")
+               # p, width = 8, height = 10, units = "in")
 
 ### MAKE CUSTOM SIZED PLOTS
 {
@@ -2145,7 +2166,7 @@ p = plot_grid(plotlist = plot_list_lib, align = "v",
           text = element_text(family = "Helvetica"))
   ## save it! 
   # ggsave(paste("figures/Grouped Histograms/custom_size_histo/Histogram_all_large_carnivores_multi_unsupported_and_supported_species_interaction_all_mods_HALF_LONG_",date, ".png", sep = ""),
-  #        p, width = 8, height = 4, units = "in") 
+  #        p, width = 10, height = 4, units = "in")
   
   ## and same with liberal!! 
   p = ggplot(plot_dat[plot_dat$rel_species == "All_large_carnivores",], aes(x = Interaction_Estimate, fill = support_liberal))+
@@ -2160,7 +2181,7 @@ p = plot_grid(plotlist = plot_list_lib, align = "v",
           text = element_text(family = "Helvetica"))
   ## save it! 
   # ggsave(paste("figures/Grouped Histograms/custom_size_histo/Histogram_all_large_carnivores_LIBERAL_multi_unsupported_and_supported_species_interaction_all_mods_HALF_LONG_",date, ".png", sep = ""),
-  #        p, width = 8, height = 4, units = "in")
+  #        p, width = 10, height = 4, units = "in")
 
   for(i in 1:length(unique(plot_dat$rel_species))){
     
@@ -2183,7 +2204,7 @@ p = plot_grid(plotlist = plot_list_lib, align = "v",
 
     # and save it!
     # ggsave(paste("figures/Grouped Histograms/custom_size_histo/Histogram_", r, "_multi_unsupported_and_supported_species_interaction_all_mods_HALF_LONG_",date, ".png", sep = ""),
-    #               p, width = 5, height = 3, units = "in")
+    #               p, width = 5, height = 2, units = "in")
     
     ## Repeat for the libs! 
     p = ggplot(plot_dat[plot_dat$rel_species == r,], aes(x = Interaction_Estimate, fill = support_liberal))+
@@ -2200,7 +2221,7 @@ p = plot_grid(plotlist = plot_list_lib, align = "v",
     
     # and save it!
     # ggsave(paste("figures/Grouped Histograms/custom_size_histo/Histogram_", r, "_LIBERAL_multi_unsupported_and_supported_species_interaction_all_mods_HALF_LONG_",date, ".png", sep = ""),
-    #        p, width = 5, height = 3, units = "in")
+    #        p, width = 5, height = 2, units = "in")
     
   }
   # clean it up
@@ -2245,7 +2266,35 @@ perc_table$num_total[perc_table$rel_species == "All_large_carnivores"] =
 # finally calulate the percent-
 perc_table$percent = perc_table$num_lvl / perc_table$num_total * 100
 # save it for fig making 
-write.csv(perc_table, paste("results/summarized_results/percentages_for_all_level_LIBERAL_histogram_fig_", date, ".csv", sep = ""), row.names = F)
+# write.csv(perc_table, paste("results/summarized_results/percentages_for_all_level_LIBERAL_histogram_fig_", date, ".csv", sep = ""), row.names = F)
+
+#### For the conceptual figure, make a plot that has all large carnivores w/ all mods w/ unsupported grouped together @ liberal settings
+# make a new col 
+plot_dat$support2 = as.character(plot_dat$support_liberal)
+plot_dat$support2[grepl("unsupported", plot_dat$support2)] = "unsupported"
+table(plot_dat$support2)
+# set factor levels
+plot_dat$support2 = factor(plot_dat$support2, levels = c("top-down", "bottom-up", 
+                                                         "unsupported"))
+
+## make the graph, omititng the one very negative value 
+p = 
+  ggplot(plot_dat[plot_dat$rel_species == "All_large_carnivores" &
+                    plot_dat$Interaction_Estimate > -2,], aes(x = Interaction_Estimate, fill = support2))+
+  geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1, alpha = 1)+#, position = "dodge")+
+  theme_classic()+
+  geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+  scale_fill_manual(values = new_colors) +
+  labs(x = "Species Interaction Value", y = "Count", color = NULL, title = paste("all_large_carnivores all prey liberal"))+
+  guides(fill = "none") + 
+  theme(axis.text.x = element_text(size = 16),
+        axis.text.y = element_text(size = 16),
+        axis.text = element_text(color = "black"),
+        text = element_text(family = "Helvetica"))
+## save it! 
+# ggsave(paste("figures/Grouped Histograms/Histogram_all_large_carnivores_LIBERAL_single_unsupported_and_supported_all_mods_", date, ".png", sep = ""), p,
+#        width = 12, height = 4, units = "in")
+
 
 
 ## keep it clean! 
@@ -2412,7 +2461,7 @@ p = plot_grid(plotlist = plot_list_lib, align = "v",
           text = element_text(family = "Helvetica"))
   ## save it! 
   # ggsave(paste("figures/Grouped Histograms/custom_size_histo/Histogram_all_large_carnivores_multi_unsupported_and_supported_species_interaction_preferred_prey_HALF_LONG_",date, ".png", sep = ""),
-  #        p, width = 8, height = 4, units = "in")
+  #        p, width = 10, height = 4, units = "in")
   
   ## and same with liberal!! 
   p = ggplot(pref_dat[pref_dat$rel_species == "All_large_carnivores",], aes(x = Interaction_Estimate, fill = support_liberal))+
@@ -2427,7 +2476,7 @@ p = plot_grid(plotlist = plot_list_lib, align = "v",
           text = element_text(family = "Helvetica"))
   ## save it! 
   # ggsave(paste("figures/Grouped Histograms/custom_size_histo/Histogram_all_large_carnivores_LIBERAL_multi_unsupported_and_supported_species_interaction_preferred_prey_HALF_LONG_",date, ".png", sep = ""),
-  #        p, width = 8, height = 4, units = "in")
+  #        p, width = 10, height = 4, units = "in")
   
   for(i in 1:length(unique(pref_dat$rel_species))){
     
@@ -2450,8 +2499,8 @@ p = plot_grid(plotlist = plot_list_lib, align = "v",
     
     # and save it!
     # ggsave(paste("figures/Grouped Histograms/custom_size_histo/Histogram_", r, "_multi_unsupported_and_supported_species_interaction_preferred_prey_HALF_LONG_",date, ".png", sep = ""),
-    #               p, width = 5, height = 3, units = "in")
-    
+    #               p, width = 5, height = 2, units = "in")
+     
     ## Repeat for the libs! 
     p = ggplot(pref_dat[pref_dat$rel_species == r,], aes(x = Interaction_Estimate, fill = support_liberal))+
       geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1, alpha = 1)+#, position = "dodge")+
@@ -2467,11 +2516,11 @@ p = plot_grid(plotlist = plot_list_lib, align = "v",
     
     # and save it!
     # ggsave(paste("figures/Grouped Histograms/custom_size_histo/Histogram_", r, "_LIBERAL_multi_unsupported_and_supported_species_interaction_preferred_prey_HALF_LONG_",date, ".png", sep = ""),
-    #        p, width = 5, height = 3, units = "in")
+    #        p, width = 5, height = 2, units = "in")
     
   }
   # clean it up
-  rm(i,m,p)
+  rm(i,p)
   
 }
 
@@ -2517,695 +2566,39 @@ perc_table$percent = perc_table$num_lvl / perc_table$num_total * 100
 # write.csv(perc_table, paste("results/summarized_results/percentages_for_LIBERAL_histogram_fig_preferred_prey_", date, ".csv", sep = ""), row.names = F)
 
 
+#### For the conceptual figure, make a plot that has all large carnivores w/ preferred prey w/ unsupported grouped together @ liberal settings
+# make a new col 
+pref_dat$support2 = as.character(pref_dat$support_liberal)
+pref_dat$support2[grepl("unsupported", pref_dat$support2)] = "unsupported"
+table(pref_dat$support2)
+# set factor levels
+pref_dat$support2 = factor(pref_dat$support2, levels = c("top-down", "bottom-up", 
+                                                         "unsupported"))
+
+## make the graph
+p = 
+ggplot(pref_dat[pref_dat$rel_species == "All_large_carnivores",], aes(x = Interaction_Estimate, fill = support2))+
+  geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1, alpha = 1)+#, position = "dodge")+
+  theme_classic()+
+  geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+  scale_fill_manual(values = new_colors) +
+  labs(x = "Species Interaction Value", y = "Count", color = NULL, title = paste("all_large_carnivores preferred prey liberal"))+
+  guides(fill = "none") + 
+  theme(axis.text.x = element_text(size = 16),
+        axis.text.y = element_text(size = 16),
+        axis.text = element_text(color = "black"),
+        text = element_text(family = "Helvetica"))
+
+# ggsave(paste("figures/Grouped Histograms/Histogram_all_large_carnivores_LIBERAL_single_unsupported_and_supported_preferred_prey_", date, ".png", sep = ""), p,
+#        width = 12, height = 4, units = "in")
+
+
+
 
 ## Clean up enviro after finishing plots! 
-rm(p, perc_table, plot_dat, unsup_colors, r, bu_dat, td_dat, 
+rm(p, perc_table, plot_dat, unsup_colors, r, bu_dat, td_dat, min_val_lib, max_val_lib,
    pref_dat,new_colors, order, date, plot_list, plot_list_lib)
 
-# 
-# 
-# 
-# #
-# ## OLD CODE BELOW, probably can delete this, its repetative from above here. 
-# ###
-# #### Remake this graph, but ONLY w/ preferred prey species
-# dat = coeff[coeff$var == "Species_Interaction",]
-# # First, gather and combine relevant data 
-# a = dat[dat$dom_sp == "Neofelis_genus" & 
-#           dat$sub_sp %in% guilds$scientificNameStd[guilds$CL_pref == "Yes"],]
-# b = dat[dat$dom_sp == "Panthera_tigris" & 
-#           dat$sub_sp %in% guilds$scientificNameStd[guilds$tiger_pref == "Yes"],]
-# c = dat[dat$dom_sp == "Panthera_pardus" & 
-#           dat$sub_sp %in% guilds$scientificNameStd[guilds$leopard_pref == "Yes"],]
-# d = dat[dat$dom_sp == "Cuon_alpinus" & 
-#           dat$sub_sp %in% guilds$scientificNameStd[guilds$dhole_pref == "Yes"],]
-# ## also adding all large carnivores w/ preferred prey
-# e = rbind(a,b,c,d)
-# e$dom_sp = "All_large_carnivores"
-# 
-# ## combine
-# ridge_dat = rbind(a,b,c,d,e)
-# rm(a,b,c,d,e)
-# 
-# ## set factor levels
-# ridge_dat$dom_sp = factor(ridge_dat$dom_sp, levels = c("Neofelis_genus","Cuon_alpinus",
-#                                                        "Panthera_pardus","Panthera_tigris",
-#                                                        "All_large_carnivores"))
-# unique(ridge_dat$dom_sp) # good, want 5 spots
-# 
-# ## try to group into two levels to reduce few data points
-# ridge_dat$hyp_support = "Unsupported"
-# ridge_dat$hyp_support[ridge_dat$mean < 0 & ridge_dat$sig == "Significant"] = "Supported"
-# 
-# ## make sure supported comes first! 
-# ridge_dat$hyp_support = factor(ridge_dat$hyp_support, levels = c("Unsupported", "Supported"))
-# 
-# ## and specify the colors for those levels 
-# hyp_colors = c("Unsupported" = "gray68",
-#                "Supported" = "firebrick4")
-# 
-# 
-# 
-# ### subset records that wont fit in density estimation (i.e. <= 2 values in hyp_support)
-# 
-# ## first grab all dom_species and take note of which need subsetting. 
-# small_dat = ddply(ridge_dat, .(dom_sp, hyp_support), summarize,
-#                   num_levls = length((hyp_support)))
-# ## then remove all that dont need subsetting
-# small_dat = small_dat[small_dat$num_levls <= 2,]
-# ## merge small_dat and ridge_dat based on common columns dom_sp and hyp_support to ensure no repeats are added
-# ridge_points <- merge(ridge_dat[ridge_dat$dom_sp %in% small_dat$dom_sp,], small_dat, by = c("dom_sp", "hyp_support"))
-# ## verify we have the proper number of records 
-# nrow(ridge_points) == sum(small_dat$num_levls) ## MUST BE TRUE 
-# rm(small_dat)
-# 
-# # ## Thin ridge_dat to include only valid mods! 
-# # ridge_dat = ridge_dat[ridge_dat$Species_Pair %in% valid_mods,]
-# 
-# # make the plot! 
-# p =
-#   ggplot(ridge_dat, aes(x = mean, y = dom_sp, fill = hyp_support)) +
-#   geom_density_ridges(scale=.9, alpha = .8, jittered_points = TRUE, point_alpha=.5)+
-#   geom_point(data = ridge_points, aes(x = mean, y = dom_sp, color = hyp_support), 
-#              size = 5, shape = "circle", alpha = .8, position = position_nudge(y = .08), inherit.aes = F)+
-#   geom_vline(aes(xintercept = 0), color = "black") +
-#   theme_ridges() +
-#   scale_fill_manual(values = hyp_colors) +
-#   scale_color_manual(values = hyp_colors) +
-#   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL, 
-#        title = "Large carnivores are dominant upon preferred prey")
-# # Save it! 
-# # ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_dominant_w_preferred_prey_2_levels_", date, ".png", sep = ""),
-# #        p, width = 10, height = 8, units = "in")
-# 
-# ## Make a second plot scaled per number of observations-
-# p = 
-#   ggplot(ridge_dat, aes(x = mean, y = dom_sp, fill = hyp_support, height = stat(density)))+
-#   geom_density_ridges(stat = "density", scale=.9, alpha = .8, jittered_points = TRUE, point_alpha=.5)+
-#   geom_point(data = ridge_points, aes(x = mean, y = dom_sp, color = hyp_support), 
-#              size = 5, shape = "circle", alpha = .8, position = position_nudge(y = .08), inherit.aes = F)+
-#   geom_vline(aes(xintercept = 0), color = "black") +
-#   theme_ridges() +
-#   scale_fill_manual(values = hyp_colors) +
-#   scale_color_manual(values = hyp_colors) +
-#   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL, 
-#        title = "Large carnivores are dominant upon preferred prey")
-# # Save it! 
-# # ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_dominant_w_preferred_prey_2_levels_DENSITY_SCALED_", date, ".png", sep = ""),p,
-# #        width = 10, height = 8, units = "in")
-
-
-
-#
-##
-### now make a second one w/ 3 levels
-
-# ##### Subset records that wont fit in density estimation (i.e. <= 2 values in neg_vs_pos2 OR hyp_support)
-# 
-# ## first grab all dom_species and take note of which need subsetting. 
-# small_dat = ddply(ridge_dat, .(dom_sp, neg_vs_pos2), summarize,
-#                   num_levls = length((neg_vs_pos2)))
-# 
-# ## then remove all that dont need subsetting
-# small_dat = small_dat[small_dat$num_levls <= 2,]
-# 
-# ## merge small_dat and ridge_dat based on common columns dom_sp and neg_vs_pos2 to ensure no repeats are added
-# ridge_points <- merge(ridge_dat[ridge_dat$dom_sp %in% small_dat$dom_sp,], small_dat, by = c("dom_sp", "neg_vs_pos2"))
-# 
-# ## verify we have the proper number of records 
-# nrow(ridge_points) == sum(small_dat$num_levls) ## MUST BE TRUE 
-# rm(small_dat)
-# 
-## Thin ridge_dat to include only valid mods! 
-# ridge_dat = ridge_dat[ridge_dat$Species_Pair %in% valid_mods,]
-# 
-# ## make the plot
-# p = 
-#   ggplot(ridge_dat, aes(x = mean, y = dom_sp, fill = neg_vs_pos2)) +
-#   geom_density_ridges(scale=.9, alpha = .8, jittered_points = TRUE, point_alpha=.5)+
-#   geom_point(data = ridge_points, aes(x = mean, y = dom_sp, color = neg_vs_pos2), 
-#              size = 5, shape = "circle", alpha = .8, position = position_nudge(y = .08), inherit.aes = F)+
-#   geom_vline(aes(xintercept = 0), color = "black") +
-#   theme_ridges() +
-#   scale_fill_manual(values = color_values_short) +
-#   scale_color_manual(values = color_values_short) +
-#   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL, 
-#        title = "Large carnivores are dominant upon preferred prey")
-# ## Save it!
-# # ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_dominant_w_preferred_prey_3_levels_", date, ".png", sep = ""),
-# #        p, width = 10, height = 8, units = "in")
-# 
-# ### Which preferred prey species are significant suppressed by tigers?
-# dat = coeff[coeff$var == "Species_Interaction",]
-# dat[dat$mean < 0 &
-#       dat$dom_sp == "Panthera_tigris" &
-#       dat$sig == "Significant" &
-#       dat$sub_sp %in% guilds$scientificNameStd[guilds$tiger_pref == "Yes"],]
-# ## Serow and Muntjac, classic! 
-# 
-# ## now what about leopards 
-# dat[dat$mean < 0 &
-#       dat$dom_sp == "Panthera_pardus" &
-#       dat$sig == "Significant" &
-#       dat$sub_sp %in% guilds$scientificNameStd[guilds$leopard_pref == "Yes"],] # macaques! both pig and long tailed 
-# 
-# ## and one should be suppresed by dholes, who?
-# dat[dat$mean < 0 &
-#       dat$dom_sp == "Cuon_alpinus" &
-#       dat$sig == "Significant" &
-#       dat$sub_sp %in% guilds$scientificNameStd[guilds$dhole_pref == "Yes"],] # serow! 
-# ## UPDATE, 2023-08-29 --> this model failed to converge on middle settings, much lower n.eff
-
-# 
-# 
-# ####
-# ###
-# ##
-# # Do the same but reverse it! 
-# 
-# ## Grab a fresh date just to be safe
-# day<-str_sub(Sys.Date(),-2)
-# month<-str_sub(Sys.Date(),-5,-4)
-# year<-str_sub(Sys.Date(),-10,-7)
-# date = paste(year,month,day, sep = "")
-# rm(year,month,day)
-# 
-# ## first subset coeff to just look at the species interaction value 
-# dat = coeff[coeff$var == "Species_Interaction",]
-# 
-# ## create two data subsets, 
-# a = dat[grepl("SUB-Large_Carn", dat$guild_pair),] # one with all large carnivores as dominant
-# b = a
-# unique(b$sub_sp) # and a second where all of these are combined into one 
-# b$sub_sp = "All_large_carnivores"
-# 
-# ## and combine
-# ridge_dat = rbind(a,b)
-# 
-# ## Set factor level to match other graphs 
-# ridge_dat$sub_sp = factor(ridge_dat$sub_sp, levels = c("Neofelis_genus","Cuon_alpinus", 
-#                                                        "Panthera_pardus","Panthera_tigris",
-#                                                        "All_large_carnivores"))
-# 
-# #### try to group into two levels to reduce few data points
-# ridge_dat$hyp_support = "Unsupported"
-# ridge_dat$hyp_support[ridge_dat$mean > 0 & ridge_dat$sig == "Significant"] = "Supported"
-# 
-# ## make sure supported comes first! 
-# ridge_dat$hyp_support = factor(ridge_dat$hyp_support, levels = c("Unsupported", "Supported"))
-# 
-# ## and specify the colors for those levels 
-# hyp_colors = c("Unsupported" = "gray68",
-#                "Supported" = "darkgreen")
-# 
-# 
-# ##### Subset records that wont fit in density estimation (i.e. <= 2 values in hyp_support)
-# ## first grab all sub_species and take note of which need subsetting. 
-# small_dat = ddply(ridge_dat, .(sub_sp, hyp_support), summarize,
-#                   num_levls = length((hyp_support)))
-# ## then remove all that dont need subsetting
-# small_dat = small_dat[small_dat$num_levls <= 2,]
-# ## merge small_dat and ridge_dat based on common columns sub_sp and hyp_support to ensure no repeats are added
-# ridge_points <- merge(ridge_dat[ridge_dat$sub_sp %in% small_dat$sub_sp,], small_dat, by = c("sub_sp", "hyp_support"))
-# ## verify we have the proper number of records 
-# nrow(ridge_points) == sum(small_dat$num_levls) ## MUST BE TRUE 
-# rm(small_dat)
-# 
-# ## Thin ridge_dat to include only valid mods! 
-# # ridge_dat = ridge_dat[ridge_dat$Species_Pair %in% valid_mods,]
-# 
-# ## make the plot 
-# p =
-#   ggplot(ridge_dat, aes(x = mean, y = sub_sp, fill = hyp_support)) +
-#   geom_density_ridges(scale=.9, alpha = .8, jittered_points = TRUE, point_alpha=.5)+
-#   geom_point(data = ridge_points, aes(x = mean, y = sub_sp, color = hyp_support), 
-#              size = 5, shape = "circle", alpha = .8, position = position_nudge(y = .08), inherit.aes = F)+
-#   geom_vline(aes(xintercept = 0), color = "black") +
-#   theme_ridges() +
-#   scale_fill_manual(values = hyp_colors) +
-#   scale_color_manual(values = hyp_colors) +
-#   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL, 
-#        title = "Large carnivores are subordinate")
-# # Save it! 
-# # ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_subordinate_2_levels_", date, ".png", sep = ""),p,
-# #        width = 10, height = 8, units = "in")
-# 
-# ## Make a second plot scaled per number of observations-
-# p = 
-#   ggplot(ridge_dat, aes(x = mean, y = sub_sp, fill = hyp_support, height = stat(density)))+
-#   geom_density_ridges(stat = "density", scale=.9, alpha = .8, jittered_points = TRUE, point_alpha=.5)+
-#   geom_point(data = ridge_points, aes(x = mean, y = sub_sp, color = hyp_support), 
-#              size = 5, shape = "circle", alpha = .8, position = position_nudge(y = .08), inherit.aes = F)+
-#   geom_vline(aes(xintercept = 0), color = "black") +
-#   theme_ridges() +
-#   scale_fill_manual(values = hyp_colors) +
-#   scale_color_manual(values = hyp_colors) +
-#   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL, 
-#        title = "Large carnivores are subordinate")
-# Save it! 
-# ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_subordinate_2_levels_DENSITY_SCALED_", date, ".png", sep = ""),p,
-#        width = 10, height = 8, units = "in")
-
-##### do the same w/ 3 levels
-# 
-# ##### Subset records that wont fit in density estimation (i.e. <= 2 values in neg_vs_pos2 OR hyp_support)
-# 
-# ## first grab all sub_species and take note of which need subsetting. 
-# small_dat = ddply(ridge_dat, .(sub_sp, neg_vs_pos2), summarize,
-#                   num_levls = length((neg_vs_pos2)))
-# ## then remove all that dont need subsetting
-# small_dat = small_dat[small_dat$num_levls <= 2,]
-# ## merge small_dat and ridge_dat based on common columns sub_sp and neg_vs_pos2 to ensure no repeats are added
-# ridge_points <- merge(ridge_dat[ridge_dat$sub_sp %in% small_dat$sub_sp,], small_dat, by = c("sub_sp", "neg_vs_pos2"))
-# ## verify we have the proper number of records 
-# nrow(ridge_points) == sum(small_dat$num_levls) ## MUST BE TRUE 
-# rm(small_dat)
-# 
-#
-## Thin ridge_dat to include only valid mods! 
-# ridge_dat = ridge_dat[ridge_dat$Species_Pair %in% valid_mods,]
-#
-# ## make the plot
-# p = 
-#   ggplot(ridge_dat, aes(x = mean, y = sub_sp, fill = neg_vs_pos2)) +
-#   geom_density_ridges(scale=.9, alpha = .8, jittered_points = TRUE, point_alpha=.5)+
-#   geom_point(data = ridge_points, aes(x = mean, y = sub_sp, color = neg_vs_pos2), 
-#              size = 5, shape = "circle", alpha = .8, position = position_nudge(y = .08), inherit.aes = F)+
-#   geom_vline(aes(xintercept = 0), color = "black") +
-#   theme_ridges() +
-#   scale_fill_manual(values = color_values_short) +
-#   scale_color_manual(values = color_values_short) +
-#   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL, 
-#        title = "Large carnivores are subordinate")
-# # Save it! 
-# # ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_subordinate_3_levels_", date, ".png", sep = ""),p,
-# #        width = 10, height = 8, units = "in")
-
-####
-###
-##
-# now subset for preferred prey species
-# 
-# # First, start fresh
-# dat = coeff[coeff$var == "Species_Interaction",]
-# # then, gather and combine relevant data 
-# a = dat[dat$sub_sp == "Neofelis_genus" & 
-#           dat$dom_sp %in% guilds$scientificNameStd[guilds$CL_pref == "Yes"],]
-# b = dat[dat$sub_sp == "Panthera_tigris" & 
-#           dat$dom_sp %in% guilds$scientificNameStd[guilds$tiger_pref == "Yes"],]
-# c = dat[dat$sub_sp == "Panthera_pardus" & 
-#           dat$dom_sp %in% guilds$scientificNameStd[guilds$leopard_pref == "Yes"],]
-# d = dat[dat$sub_sp == "Cuon_alpinus" & 
-#           dat$dom_sp %in% guilds$scientificNameStd[guilds$dhole_pref == "Yes"],]
-# ## combine all for all_large_carn
-# e = rbind(a,b,c,d)
-# e$sub_sp = "All_large_carnivores"
-# 
-# ## combine
-# ridge_dat = rbind(a,b,c,d,e)
-# rm(a,b,c,d,e)
-# 
-# ## Set factor level to match other graphs 
-# ridge_dat$sub_sp = factor(ridge_dat$sub_sp, levels = c("Neofelis_genus","Cuon_alpinus",
-#                                                        "Panthera_pardus","Panthera_tigris",
-#                                                        "All_large_carnivores"))
-# ## try to group into two levels to reduce few data points
-# ridge_dat$hyp_support = "Unsupported"
-# ridge_dat$hyp_support[ridge_dat$mean > 0 & ridge_dat$sig == "Significant"] = "Supported"
-# 
-# ## make sure supported comes first! 
-# ridge_dat$hyp_support = factor(ridge_dat$hyp_support, levels = c("Unsupported", "Supported"))
-# 
-# 
-# ##### Subset records that wont fit in density estimation (i.e. <= 2 values in neg_vs_pos2 OR hyp_supported)
-# ## first grab all dom_species and take note of which need subsetting. 
-# small_dat = ddply(ridge_dat, .(sub_sp, hyp_support), summarize,
-#                   num_levls = length((hyp_support)))
-# ## then remove all that dont need subsetting
-# small_dat = small_dat[small_dat$num_levls <= 2,]
-# ## merge small_dat and ridge_dat based on common columns sub_sp and hyp_support to ensure no repeats are added
-# ridge_points <- merge(ridge_dat[ridge_dat$sub_sp %in% small_dat$sub_sp,], small_dat, by = c("sub_sp", "hyp_support"))
-# ## verify we have the proper number of records 
-# nrow(ridge_points) == sum(small_dat$num_levls) ## MUST BE TRUE 
-# rm(small_dat)
-# 
-# ## Thin ridge_dat to include only valid mods! 
-# # ridge_dat = ridge_dat[ridge_dat$Species_Pair %in% valid_mods,]
-# 
-# ## Make the plots 
-# p=
-#   ggplot(ridge_dat, aes(x = mean, y = sub_sp, fill = hyp_support)) +
-#   geom_density_ridges(scale=.9, alpha = .8, jittered_points = TRUE, point_alpha=.5)+
-#   geom_point(data = ridge_points, aes(x = mean, y = sub_sp, color = hyp_support), 
-#              size = 5, shape = "circle", alpha = .8, position = position_nudge(y = .08), inherit.aes = F)+
-#   geom_vline(aes(xintercept = 0), color = "black") +
-#   theme_ridges() +
-#   scale_fill_manual(values = hyp_colors) +
-#   scale_color_manual(values = hyp_colors) +
-#   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL, 
-#        title = "Large carnivores are subordinate to preferred prey")
-# # Save it! 
-# # ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_subordinate_with_preferred_prey_2_levels_", date, ".png", sep = ""),p,
-# #        width = 10, height = 8, units = "in")
-# 
-# ## Make a second plot scaled per number of observations-
-# p = 
-#   ggplot(ridge_dat, aes(x = mean, y = sub_sp, fill = hyp_support, height = stat(density)))+
-#   geom_density_ridges(stat = "density", scale=.9, alpha = .8, jittered_points = TRUE, point_alpha=.5)+
-#   geom_point(data = ridge_points, aes(x = mean, y = sub_sp, color = hyp_support), 
-#              size = 5, shape = "circle", alpha = .8, position = position_nudge(y = .08), inherit.aes = F)+
-#   geom_vline(aes(xintercept = 0), color = "black") +
-#   theme_ridges() +
-#   scale_fill_manual(values = hyp_colors) +
-#   scale_color_manual(values = hyp_colors) +
-#   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL, 
-#        title = "Large carnivores are subordinate to preferred prey")
-# # Save it! 
-# # ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_subordinate_with_preferred_prey_2_levels_DENSITY_SCALED_", date, ".png", sep = ""),p,
-# #        width = 10, height = 8, units = "in")
-
-
-
-
-## remake the plot w/ three levels 
-
-# ##### Subset records that wont fit in density estimation (i.e. <= 2 values in neg_vs_pos2 OR hyp_support)
-# 
-# ## first grab all sub_species and take note of which need subsetting. 
-# small_dat = ddply(ridge_dat, .(sub_sp, neg_vs_pos2), summarize,
-#                   num_levls = length((neg_vs_pos2)))
-# ## then remove all that dont need subsetting
-# small_dat = small_dat[small_dat$num_levls <= 2,]
-# ## merge small_dat and ridge_dat based on common columns sub_sp and neg_vs_pos2 to ensure no repeats are added
-# ridge_points <- merge(ridge_dat[ridge_dat$sub_sp %in% small_dat$sub_sp,], small_dat, by = c("sub_sp", "neg_vs_pos2"))
-# ## verify we have the proper number of records 
-# nrow(ridge_points) == sum(small_dat$num_levls) ## MUST BE TRUE 
-# rm(small_dat)
-# 
-# ## make the plot
-# p = 
-#   ggplot(ridge_dat, aes(x = mean, y = sub_sp, fill = neg_vs_pos2)) +
-#   geom_density_ridges(scale=.9, alpha = .8, jittered_points = TRUE, point_alpha=.5)+
-#   geom_point(data = ridge_points, aes(x = mean, y = sub_sp, color = neg_vs_pos2), 
-#              size = 5, shape = "circle", alpha = .8, position = position_nudge(y = .08), inherit.aes = F)+
-#   geom_vline(aes(xintercept = 0), color = "black") +
-#   theme_ridges() +
-#   scale_fill_manual(values = color_values_short) +
-#   scale_color_manual(values = color_values_short) +
-#   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL, 
-#        title = "Large carnivores are subordinate to preferred prey")
-# # Save it! 
-# # ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_subordinate_with_preferred_prey_3_levels_", date, ".png", sep = ""),p,
-# #        width = 10, height = 8, units = "in")
-
-# 
-# ### Which preferred prey species are significant supporting tigers?
-# dat = coeff[coeff$var == "Species_Interaction",]
-# dat[dat$mean > 0 &
-#       dat$sub_sp == "Panthera_tigris" &
-#       dat$sig == "Significant" &
-#       dat$dom_sp %in% guilds$scientificNameStd[guilds$tiger_pref == "Yes"],] 
-# # 3 species --> Rusa, Sus scrofa, and Ursus thibetanus
-# 
-# ## now what about leopards 
-# dat[dat$mean > 0 &
-#       dat$sub_sp == "Panthera_pardus" &
-#       dat$sig == "Significant" &
-#       dat$dom_sp %in% guilds$scientificNameStd[guilds$leopard_pref == "Yes"],]  
-# # 3 species --> Muntjac, Macaca_arctoides, & Sus scrofa
-# 
-# ## now what about dholes 
-# dat[dat$mean > 0 &
-#       dat$sub_sp == "Cuon_alpinus" &
-#       dat$sig == "Significant" &
-#       dat$dom_sp %in% guilds$scientificNameStd[guilds$dhole_pref == "Yes"],] 
-# # 3 species --> Muntjac, Rusa, and Sus scrofa
-# 
-# ## and what about SCL?
-# dat[dat$mean > 0 &
-#       dat$sub_sp == "Neofelis_genus" &
-#       dat$sig == "Significant" &
-#       dat$dom_sp %in% guilds$scientificNameStd[guilds$CL_pref == "Yes"],] 
-# # 9 species! --> Arctictis_binturong, Arctonyx_collaris, Capricornis_genus, Hystrix_brachyura,
-# # Macaca_nemestrina, Muntiacus_genus, Sus_scrofa, Viverra_tangalunga, Viverra_zibetha
-# 
-# ### interesting, Sus scrofa is a key prey species for ALL large carnivores...
-# # They are the keystone species that matters in SEA! 
-# 
-# ## who is the one negative for SCL?
-# dat[dat$mean < 0 &
-#       dat$sub_sp == "Neofelis_genus" &
-#       dat$sig == "Significant" &
-#       dat$dom_sp %in% guilds$scientificNameStd[guilds$CL_pref == "Yes"],] # Sambar! interesting! 
-
-
-#
-##
-###
-####
-##### Make a unified plot w/ top-down, bottom-up, and unsupported distributions
-# 
-# ## first grab all species interaction values
-# dat = coeff[coeff$var == "Species_Interaction",]
-# 
-# ## create top-down data next-
-# # grab two data subsets, 
-# a = dat[grepl("DOM-Large_Carn", dat$guild_pair),] # one with all large carnivores as dominant
-# b = a
-# unique(b$dom_sp) # and a second where all of these are combined into one 
-# b$dom_sp = "All_large_carnivores"
-# 
-# # and combine
-# td = rbind(a,b)
-# rm(a,b)
-# 
-# ## create a column for hypothesis support or not
-# td$hyp_support = "Unsupported"
-# td$hyp_support[td$mean < 0 & td$sig == "Significant"] = "Top-Down"
-# 
-# ## seperate out the large carns into their own col
-# td$large_carnivores = td$dom_sp
-# 
-# 
-# 
-# ## create bottom-up data
-# # grab two data subsets, 
-# a = dat[grepl("SUB-Large_Carn", dat$guild_pair),] # one with all large carnivores as dominant
-# b = a
-# unique(b$sub_sp) # and a second where all of these are combined into one 
-# b$sub_sp = "All_large_carnivores"
-# 
-# # and combine
-# bu = rbind(a,b)
-# rm(a,b)
-# 
-# ## create a column for hypothesis support or not
-# bu$hyp_support = "Unsupported"
-# bu$hyp_support[bu$mean > 0 & bu$sig == "Significant"] = "Bottom-Up"
-# 
-# ## seperate out the large carns into their own col
-# bu$large_carnivores = bu$sub_sp
-# 
-# ## Combine bottom-up w/ top-down
-# tc = rbind(td, bu)
-# rm(td,bu)
-# 
-# ## do it manually b/c order is silly on graph
-# tc$large_carnivores = factor(tc$large_carnivores, levels = c("Neofelis_genus","Cuon_alpinus", 
-#                                                              "Panthera_pardus","Panthera_tigris",
-#                                                              "All_large_carnivores"))
-# 
-# ## and specify the colors for those levels 
-# hyp_colors = c("Unsupported" = "gray68",
-#                "Top-Down" = "firebrick4", 
-#                "Bottom-Up" = "darkgreen")
-# 
-# ## make sure supported comes first! 
-# tc$hyp_support = factor(tc$hyp_support, levels = c("Unsupported", "Bottom-Up", "Top-Down"))
-# 
-# 
-# ##### Subset records that wont fit in density estimation (i.e. <= 2 values in neg_vs_pos2 OR hyp_supported)
-# ## first grab all dom_species and take note of which need subsetting. 
-# small_dat = ddply(tc, .(large_carnivores, hyp_support), summarize,
-#                   num_levls = length((hyp_support)))
-# ## then remove all that dont need subsetting
-# small_dat = small_dat[small_dat$num_levls <= 2,]
-# ## merge small_dat and ridge_dat based on common columns large_carnivores and hyp_support to ensure no repeats are added
-# ridge_points <- merge(tc[tc$large_carnivores %in% small_dat$large_carnivores,], 
-#                       small_dat, 
-#                       by = c("large_carnivores", "hyp_support"))
-# ## verify we have the proper number of records 
-# nrow(ridge_points) == sum(small_dat$num_levls) ## MUST BE TRUE 
-# rm(small_dat)
-# 
-# ## Thin ridge_dat to include only valid mods! 
-# # ridge_dat = ridge_dat[ridge_dat$Species_Pair %in% valid_mods,]
-# 
-# ## Make the plots 
-# p=
-#   ggplot(tc, aes(x = mean, y = large_carnivores, fill = hyp_support)) +
-#   geom_density_ridges(scale=.9, alpha = .8, jittered_points = TRUE, point_alpha=.5)+
-#   geom_point(data = ridge_points, aes(x = mean, y = large_carnivores, color = hyp_support), 
-#              size = 5, shape = "circle", alpha = .8, position = position_nudge(y = .08), inherit.aes = F)+
-#   geom_vline(aes(xintercept = 0), color = "black") +
-#   theme_ridges() +
-#   scale_fill_manual(values = hyp_colors) +
-#   scale_color_manual(values = hyp_colors) +
-#   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL, 
-#        title = "Large carnivores dominant (red) and subordinate (green)")
-# # Save it! 
-# ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_dominant_and_subordinate_3_levels_", date, ".png", sep = ""),p,
-#        width = 10, height = 8, units = "in")
-# 
-# ## Make a second plot scaled per number of observations-
-# p =
-#   ggplot(tc, aes(x = mean, y = large_carnivores, fill = hyp_support, height = stat(density)))+
-#   geom_density_ridges(stat = "density", scale=.9, alpha = .8, jittered_points = TRUE, point_alpha=.5)+
-#   geom_point(data = ridge_points, aes(x = mean, y = large_carnivores, color = hyp_support), 
-#              size = 5, shape = "circle", alpha = .8, position = position_nudge(y = .08), inherit.aes = F)+
-#   geom_vline(aes(xintercept = 0), color = "black") +
-#   theme_ridges() +
-#   scale_fill_manual(values = hyp_colors) +
-#   scale_color_manual(values = hyp_colors) +
-#   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL, 
-#        title = "Large carnivores dominant (red) and subordinate (green)")
-# # Save it! 
-# # ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_dominant_and_subordinate_3_levels_DENSITY_SCALED_", date, ".png", sep = ""),p,
-# #        width = 10, height = 8, units = "in")
-
-
-#
-##
-###
-####
-##### Re-make unified plot w/ preferred prey species 
-# 
-# ## first grab all species interaction values
-# dat = coeff[coeff$var == "Species_Interaction",]
-# 
-# # then, gather and combine relevant data 
-# a = dat[dat$sub_sp == "Neofelis_genus" & 
-#           dat$dom_sp %in% guilds$scientificNameStd[guilds$CL_pref == "Yes"],]
-# b = dat[dat$sub_sp == "Panthera_tigris" & 
-#           dat$dom_sp %in% guilds$scientificNameStd[guilds$tiger_pref == "Yes"],]
-# c = dat[dat$sub_sp == "Panthera_pardus" & 
-#           dat$dom_sp %in% guilds$scientificNameStd[guilds$leopard_pref == "Yes"],]
-# d = dat[dat$sub_sp == "Cuon_alpinus" & 
-#           dat$dom_sp %in% guilds$scientificNameStd[guilds$dhole_pref == "Yes"],]
-# ## combine all for all_large_carn
-# e = rbind(a,b,c,d)
-# e$sub_sp = "All_large_carnivores"
-# 
-# ## combine
-# bu = rbind(a,b,c,d,e)
-# rm(a,b,c,d,e)
-# 
-# ## create a column for hypothesis support or not
-# bu$hyp_support = "Unsupported"
-# bu$hyp_support[bu$mean > 0 & bu$sig == "Significant"] = "Bottom-Up"
-# 
-# ## seperate out the large carns into their own col
-# bu$large_carnivores = bu$sub_sp
-# 
-# 
-# 
-# #### Remake this graph, but ONLY w/ preferred prey species
-# dat = coeff[coeff$var == "Species_Interaction",]
-# # First, gather and combine relevant data 
-# a = dat[dat$dom_sp == "Neofelis_genus" & 
-#           dat$sub_sp %in% guilds$scientificNameStd[guilds$CL_pref == "Yes"],]
-# b = dat[dat$dom_sp == "Panthera_tigris" & 
-#           dat$sub_sp %in% guilds$scientificNameStd[guilds$tiger_pref == "Yes"],]
-# c = dat[dat$dom_sp == "Panthera_pardus" & 
-#           dat$sub_sp %in% guilds$scientificNameStd[guilds$leopard_pref == "Yes"],]
-# d = dat[dat$dom_sp == "Cuon_alpinus" & 
-#           dat$sub_sp %in% guilds$scientificNameStd[guilds$dhole_pref == "Yes"],]
-# ## also adding all large carnivores w/ preferred prey
-# e = rbind(a,b,c,d)
-# e$dom_sp = "All_large_carnivores"
-# 
-# ## combine
-# td = rbind(a,b,c,d,e)
-# rm(a,b,c,d,e)
-# 
-# ## create a column for hypothesis support or not
-# td$hyp_support = "Unsupported"
-# td$hyp_support[td$mean < 0 & td$sig == "Significant"] = "Top-Down"
-# 
-# ## seperate out the large carns into their own col
-# td$large_carnivores = td$dom_sp
-# 
-# 
-# ## Combine bottom-up w/ top-down
-# tc = rbind(td, bu)
-# rm(td,bu)
-# 
-# ## do it manually b/c order is silly on graph
-# tc$large_carnivores = factor(tc$large_carnivores, levels = c("Neofelis_genus","Cuon_alpinus", 
-#                                                              "Panthera_pardus","Panthera_tigris",
-#                                                              "All_large_carnivores"))
-# 
-# ## and specify the colors for those levels 
-# hyp_colors = c("Unsupported" = "gray68",
-#                "Top-Down" = "firebrick4", 
-#                "Bottom-Up" = "darkgreen")
-# 
-# ## make sure supported comes first! 
-# tc$hyp_support = factor(tc$hyp_support, levels = c("Unsupported", "Bottom-Up", "Top-Down"))
-# 
-# 
-# ##### Subset records that wont fit in density estimation (i.e. <= 2 values in neg_vs_pos2 OR hyp_supported)
-# ## first grab all dom_species and take note of which need subsetting. 
-# small_dat = ddply(tc, .(large_carnivores, hyp_support), summarize,
-#                   num_levls = length((hyp_support)))
-# ## then remove all that dont need subsetting
-# small_dat = small_dat[small_dat$num_levls <= 2,]
-# ## merge small_dat and ridge_dat based on common columns large_carnivores and hyp_support to ensure no repeats are added
-# ridge_points <- merge(tc[tc$large_carnivores %in% small_dat$large_carnivores,], 
-#                       small_dat, 
-#                       by = c("large_carnivores", "hyp_support"))
-# ## verify we have the proper number of records 
-# nrow(ridge_points) == sum(small_dat$num_levls) ## MUST BE TRUE 
-# rm(small_dat)
-# 
-# ## Thin ridge_dat to include only valid mods! 
-# # tc = tc[tc$Species_Pair %in% valid_mods,]
-# 
-# ## Make the plots 
-# p=
-#   ggplot(tc, aes(x = mean, y = large_carnivores, fill = hyp_support)) +
-#   geom_density_ridges(scale=.9, alpha = .8, jittered_points = TRUE, point_alpha=.5)+
-#   geom_point(data = ridge_points, aes(x = mean, y = large_carnivores, color = hyp_support), 
-#              size = 5, shape = "circle", alpha = .8, position = position_nudge(y = .08), inherit.aes = F)+
-#   geom_vline(aes(xintercept = 0), color = "black") +
-#   theme_ridges() +
-#   scale_fill_manual(values = hyp_colors) +
-#   scale_color_manual(values = hyp_colors) +
-#   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL, 
-#        title = "Large carnivores dominant (red) and subordinate (green) to preferred prey")
-# # Save it! 
-# # ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_dominant_and_subordinate_with_preferred_prey_3_levels_", date, ".png", sep = ""),p,
-# #        width = 10, height = 8, units = "in")
-# 
-# ## Make a second plot scaled per number of observations-
-# p =
-#   ggplot(tc, aes(x = mean, y = large_carnivores, fill = hyp_support, height = stat(density)))+
-#   geom_density_ridges(stat = "density", scale=.9, alpha = .8, jittered_points = TRUE, point_alpha=.5)+
-#   geom_point(data = ridge_points, aes(x = mean, y = large_carnivores, color = hyp_support), 
-#              size = 5, shape = "circle", alpha = .8, position = position_nudge(y = .08), inherit.aes = F)+
-#   geom_vline(aes(xintercept = 0), color = "black") +
-#   theme_ridges() +
-#   scale_fill_manual(values = hyp_colors) +
-#   scale_color_manual(values = hyp_colors) +
-#   labs(x = "Mean Species Interaction Value", y = NULL, fill = NULL, color = NULL, 
-#        title = "Large carnivores dominant (red) and subordinate (green) to preferred prey")
-# # Save it! 
-# # ggsave(paste("figures/Grouped Histograms/Histogram_Ridgeline_species_interaction_value_large_carnivores_dominant_and_subordinate_with_preferred_prey_3_levels_DENSITY_SCALED_", date, ".png", sep = ""),p,
-# #        width = 10, height = 8, units = "in")
-# 
-# ## keep it clean
-# rm(dat, ridge_dat, ridge_points, order, p, color_values_short,
-#    color_values_full, a,b, min,max,date, hyp_colors, tc, bu, td)
 
 
 ######### Visually compare pairwise interactions in different directions ######
@@ -3574,8 +2967,8 @@ for(i in 1:length(unique(pred_abund$Species_Pair))){
   p = 
   ggplot(pred, aes(y = Predicted.N, x = var))+
     # geom_point(data = est, aes(y = Sub_abundance, x = Dom_abundance, color = Landscape), alpha = 0.5, inherit.aes = F)+
-    geom_jitter(data = est, aes(y = Sub_abundance, x = Dom_abundance, color = Landscape), width = .5)+
-    geom_line(color = "black", size = 2)+
+    # geom_jitter(data = est, aes(y = Sub_abundance, x = Dom_abundance, color = Landscape), width = .5)+
+    geom_line(color = "black", linewidth = 2)+
     geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.1, color = "black", linetype = "dashed")+
     # geom_errorbar(data = est, aes(y = Sub_abundance, x = Dom_abundance,
     #                                  ymin = lower_sub, ymax = upper_sub), alpha = 0.2, inherit.aes = F)+
@@ -3586,14 +2979,19 @@ for(i in 1:length(unique(pred_abund$Species_Pair))){
          title = title, color = NULL)+ 
     guides(color = "none") + # way too many landscapes to list them now. 
     theme_test()+
-    coord_cartesian(xlim = c(0, max(est$Dom_abundance)),
-                    ylim = c(0, max(est$Sub_abundance)))
+
+    theme(axis.text.x = element_text(size = 16),
+          axis.text.y = element_text(size = 16),
+          axis.text = element_text(color = "black"),
+          text = element_text(family = "Helvetica"))
+    # coord_cartesian(xlim = c(0, max(est$Dom_abundance)),
+    #                 ylim = c(0, max(est$Sub_abundance)))
   
   ## construct the saving path
   path = paste("figures/", paste(gp, n, sep = "/"), "/Prediction_plot_", n, "_", date, ".png", sep = "")
   
   ## save the dang thang 
-  ggsave(path, p, width = 9, height = 6, units = "in")
+  # ggsave(path, p, width = 6, height = 6, units = "in")
  
  }
 rm(path, p,i, title, n, n_split, gp, est, pred, day, month, year, date)
@@ -4303,15 +3701,19 @@ library(sn)
 set.seed(123)
 
 # Central Normal distribution with mean=0
-normal_data <- rnorm(100, mean = 0, sd = 6)
+normal_data <- rnorm(100, mean = 0, sd = 6) # equal
+# normal_data <- rnorm(150, mean = 0, sd = 6) # realistic
+
 
 # Negative-skewed Normal distribution with mean= -2
 # Using shape parameter to achieve negative skewness
-negative_dat <- rsn(100, xi = -2, omega = 5, alpha = -3)
+negative_dat <- rsn(100, xi = -2, omega = 5, alpha = -3) # equal
+# negative_dat <- rsn(50, xi = -2, omega = 5, alpha = -3)  # realistic
 
 # Positive-skewed Normal distribution with mean=2
 # Using shape parameter to achieve positive skewness
-positive_dat <- rsn(100, xi = 2, omega = 5, alpha = 3)
+positive_dat <- rsn(100, xi = 2, omega = 5, alpha = 3) # equal
+# positive_dat <- rsn(50, xi = 2, omega = 5, alpha = 3)  # realistic
 
 
 # Combine data into one data frame
@@ -4325,38 +3727,89 @@ df <- data.frame(
 rm(normal_data, positive_dat, negative_dat)
 
 ## make sure normal distribution goes behind the non-normal one!
-df$distribution = factor(df$distribution, levels = c("Normal","positive_dat", "negative_dat"))
+df$distribution = factor(df$distribution, levels = c("positive_dat", "negative_dat","Normal"))
 
 ## and set the color scheme approprietly 
-concept_col = c("Normal" = "gray68",
-                "negative_dat" = "firebrick4",
-                "positive_dat" = "darkgreen")
+concept_col = c("Normal" = "gray32",
+                "negative_dat" = "darkorange4",
+                "positive_dat" = "springgreen4")
+
+## make the x-axis closer to what the results are
+df$value = df$value / 8 # smaller range
+
+## make sure no negative values are positive!
+df$value[df$distribution == "negative_dat" & df$value > 0] = (df$value[df$distribution == "negative_dat" & df$value > 0]) * -1
+
 
 ## Plotting the distributions
 #H1
-p = 
-ggplot(df[df$distribution %in% c("negative_dat", "Normal"),], aes(x = value, fill = distribution)) +
-  geom_density(aes(y = ..density..), alpha = 0.9) +
-  labs(title = "H1 concept", x = "Species Interaction Value", y = "Density") +
-  guides(fill = "none") +
-  scale_fill_manual(values = concept_col)+
-  theme_ridges()
-
-## save it! 
-# ggsave("explore/H1_negative_concept_histogram_20230904.png", p, 
+p =
+  ggplot(df[df$distribution %in% c("negative_dat", "Normal"),], aes(x = value, fill = distribution))+
+  geom_histogram(aes(y=after_stat(count)), colour="black")+#, binwidth = .1, alpha = 1)+#, position = "dodge")+
+  theme_classic()+
+  geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+  scale_fill_manual(values = concept_col) +
+  labs(x = "Species Interaction Value", y = NULL, color = NULL, title = "top-down hypothesis")+
+  guides(fill = "none") + 
+  coord_cartesian((xlim = c(-2,2)))+
+  theme(axis.text.x = element_text(size = 16),
+        axis.text.y = element_text(size = 16),
+        axis.text = element_text(color = "black"),
+        text = element_text(family = "Helvetica"))
+# ## save it! 
+# ggsave("explore/H1_negative_concept_many_unsupported_histogram_20231116.png", p,
 #        width = 12, height = 4, units = "in")
+
+## remade plot, but with equal weighting between groups
+# ggsave("explore/H1_negative_concept_equal_unsupported_histogram_20231116.png", p,
+#        width = 6, height = 4, units = "in")
+
+## make sure no positive values are negative!
+df$value[df$distribution == "positive_dat" & df$value < 0] = (df$value[df$distribution == "positive_dat" & df$value < 0]) * -1
 
 ## repeat but for the positive ones
 p = 
-  ggplot(df[df$distribution %in% c("positive_dat", "Normal"),], aes(x = value)) +
-  geom_density(aes(y = ..density.., fill = distribution), alpha = 0.9) +
-  labs(title = "H2 concept", x = "Species Interaction Value", y = "Density") +
-  guides(fill = "none") +
-  scale_fill_manual(values = concept_col)+
-  theme_ridges()
-
-# ggsave("explore/H2_positive_concept_histogram_20230904.png", p,
+  ggplot(df[df$distribution %in% c("positive_dat", "Normal"),], aes(x = value, fill = distribution))+
+  geom_histogram(aes(y=after_stat(count)), colour="black")+#, binwidth = .1, alpha = 1)+#, position = "dodge")+
+  theme_classic()+
+  geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+  scale_fill_manual(values = concept_col) +
+  labs(x = "Species Interaction Value", y = NULL, color = NULL, title = "bottom-up hypothesis")+
+  guides(fill = "none") + 
+  coord_cartesian((xlim = c(-2,2)))+
+  theme(axis.text.x = element_text(size = 16),
+        axis.text.y = element_text(size = 16),
+        axis.text = element_text(color = "black"),
+        text = element_text(family = "Helvetica"))
+# save it! 
+# ggsave("explore/H1_positive_concept_many_unsupported_histogram_20231116.png", p,
 #        width = 12, height = 4, units = "in")
+
+## remade plot, but with equal weighting between groups
+# ggsave("explore/H2_positive_concept_equal_unsupported_histogram_20231116.png", p,
+#        width = 6, height = 4, units = "in")
+
+
+## run a plot with both top down and bottom up 
+p = 
+ggplot(df, aes(x = value, fill = distribution))+
+  geom_histogram(aes(y=after_stat(count)), colour="black")+#, binwidth = .1, alpha = 1)+#, position = "dodge")+
+  theme_classic()+
+  geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+  scale_fill_manual(values = concept_col) +
+  labs(x = "Species Interaction Value", y = "Count", color = NULL, title = "both hypothesis")+
+  guides(fill = "none") + 
+  coord_cartesian((xlim = c(-2,2)))+
+  theme(axis.text.x = element_text(size = 16),
+        axis.text.y = element_text(size = 16),
+        axis.text = element_text(color = "black"),
+        text = element_text(family = "Helvetica"))
+# ## save it!
+# ggsave("explore/H1&2_neg_and_pos_concept_histogram_wide_20231117.png", p,
+#        width = 12, height = 4, units = "in")
+# # and again but narrower
+# ggsave("explore/H1&2_neg_and_pos_concept_histogram_narrow_20231117.png", p,
+#        width = 6, height = 4, units = "in")
 
 
 
@@ -4366,7 +3819,7 @@ p =
 set.seed(123)
 n <- 100
 x <- seq(0.1, 5, length.out = n)  # x should be > 0 for logarithmic relationship
-y <- 10 - 3 * log(x) + rnorm(n, 0, 3)  # Logarithmic relationship with some noise
+y <- 10 - 3 * log(x) + rnorm(n, 0, 5)  # Logarithmic relationship with some noise
 
 df <- data.frame(x = x, y = y)
 rm(n,x,y)
@@ -4374,24 +3827,28 @@ rm(n,x,y)
 # 2. Fit a logarithmic regression model
 model <- lm(y ~ log(x), data = df)
 
+# ## thin df to not include the positive tilt at the end 
+# df = df[df$x < 1,]
+
 # 3. Plot the fitted line with confidence interval
-p = 
+p =
 ggplot(df, aes(x = x, y = y)) +
-  geom_smooth(method = "lm", formula = y ~ x + I(x^2), se = TRUE, col = "firebrick4") +
+  geom_smooth(method = "lm", formula = y ~ log(x), se = TRUE, col = "darkorange4") +
   labs(title = "H1: Negative predator-prey relationship", 
        x = "Predator abundance", y = "Prey abundance") +
   guides(color = "none") +
   theme_test() +  
+  # coord_cartesian(xlim = c(0.1, 3))+
   theme(
     axis.text = element_blank(),  # Removes axis values
     axis.ticks = element_blank(), # Removes axis ticks
-    axis.title.x = element_text(size = 20, family = "Times New Roman"),  # Adjusts x-axis title properties
-    axis.title.y = element_text(size = 20, family = "Times New Roman")   # Adjusts y-axis title properties
+    axis.title.x = element_text(size = 20, family = "Helvetica"),  # Adjusts x-axis title properties
+    axis.title.y = element_text(size = 20, family = "Helvetica")   # Adjusts y-axis title properties
   )
 
 # 4. save it!
-# ggsave("explore/H1_negative_concept_pred-prey_relationship_20230904.png", p,
-#        width = 6, height = 5, units = "in")
+ggsave("explore/H1_negative_concept_pred-prey_relationship_20231116.png", p,
+       width = 6, height = 5, units = "in")
 
 
 #### Now reverse it for the positive trend! 
@@ -4400,7 +3857,7 @@ ggplot(df, aes(x = x, y = y)) +
 set.seed(123)
 n <- 100
 x <- seq(0.1, 5, length.out = n)
-y <- 2 + 1.5 * exp(0.5 * x) + rnorm(n, 0, 5)  # Exponential relationship with some noise
+y <- 2 + 1.5 * exp(0.5 * x) + rnorm(n, 0, 7)  # Exponential relationship with some noise
 
 df <- data.frame(x = x, y = y)
 rm(n,x,y)
@@ -4411,7 +3868,7 @@ model <- lm(log(y - min(y) + 1) ~ x, data = df)
 # 3. Plot the fitted line with confidence interval
 p=
 ggplot(df, aes(x = x, y = y)) +
-  geom_smooth(method = "lm", formula = y ~ exp(x), se = TRUE, col = "darkgreen") +
+  geom_smooth(method = "lm", formula = y ~ exp(x), se = TRUE, col = "springgreen4") +
   labs(title = "H2: Positive prey-predator relationship", 
        x = "Prey abundance", y = "Predator abundance") +
   guides(color = "none") +
@@ -4424,11 +3881,11 @@ ggplot(df, aes(x = x, y = y)) +
   )
 
 ## 4. save it! 
-# ggsave("explore/H2_positive_concept_pred-prey_relationship_20230904.png", p,
+# ggsave("explore/H2_positive_concept_pred-prey_relationship_20231116.png", p,
 #        width = 6, height = 5, units = "in")
 
 ## keep it clean!
-rm(df, concept_col, model)
+rm(df, concept_col, model, p)
 
 ##### Visualize interaction across community via matrix ######
 

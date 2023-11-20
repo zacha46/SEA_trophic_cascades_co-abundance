@@ -1147,10 +1147,19 @@ plot_dat$rel_species = factor(plot_dat$rel_species, levels = c("Neofelis_genus",
                                                                "Panthera_pardus","Panthera_tigris",
                                                                  "All_large_carnivores"))
 
+
+## manually add tiger~ pig + rusa models from middle settings for quick plotting
+## still running on HPC at time of making
+plot_dat$Interaction_Estimate[plot_dat$Species_Pair == "SUB-Panthera_tigris~DOM-Rusa_unicolor"] = 0.15
+plot_dat$support_liberal[plot_dat$Species_Pair == "SUB-Panthera_tigris~DOM-Rusa_unicolor"] = "Supported"
+
+plot_dat$Interaction_Estimate[plot_dat$Species_Pair == "SUB-Panthera_tigris~DOM-Sus_scrofa"] = 0.16
+plot_dat$support_liberal[plot_dat$Species_Pair == "SUB-Panthera_tigris~DOM-Sus_scrofa"] = "Supported"
+
+
 ## create a new column for simple groupings: top-down, bottom-up and unsupported
 plot_dat$support_simple = plot_dat$direction
 plot_dat$support_simple_liberal = plot_dat$direction
-
 
 ### edit support_simple to allow for unsupported mods
 plot_dat$support_simple[grepl("Unsupported", plot_dat$support)] = "unsupported"
@@ -1160,12 +1169,14 @@ table(plot_dat$support_simple)
 plot_dat$support_simple_liberal[grepl("Unsupported", plot_dat$support_liberal)] = "unsupported"
 table(plot_dat$support_simple_liberal)
 
-## remove NA values from plot_dat --> from non-completed mods
+
+
+# ## remove NA values from plot_dat --> from non-completed mods
 plot_dat = plot_dat[! is.na(plot_dat$Interaction_Estimate), ]
 
 ## Check if there are extreme species interaction values (> |3|)
 summary(plot_dat$Interaction_Estimate) 
-## Problematic species pair: SUB-Panthera_pardus~DOM-Paradoxurus_hermaphroditus
+plot_dat[plot_dat$Interaction_Estimate < -3,] ## Problematic species pair: SUB-Panthera_pardus~DOM-Paradoxurus_hermaphroditus
 ## good model fit, but unsupported_1 (SIV in wrong direction). Remove for plotting
 
 ## for plotting sake, remove anything < -3
@@ -1184,6 +1195,48 @@ plot_dat$support_simple_liberal = factor(plot_dat$support_simple_liberal, levels
 ## catch a tricky typo! 
 plot_dat$Species_Pair[plot_dat$support_simple_liberal == "bottom-up" & plot_dat$Interaction_Estimate < 0] # these should be top-down! 
 plot_dat$support_simple_liberal[plot_dat$Species_Pair == "SUB-Neofelis_genus~DOM-Cuon_alpinus"] = "top-down"
+
+## make the support column more informative
+plot_dat$support[plot_dat$support == "Supported" & plot_dat$direction == "top-down"] = "top-down"
+plot_dat$support_liberal[plot_dat$support_liberal == "Supported" & plot_dat$direction == "top-down"] = "top-down"
+plot_dat$support[plot_dat$support == "Supported" & plot_dat$direction == "bottom-up"] = "bottom-up"
+plot_dat$support_liberal[plot_dat$support_liberal == "Supported" & plot_dat$direction == "bottom-up"] = "bottom-up"
+
+## make letters all lowercase
+plot_dat$support= tolower(plot_dat$support)
+plot_dat$support_liberal = tolower(plot_dat$support_liberal)
+
+## and set factor level 
+plot_dat$support = factor(plot_dat$support, levels = c("top-down", "bottom-up", 
+                                                       "unsupported_1", "unsupported_2",
+                                                       "unsupported_3"))
+plot_dat$support_liberal = factor(plot_dat$support_liberal, levels = c("top-down", "bottom-up", 
+                                                                       "unsupported_1", "unsupported_2",
+                                                                       "unsupported_3"))
+## Catch typo that was caught for simple support earlier!
+plot_dat$support_liberal[plot_dat$Species_Pair == "SUB-Neofelis_genus~DOM-Cuon_alpinus"] = "top-down"
+
+
+
+#### For the conceptual figure, make a plot that has all large carnivores w/ all mods w/ unsupported grouped together @ liberal settings
+# make a new col 
+plot_dat$support2 = as.character(plot_dat$support_liberal)
+plot_dat$support2[grepl("unsupported", plot_dat$support2)] = "unsupported"
+table(plot_dat$support2)
+
+## catch typo
+plot_dat$support2[plot_dat$Species_Pair == "SUB-Panthera_tigris~DOM-Rusa_unicolor"] = "bottom-up"
+plot_dat$support2[plot_dat$Species_Pair == "SUB-Panthera_tigris~DOM-Sus_scrofa"] = "bottom-up"
+
+# set factor levels
+plot_dat$support2 = factor(plot_dat$support2, levels = c("top-down", "bottom-up", 
+                                                         "unsupported"))
+anyNA(plot_dat$support2) # MUST BE F
+
+## set colors 
+three_colors = c("unsupported" = "gray32",
+                 "top-down" = "darkorange4",
+                 "bottom-up" = "springgreen4")
 
 #
 ##
@@ -2062,25 +2115,25 @@ table(plot_dat$support_liberal[plot_dat$direction == "top-down"])
 table(plot_dat$support[plot_dat$direction == "bottom-up"])
 table(plot_dat$support_liberal[plot_dat$direction == "bottom-up"])
 
-## make the support column more informative
-plot_dat$support[plot_dat$support == "Supported" & plot_dat$direction == "top-down"] = "top-down"
-plot_dat$support_liberal[plot_dat$support_liberal == "Supported" & plot_dat$direction == "top-down"] = "top-down"
-plot_dat$support[plot_dat$support == "Supported" & plot_dat$direction == "bottom-up"] = "bottom-up"
-plot_dat$support_liberal[plot_dat$support_liberal == "Supported" & plot_dat$direction == "bottom-up"] = "bottom-up"
-
-## make letters all lowercase
-plot_dat$support= tolower(plot_dat$support)
-plot_dat$support_liberal = tolower(plot_dat$support_liberal)
-
-## and set factor level 
-plot_dat$support = factor(plot_dat$support, levels = c("top-down", "bottom-up", 
-                                                       "unsupported_1", "unsupported_2",
-                                                       "unsupported_3"))
-plot_dat$support_liberal = factor(plot_dat$support_liberal, levels = c("top-down", "bottom-up", 
-                                                                         "unsupported_1", "unsupported_2",
-                                                                         "unsupported_3"))
-## Catch typo that was caught for simple support earlier!
-plot_dat$support_liberal[plot_dat$Species_Pair == "SUB-Neofelis_genus~DOM-Cuon_alpinus"] = "top-down"
+# ## make the support column more informative
+# plot_dat$support[plot_dat$support == "Supported" & plot_dat$direction == "top-down"] = "top-down"
+# plot_dat$support_liberal[plot_dat$support_liberal == "Supported" & plot_dat$direction == "top-down"] = "top-down"
+# plot_dat$support[plot_dat$support == "Supported" & plot_dat$direction == "bottom-up"] = "bottom-up"
+# plot_dat$support_liberal[plot_dat$support_liberal == "Supported" & plot_dat$direction == "bottom-up"] = "bottom-up"
+# 
+# ## make letters all lowercase
+# plot_dat$support= tolower(plot_dat$support)
+# plot_dat$support_liberal = tolower(plot_dat$support_liberal)
+# 
+# ## and set factor level 
+# plot_dat$support = factor(plot_dat$support, levels = c("top-down", "bottom-up", 
+#                                                        "unsupported_1", "unsupported_2",
+#                                                        "unsupported_3"))
+# plot_dat$support_liberal = factor(plot_dat$support_liberal, levels = c("top-down", "bottom-up", 
+#                                                                          "unsupported_1", "unsupported_2",
+#                                                                          "unsupported_3"))
+# ## Catch typo that was caught for simple support earlier!
+# plot_dat$support_liberal[plot_dat$Species_Pair == "SUB-Neofelis_genus~DOM-Cuon_alpinus"] = "top-down"
 
 ### set up the new colors 
 new_colors = c("unsupported_1" = "gray87",
@@ -2148,7 +2201,7 @@ p = plot_grid(plotlist = plot_list_lib, align = "v",
               ncol = 1, nrow = length(plot_list_lib)) #
 # and save it! 
 # ggsave(paste("figures/Grouped Histograms/Histogram_multi_unsupported_and_supported_LIBERAL_species_interaction_all_mods_HALF_LONG_",date, ".png", sep = ""),
-               # p, width = 8, height = 10, units = "in")
+# p, width = 8, height = 10, units = "in")
 
 ### MAKE CUSTOM SIZED PLOTS
 {
@@ -2180,8 +2233,8 @@ p = plot_grid(plotlist = plot_list_lib, align = "v",
           axis.text = element_text(color = "black"),
           text = element_text(family = "Helvetica"))
   ## save it! 
-  # ggsave(paste("figures/Grouped Histograms/custom_size_histo/Histogram_all_large_carnivores_LIBERAL_multi_unsupported_and_supported_species_interaction_all_mods_HALF_LONG_",date, ".png", sep = ""),
-  #        p, width = 10, height = 4, units = "in")
+  ggsave(paste("figures/Grouped Histograms/custom_size_histo/Histogram_all_large_carnivores_LIBERAL_multi_unsupported_and_supported_species_interaction_all_mods_HALF_LONG_",date, ".png", sep = ""),
+         p, width = 10, height = 4, units = "in")
 
   for(i in 1:length(unique(plot_dat$rel_species))){
     
@@ -2220,12 +2273,12 @@ p = plot_grid(plotlist = plot_list_lib, align = "v",
             text = element_text(family = "Helvetica"))
     
     # and save it!
-    # ggsave(paste("figures/Grouped Histograms/custom_size_histo/Histogram_", r, "_LIBERAL_multi_unsupported_and_supported_species_interaction_all_mods_HALF_LONG_",date, ".png", sep = ""),
-    #        p, width = 5, height = 2, units = "in")
+    ggsave(paste("figures/Grouped Histograms/custom_size_histo/Histogram_", r, "_LIBERAL_multi_unsupported_and_supported_species_interaction_all_mods_HALF_LONG_",date, ".png", sep = ""),
+           p, width = 5, height = 2, units = "in")
     
   }
   # clean it up
-  rm(i,m,p)
+  rm(i,r,p)
   
 }
 
@@ -2268,14 +2321,19 @@ perc_table$percent = perc_table$num_lvl / perc_table$num_total * 100
 # save it for fig making 
 # write.csv(perc_table, paste("results/summarized_results/percentages_for_all_level_LIBERAL_histogram_fig_", date, ".csv", sep = ""), row.names = F)
 
-#### For the conceptual figure, make a plot that has all large carnivores w/ all mods w/ unsupported grouped together @ liberal settings
-# make a new col 
-plot_dat$support2 = as.character(plot_dat$support_liberal)
-plot_dat$support2[grepl("unsupported", plot_dat$support2)] = "unsupported"
-table(plot_dat$support2)
-# set factor levels
-plot_dat$support2 = factor(plot_dat$support2, levels = c("top-down", "bottom-up", 
-                                                         "unsupported"))
+# #### For the conceptual figure, make a plot that has all large carnivores w/ all mods w/ unsupported grouped together @ liberal settings
+# # make a new col 
+# plot_dat$support2 = as.character(plot_dat$support_liberal)
+# plot_dat$support2[grepl("unsupported", plot_dat$support2)] = "unsupported"
+# table(plot_dat$support2)
+# # set factor levels
+# plot_dat$support2 = factor(plot_dat$support2, levels = c("top-down", "bottom-up", 
+#                                                          "unsupported"))
+# 
+# ## set colors 
+# three_colors = c("unsupported" = "gray32",
+#                "top-down" = "darkorange4",
+#                "bottom-up" = "springgreen4")
 
 ## make the graph, omititng the one very negative value 
 p = 
@@ -2284,9 +2342,10 @@ p =
   geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1, alpha = 1)+#, position = "dodge")+
   theme_classic()+
   geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
-  scale_fill_manual(values = new_colors) +
+  scale_fill_manual(values = three_colors) +
   labs(x = "Species Interaction Value", y = "Count", color = NULL, title = paste("all_large_carnivores all prey liberal"))+
   guides(fill = "none") + 
+  # coord_cartesian((xlim = c(-2,2)))+
   theme(axis.text.x = element_text(size = 16),
         axis.text.y = element_text(size = 16),
         axis.text = element_text(color = "black"),
@@ -2295,16 +2354,99 @@ p =
 # ggsave(paste("figures/Grouped Histograms/Histogram_all_large_carnivores_LIBERAL_single_unsupported_and_supported_all_mods_", date, ".png", sep = ""), p,
 #        width = 12, height = 4, units = "in")
 
+# ggsave(paste("figures/Grouped Histograms/Histogram_all_large_carnivores_LIBERAL_single_unsupported_and_supported_all_mods_", date, ".png", sep = ""), p,
+#        width = 12, height = 4, units = "in")
 
-
-## keep it clean! 
-rm(plot_list, plot_list_lib, perc_table)
+# 
+# ### JUST TO MAKE SURE THEY ARE SUPER CONSISTENT, 
+# ## make the hypothesized plot below. 
+# {
+#   ### Will generate two histograms, and both will have two distributions:
+#   # H1 --> negative distribution + norm distribution
+#   # H2 --> positive distribution + norm distribution
+#   
+#   ## Use the sn pacakge to generate specified distributions
+#   library(sn)
+#   
+#   # Set a seed for reproducibility
+#   set.seed(123)
+#   
+#   # Central Normal distribution with mean=0
+#   normal_data <- rnorm(100, mean = 0, sd = 6) # equal
+#   
+#   # Negative-skewed Normal distribution with mean= -2
+#   # Using shape parameter to achieve negative skewness
+#   negative_dat <- rsn(100, xi = -2, omega = 5, alpha = -3) # equal
+#   
+#   # Positive-skewed Normal distribution with mean=2
+#   # Using shape parameter to achieve positive skewness
+#   positive_dat <- rsn(100, xi = 2, omega = 5, alpha = 3) # equal
+#   
+#   
+#   # Combine data into one data frame
+#   df <- data.frame(
+#     value = c(positive_dat, negative_dat, normal_data),
+#     distribution = factor(c(rep("positive_dat", length(positive_dat)),
+#                             rep("negative_dat", length(negative_dat)),
+#                             rep("Normal", length(normal_data)))),
+#     baseline = 0
+#   )
+#   rm(normal_data, positive_dat, negative_dat)
+#   
+#   ## make sure normal distribution goes behind the non-normal one!
+#   df$distribution = factor(df$distribution, levels = c("positive_dat", "negative_dat","Normal"))
+#   
+#   ## set colors 
+#   concept_cols = c("Normal" = "gray32",
+#                    "negative_dat" = "darkorange4",
+#                    "positive_dat" = "springgreen4")
+#   
+#   ## make the x-axis closer to what the results are
+#   df$value = df$value / 8 # smaller range
+#   
+#   ## make sure no negative values are positive!
+#   df$value[df$distribution == "negative_dat" & df$value > 0] = (df$value[df$distribution == "negative_dat" & df$value > 0]) * -1
+#   ## and vice versa
+#   df$value[df$distribution == "positive_dat" & df$value < 0] = (df$value[df$distribution == "positive_dat" & df$value < 0]) * -1
+#   
+#   ## grab relevant min and max values
+#   min = min(plot_dat$Interaction_Estimate[plot_dat$rel_species == "All_large_carnivores" & plot_dat$Interaction_Estimate > -2])
+#   max = max(plot_dat$Interaction_Estimate[plot_dat$rel_species == "All_large_carnivores" & plot_dat$Interaction_Estimate > -2])
+#   
+#   
+#   ## Make a plot with both top down and bottom up 
+#   p = 
+#     ggplot(df, aes(x = value, fill = distribution))+
+#     geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1)+#, position = "dodge")+
+#     theme_classic()+
+#     geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+#     scale_fill_manual(values = concept_cols) +
+#     labs(x = "Species Interaction Value", y = "Count", color = NULL, title = "both hypothesis")+
+#     guides(fill = "none") + 
+#     coord_cartesian((xlim = c(-2,2)))+
+#     theme(axis.text.x = element_text(size = 16),
+#           axis.text.y = element_text(size = 16),
+#           axis.text = element_text(color = "black"),
+#           text = element_text(family = "Helvetica"))
+#   # ## save it!
+#   ggsave(paste("explore/H1&2_neg_and_pos_concept_histogram_wide_", date, ".png", sep = ""), p,
+#          width = 12, height = 4, units = "in")
+#   
+#   }
+# 
+# 
+# 
+# 
+# ## keep it clean! 
+# rm(plot_list, plot_list_lib, perc_table, 
+#    df, concept_cols, min, max)
 
 #
 ##
 ###
 ####
 ##### Repeat for preferred prey species too! 
+td_dat = plot_dat[plot_dat$direction == "top-down",]
 
 ## subset for each pref prey and then combine all
 a = td_dat[td_dat$rel_species == "Neofelis_genus" &
@@ -2338,6 +2480,7 @@ td_dat_pref$support_liberal= tolower(td_dat_pref$support_liberal)
 #
 ##
 ### Repeat the process for bottom-up 
+bu_dat = plot_dat[plot_dat$direction == "bottom-up",]
 
 ## subset for each pref prey and then combine all
 a = bu_dat[bu_dat$rel_species == "Neofelis_genus" &
@@ -2384,12 +2527,24 @@ pref_dat$support_liberal = factor(pref_dat$support_liberal, levels = c("top-down
                                                                       "unsupported_3"))
 table(pref_dat$support);table(pref_dat$support_liberal)
 
+## create a new support level that combines unsupported
+pref_dat$support2 = as.character(pref_dat$support_liberal)
+pref_dat$support2[grepl("unsupported", pref_dat$support2)] = "unsupported"
+
+pref_dat$support2 = factor(pref_dat$support2, 
+                           levels = c("top-down", "bottom-up","unsupported"))
+
+table(pref_dat$support2)
+anyNA(pref_dat$support2) # must be F! 
+
 ## Frequency plots 
 plot_list = list()
 plot_list_lib = list()
 
 order = c("All_large_carnivores","Panthera_tigris","Panthera_pardus", 
           "Cuon_alpinus", "Neofelis_genus")
+
+
 # # grab min and max vals 
 min_val = min(pref_dat$Interaction_Estimate)
 max_val = max(pref_dat$Interaction_Estimate)
@@ -2415,15 +2570,20 @@ for(i in 1:length(order)){
   ### Repeat for liberal values
   
   # make the plot 
-  p = ggplot(d, aes(x = Interaction_Estimate, fill = support_liberal))+
+  p = ggplot(d, aes(x = Interaction_Estimate, fill = support2))+
     geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1, alpha = 1)+#, position = "dodge")+
     # theme_minimal()+
     # theme_test()+
     theme_classic()+
     geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
-    scale_fill_manual(values = new_colors) +
+    # scale_fill_manual(values = new_colors) +
+    scale_fill_manual(values = three_colors) +
     coord_cartesian(xlim = c(min_val, max_val))+
-    labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])
+    labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])+
+    theme(axis.text.x = element_text(size = 16),
+          axis.text.y = element_text(size = 16),
+          axis.text = element_text(color = "black"),
+          text = element_text(family = "Helvetica"))
   
   # save it! 
   plot_list_lib[[i]] = p
@@ -2431,8 +2591,8 @@ for(i in 1:length(order)){
 rm(d,p,i, min_val, max_val)
 
 ## arrange them vertically 
-p = plot_grid(plotlist = plot_list, align = "v", 
-              ncol = 1, nrow = length(plot_list)) # 
+# p = plot_grid(plotlist = plot_list, align = "v", 
+#               ncol = 1, nrow = length(plot_list)) # 
 # and save it! 
 # ggsave(paste("figures/Grouped Histograms/Histogram_multi_unsupported_and_supported_species_interaction_preferred_prey_HALF_LONG_",date, ".png", sep = ""),
 #                p, width = 8, height = 10, units = "in")
@@ -2546,24 +2706,24 @@ perc_table$percent = perc_table$num_lvl / perc_table$num_total * 100
 # write.csv(perc_table, paste("results/summarized_results/percentages_for_histogram_fig_preferred_prey_", date, ".csv", sep = ""), row.names = F)
 
 ### Repeat for liberal groupings
-perc_table = ddply(pref_dat, .(rel_species, support_liberal), summarize,
+pref_perc_table = ddply(pref_dat, .(rel_species, support_liberal), summarize,
                    num_lvl = length(Species_Pair))
 # then total number of mods per species
-perc_table$num_total[perc_table$rel_species == "Neofelis_genus"] = 
-  sum(perc_table$num_lvl[perc_table$rel_species == "Neofelis_genus"])
-perc_table$num_total[perc_table$rel_species == "Cuon_alpinus"] = 
-  sum(perc_table$num_lvl[perc_table$rel_species == "Cuon_alpinus"])
-perc_table$num_total[perc_table$rel_species == "Panthera_pardus"] = 
-  sum(perc_table$num_lvl[perc_table$rel_species == "Panthera_pardus"])
-perc_table$num_total[perc_table$rel_species == "Panthera_tigris"] = 
-  sum(perc_table$num_lvl[perc_table$rel_species == "Panthera_tigris"])
-perc_table$num_total[perc_table$rel_species == "All_large_carnivores"] = 
-  sum(perc_table$num_lvl[perc_table$rel_species == "All_large_carnivores"])
+pref_perc_table$num_total[pref_perc_table$rel_species == "Neofelis_genus"] = 
+  sum(pref_perc_table$num_lvl[pref_perc_table$rel_species == "Neofelis_genus"])
+pref_perc_table$num_total[pref_perc_table$rel_species == "Cuon_alpinus"] = 
+  sum(pref_perc_table$num_lvl[pref_perc_table$rel_species == "Cuon_alpinus"])
+pref_perc_table$num_total[pref_perc_table$rel_species == "Panthera_pardus"] = 
+  sum(pref_perc_table$num_lvl[pref_perc_table$rel_species == "Panthera_pardus"])
+pref_perc_table$num_total[pref_perc_table$rel_species == "Panthera_tigris"] = 
+  sum(pref_perc_table$num_lvl[pref_perc_table$rel_species == "Panthera_tigris"])
+pref_perc_table$num_total[pref_perc_table$rel_species == "All_large_carnivores"] = 
+  sum(pref_perc_table$num_lvl[pref_perc_table$rel_species == "All_large_carnivores"])
 # finally calulate the percent-
-perc_table$percent = perc_table$num_lvl / perc_table$num_total * 100
+pref_perc_table$percent = pref_perc_table$num_lvl / pref_perc_table$num_total * 100
 
 # save it for fig making 
-# write.csv(perc_table, paste("results/summarized_results/percentages_for_LIBERAL_histogram_fig_preferred_prey_", date, ".csv", sep = ""), row.names = F)
+# write.csv(pref_perc_table, paste("results/summarized_results/percentages_for_LIBERAL_histogram_fig_preferred_prey_", date, ".csv", sep = ""), row.names = F)
 
 
 #### For the conceptual figure, make a plot that has all large carnivores w/ preferred prey w/ unsupported grouped together @ liberal settings
@@ -2574,6 +2734,11 @@ table(pref_dat$support2)
 # set factor levels
 pref_dat$support2 = factor(pref_dat$support2, levels = c("top-down", "bottom-up", 
                                                          "unsupported"))
+## set colors 
+three_colors = c("unsupported" = "gray32",
+                 "top-down" = "darkorange4",
+                 "bottom-up" = "springgreen4")
+
 
 ## make the graph
 p = 
@@ -2581,7 +2746,7 @@ ggplot(pref_dat[pref_dat$rel_species == "All_large_carnivores",], aes(x = Intera
   geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1, alpha = 1)+#, position = "dodge")+
   theme_classic()+
   geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
-  scale_fill_manual(values = new_colors) +
+  scale_fill_manual(values = three_colors) +
   labs(x = "Species Interaction Value", y = "Count", color = NULL, title = paste("all_large_carnivores preferred prey liberal"))+
   guides(fill = "none") + 
   theme(axis.text.x = element_text(size = 16),
@@ -2591,6 +2756,9 @@ ggplot(pref_dat[pref_dat$rel_species == "All_large_carnivores",], aes(x = Intera
 
 # ggsave(paste("figures/Grouped Histograms/Histogram_all_large_carnivores_LIBERAL_single_unsupported_and_supported_preferred_prey_", date, ".png", sep = ""), p,
 #        width = 12, height = 4, units = "in")
+
+
+
 
 
 
@@ -2931,6 +3099,11 @@ str(est_abund) # already numeric
 head(pred_abund) #Predicted change in subordinate abundance as a function of dominant species abundance
 str(pred_abund) # already numeric
 
+## set colors 
+three_colors = c("unsupported" = "gray32",
+                 "top-down" = "darkorange4",
+                 "bottom-up" = "springgreen4")
+
 
 ## repeat for each species pair 
 for(i in 1:length(unique(pred_abund$Species_Pair))){
@@ -2961,29 +3134,88 @@ for(i in 1:length(unique(pred_abund$Species_Pair))){
   title = paste("Dominant species:", n_split[2], 
                 "affects subordinate species:", n_split[1])
   
+  ## make plots according to support level color 
+  if(preform$support_liberal[preform$Species_Pair == n] == "Supported"){
+    
+    ## make the top-down plot 
+    if(preform$direction[preform$Species_Pair == n] == "top-down"){
+      
+      p = 
+        ggplot(pred, aes(y = Predicted.N, x = var))+
+        geom_line(color = "darkorange4", linewidth = 2)+
+        geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.1, color = "black", linetype = "dashed")+
+        labs(y = paste0(n_split[1], " Abundance"), 
+             x = paste0(n_split[2], " Abundance"),
+             title = title, color = NULL)+ 
+        guides(color = "none") + # way too many landscapes to list them now. 
+        theme_test()+
+        theme(axis.text.x = element_text(size = 22),
+              axis.text.y = element_text(size = 22),
+              axis.text = element_text(color = "black"),
+              text = element_text(family = "Helvetica"))
+      
+    } # end top-down
+    
+    # make the bottom-up plot
+    if(preform$direction[preform$Species_Pair == n] == "bottom-up"){
+      
+      
+      p = 
+        ggplot(pred, aes(y = Predicted.N, x = var))+
+        geom_line(color = "springgreen4", linewidth = 2)+
+        geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.1, color = "black", linetype = "dashed")+
+        labs(y = paste0(n_split[1], " Abundance"), 
+             x = paste0(n_split[2], " Abundance"),
+             title = title, color = NULL)+ 
+        guides(color = "none") + # way too many landscapes to list them now. 
+        theme_test()+
+        theme(axis.text.x = element_text(size = 22),
+              axis.text.y = element_text(size = 22),
+              axis.text = element_text(color = "black"),
+              text = element_text(family = "Helvetica"))
+      
+    } # end bottom-up
+    
+  }else{
+    
+    ## make the unsupported plot 
+    p = 
+      ggplot(pred, aes(y = Predicted.N, x = var))+
+           geom_line(color = "black", linewidth = 2)+
+      geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.1, color = "black", linetype = "dashed")+
+      labs(y = paste0(n_split[1], " Abundance"), 
+           x = paste0(n_split[2], " Abundance"),
+           title = title, color = NULL)+ 
+      guides(color = "none") + # way too many landscapes to list them now. 
+      theme_test()+
+      theme(axis.text.x = element_text(size = 22),
+            axis.text.y = element_text(size = 22),
+            axis.text = element_text(color = "black"),
+            text = element_text(family = "Helvetica"))
+    
+  }
   
   ## make the plot! 
-  # Hashed out lines are different styles you can test out. 
-  p = 
-  ggplot(pred, aes(y = Predicted.N, x = var))+
-    # geom_point(data = est, aes(y = Sub_abundance, x = Dom_abundance, color = Landscape), alpha = 0.5, inherit.aes = F)+
-    # geom_jitter(data = est, aes(y = Sub_abundance, x = Dom_abundance, color = Landscape), width = .5)+
-    geom_line(color = "black", linewidth = 2)+
-    geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.1, color = "black", linetype = "dashed")+
-    # geom_errorbar(data = est, aes(y = Sub_abundance, x = Dom_abundance,
-    #                                  ymin = lower_sub, ymax = upper_sub), alpha = 0.2, inherit.aes = F)+
-    # geom_errorbarh(data = est, aes(y = Sub_abundance, x = Dom_abundance,
-    #                                   xmin = lower_dom, xmax = upper_dom), alpha = 0.2, inherit.aes = F)+
-    labs(y = paste0(n_split[1], " Abundance"), 
-         x = paste0(n_split[2], " Abundance"),
-         title = title, color = NULL)+ 
-    guides(color = "none") + # way too many landscapes to list them now. 
-    theme_test()+
-
-    theme(axis.text.x = element_text(size = 16),
-          axis.text.y = element_text(size = 16),
-          axis.text = element_text(color = "black"),
-          text = element_text(family = "Helvetica"))
+  # # Hashed out lines are different styles you can test out. 
+  # p = 
+  # ggplot(pred, aes(y = Predicted.N, x = var))+
+  #   # geom_point(data = est, aes(y = Sub_abundance, x = Dom_abundance, color = Landscape), alpha = 0.5, inherit.aes = F)+
+  #   # geom_jitter(data = est, aes(y = Sub_abundance, x = Dom_abundance, color = Landscape), width = .5)+
+  #   geom_line(color = "black", linewidth = 2)+
+  #   geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.1, color = "black", linetype = "dashed")+
+  #   # geom_errorbar(data = est, aes(y = Sub_abundance, x = Dom_abundance,
+  #   #                                  ymin = lower_sub, ymax = upper_sub), alpha = 0.2, inherit.aes = F)+
+  #   # geom_errorbarh(data = est, aes(y = Sub_abundance, x = Dom_abundance,
+  #   #                                   xmin = lower_dom, xmax = upper_dom), alpha = 0.2, inherit.aes = F)+
+  #   labs(y = paste0(n_split[1], " Abundance"), 
+  #        x = paste0(n_split[2], " Abundance"),
+  #        title = title, color = NULL)+ 
+  #   guides(color = "none") + # way too many landscapes to list them now. 
+  #   theme_test()+
+  #   theme(axis.text.x = element_text(size = 16),
+  #         axis.text.y = element_text(size = 16),
+  #         axis.text = element_text(color = "black"),
+  #         text = element_text(family = "Helvetica"))
     # coord_cartesian(xlim = c(0, max(est$Dom_abundance)),
     #                 ylim = c(0, max(est$Sub_abundance)))
   
@@ -2991,7 +3223,7 @@ for(i in 1:length(unique(pred_abund$Species_Pair))){
   path = paste("figures/", paste(gp, n, sep = "/"), "/Prediction_plot_", n, "_", date, ".png", sep = "")
   
   ## save the dang thang 
-  # ggsave(path, p, width = 6, height = 6, units = "in")
+  ggsave(path, p, width = 5, height = 4, units = "in")
  
  }
 rm(path, p,i, title, n, n_split, gp, est, pred, day, month, year, date)

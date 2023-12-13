@@ -23,7 +23,7 @@
 #SBATCH --time=8:00:00
 
 # SPECIFY THE JOB ARRAY-
-#SBATCH --array=1-279
+#SBATCH --array=1-116
 
 # SPECIFY THE JOB NAME
 #SBATCH --job-name=CoA_SHORT
@@ -47,4 +47,4 @@ cd $SLURM_SUBMIT_DIR
 pwd
 
 # LOAD THE R SCRIPT, SUBMIT JOB FROM /scratch/user/uqzamir/, AND SPECIFY THE ARRAY INDEX 
-Rscript code/co-abundance/HPC_co-abundance_model.R $SLURM_ARRAY_TASK_ID
+Rscript code/co-abundance/HPC_AWT_co-abundance_model.R $SLURM_ARRAY_TASK_ID

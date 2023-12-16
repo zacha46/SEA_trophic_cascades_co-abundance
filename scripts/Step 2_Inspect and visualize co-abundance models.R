@@ -14,10 +14,10 @@ rm(list = ls())
 library(tidyverse)
 library(plyr)
 library(cowplot) # for arranging plots 
+library(lme4) # For post-hoc regressions
 
 
 # library(metafor) # for meta-analysis of effect sizes
-# library(lme4) # For post-hoc regressions
 # library(ggpubr) # for fancy histo + density plots 
 # library(fs) # for moving files around 
 # library(ggridges) # for ridgeline plots 
@@ -28,7 +28,7 @@ library(cowplot) # for arranging plots
 # library(traitdata) # for species trait data
 
 ## set WD (should be automatic b/c RProj, but being safe anyway)
-setwd("/Users/zachary_amir/Dropbox/Zach PhD/Trophic release project/SEA_trophic_cascades_co-abundance")
+setwd("/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_trophic_cascades_co-abundance")
 
 ## Import clean cam trap data here for referencing
 og_resamp_captures = read.csv("data/send_to_HPC/clean_captures_to_make_UMFs_20230821.csv")
@@ -59,7 +59,8 @@ all_combos = names(bdata)
 ## This will do nothing if there are no duplicates, so its ok to run thru. 
 
 # List all files in the coefficents folder
-file_list <- dir("results/coefficent_dataframes/", full.names = TRUE)
+file_list <- dir("results/HALF_LONG_testing_Oct_2023/coefficent_dataframes/", full.names = TRUE)
+file_list = file_list[!grepl("OLD", file_list)] # remove the old 
 
 # Extract the filenames without the date
 file_names <- basename(file_list) %>% str_remove("\\d{8}\\.csv$")
@@ -558,34 +559,29 @@ table(preform$parameter_valid[!is.na(preform$Interaction_Estimate)])[1]/
   length(preform$Species_Pair[!is.na(preform$Interaction_Estimate)]) * 100
 ## only 21% have invalid parameters
 
-## Which species pairs involved large carnivores significantly regulating the abundance of other critters?
-
-## conservative settings-
-preform$Species_Pair[preform$Interaction_Estimate < 0 & 
-                       preform$Significance == "Significant" &
-                       preform$parameter_valid == "Yes" & 
-                       preform$BPV_valid == "Yes" & 
-                       grepl("DOM-Large_Carnivore", preform$guild_pair)] 
-## liberal settings
-preform$Species_Pair[preform$Interaction_Estimate < 0 & 
-                       preform$Significance == "Significant" &
-                       preform$parameter_valid == "Yes" & 
-                       preform$BPV_valid_liberal == "Yes" & 
-                       grepl("DOM-Large_Carnivore", preform$guild_pair)] 
-## much more to work with here! 
-
-
-## Are there models with a good fit, but invalid SIV?
-preform$Species_Pair[preform$BPV_valid == "Yes" &
-                       preform$parameter_valid == "No"] # 14! This is odd
-
 ## Add the direction of the relationship
 preform$direction[preform$sub_species %in% c("Panthera_tigris", "Panthera_pardus", 
                                              "Neofelis_genus", "Cuon_alpinus")] = "bottom-up"
 preform$direction[preform$dom_species %in% c("Panthera_tigris", "Panthera_pardus", 
                                              "Neofelis_genus", "Cuon_alpinus")] = "top-down" # this should allow large carnivore pairings to be top-down
 ## address the large carnivore pairings as top-down
-preform$Species_Pair[preform$guild_pair == "SUB-Large_Carnivore~DOM-Large_Carnivore"] # they are all top-down already... 
+preform$Species_Pair[preform$guild_pair == "SUB-Large_Carnivore~DOM-Large_Carnivore"] 
+unique(preform$direction[preform$guild_pair == "SUB-Large_Carnivore~DOM-Large_Carnivore"]) # they are all top-down, good! 
+
+## add a column to preform to determine if the model is a preferred prey species or not
+preform$preference = "community"
+# top-downs
+preform$preference[preform$dom_sp == "Panthera_tigris" & preform$sub_sp %in% guilds$scientificNameStd[guilds$tiger_pref == "Yes"]] = "preferred"
+preform$preference[preform$dom_sp == "Panthera_pardus" & preform$sub_sp %in% guilds$scientificNameStd[guilds$leopard_pref == "Yes"]] = "preferred"
+preform$preference[preform$dom_sp == "Neofelis_genus" & preform$sub_sp %in% guilds$scientificNameStd[guilds$CL_pref == "Yes"]] = "preferred"
+preform$preference[preform$dom_sp == "Cuon_alpinus" & preform$sub_sp %in% guilds$scientificNameStd[guilds$dhole_pref == "Yes"]] = "preferred"
+# bottoms-up
+preform$preference[preform$sub_sp == "Panthera_tigris" & preform$dom_sp %in% guilds$scientificNameStd[guilds$tiger_pref == "Yes"]] = "preferred"
+preform$preference[preform$sub_sp == "Panthera_pardus" & preform$dom_sp %in% guilds$scientificNameStd[guilds$leopard_pref == "Yes"]] = "preferred"
+preform$preference[preform$sub_sp == "Neofelis_genus" & preform$dom_sp %in% guilds$scientificNameStd[guilds$CL_pref == "Yes"]] = "preferred"
+preform$preference[preform$sub_sp == "Cuon_alpinus" & preform$dom_sp %in% guilds$scientificNameStd[guilds$dhole_pref == "Yes"]] = "preferred"
+## how many do we have?
+table(preform$preference) # 66 preferred, 194 not. 66 + 914 = 260, all accounted for! 
 
 
 ## Assign 3 levels of non-support --> unsupported_1, unsupported_2, unsupported_3
@@ -668,6 +664,25 @@ table(preform$support_liberal[!is.na(preform$Interaction_Estimate)]);anyNA(prefo
 # who is supported?
 preform[preform$support_liberal == "Supported", ] # mostly bottom up! Also lots of random species pairings here... 
 
+## Which species pairs involved large carnivores significantly regulating the abundance of other critters?
+## conservative settings-
+preform$Species_Pair[preform$Interaction_Estimate < 0 & 
+                       preform$Significance == "Significant" &
+                       preform$parameter_valid == "Yes" & 
+                       preform$BPV_valid == "Yes" & 
+                       grepl("DOM-Large_Carnivore", preform$guild_pair)] 
+## liberal settings
+preform$Species_Pair[preform$Interaction_Estimate < 0 & 
+                       preform$Significance == "Significant" &
+                       preform$parameter_valid == "Yes" & 
+                       preform$BPV_valid_liberal == "Yes" & 
+                       grepl("DOM-Large_Carnivore", preform$guild_pair)] 
+## much more to work with here! 
+
+
+## Are there models with a good fit, but invalid SIV?
+preform$Species_Pair[preform$BPV_valid == "Yes" &
+                       preform$parameter_valid == "No"] # 14! This is odd
 
 ### This is a super useful dataframe, will need to share this in the supplmentary tables section
 ## save it! 
@@ -696,12 +711,9 @@ a = td_plot_dat
 a$rel_species = "All_large_carnivores"
 td_plot_dat = rbind(td_plot_dat, a)
 
-## add direction
-td_plot_dat$direction = "top-down"
-
 
 ## grab bottom-up mods
-bu_plot_dat = preform[grepl("SUB-Large_Carnivore", preform$guild_pair),]
+bu_plot_dat = preform[preform$direction == "bottom-up",]
 
 ## create a new col that is the relevant species
 bu_plot_dat$rel_species = bu_plot_dat$sub_species
@@ -710,9 +722,6 @@ bu_plot_dat$rel_species = bu_plot_dat$sub_species
 a = bu_plot_dat
 a$rel_species = "All_large_carnivores"
 bu_plot_dat = rbind(bu_plot_dat, a)
-
-## add direction
-bu_plot_dat$direction = "bottom-up"
 
 ## remove any models where there is also a dominant large carnivore
 bu_plot_dat = bu_plot_dat[!grepl("DOM-Large_Carnivore", bu_plot_dat$guild_pair),]
@@ -768,10 +777,11 @@ plot_dat[plot_dat$Interaction_Estimate < -2,]
 plot_dat$support_simple = factor(plot_dat$support_simple, levels = c("top-down", "bottom-up", "unsupported"))
 plot_dat$support_simple_liberal = factor(plot_dat$support_simple_liberal, levels = c("top-down", "bottom-up", "unsupported"))
 
-## catch a tricky typo! 
-plot_dat$Species_Pair[plot_dat$support_simple_liberal == "bottom-up" & plot_dat$Interaction_Estimate < 0] # these should be top-down! 
-plot_dat$support_simple_liberal[plot_dat$Species_Pair == "SUB-Neofelis_genus~DOM-Cuon_alpinus"] = "top-down"
-plot_dat$support_liberal[plot_dat$Species_Pair == "SUB-Neofelis_genus~DOM-Cuon_alpinus"] = "top-down"
+# ## catch a tricky typo! 
+# plot_dat$Species_Pair[plot_dat$support_simple_liberal == "bottom-up" & plot_dat$Interaction_Estimate < 0] # these should be top-down! 
+# plot_dat$support_simple_liberal[plot_dat$Species_Pair == "SUB-Neofelis_genus~DOM-Cuon_alpinus"] = "top-down"
+# plot_dat$support_liberal[plot_dat$Species_Pair == "SUB-Neofelis_genus~DOM-Cuon_alpinus"] = "top-down"
+### Addressed in edits above! 
 
 ## make the support column more informative
 plot_dat$support[plot_dat$support == "Supported" & plot_dat$direction == "top-down"] = "top-down"
@@ -920,7 +930,7 @@ new_colors = c("unsupported_1" = "gray87",
 }
 
 ### histogram is the final move! 
-ggplot(plot_dat, aes(x = Interaction_Estimate, fill = support_simple_liberal))+
+ggplot(plot_dat[plot_dat$preference == "preferred",], aes(x = Interaction_Estimate, fill = support_simple_liberal))+
   geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .08, alpha = 1)+#, position = "dodge")+
   # theme_minimal()+
   # theme_test()+
@@ -1471,24 +1481,10 @@ p =
 ###
 ####
 ##### Repeat for preferred prey species too! 
-td_dat = plot_dat[plot_dat$direction == "top-down",]
-
-## subset for each pref prey and then combine all
-a = td_dat[td_dat$rel_species == "Neofelis_genus" &
-                   td_dat$sub_species %in% guilds$scientificNameStd[guilds$CL_pref == "Yes"],]
-b = td_dat[td_dat$rel_species == "Cuon_alpinus" &
-                   td_dat$sub_species %in% guilds$scientificNameStd[guilds$dhole_pref == "Yes"],]
-c = td_dat[td_dat$rel_species == "Panthera_pardus" &
-                   td_dat$sub_species %in% guilds$scientificNameStd[guilds$leopard_pref == "Yes"],]
-d = td_dat[td_dat$rel_species == "Panthera_tigris" &
-                   td_dat$sub_species %in% guilds$scientificNameStd[guilds$tiger_pref == "Yes"],]
-e = rbind(a,b,c,d)
-
-## double down for all_carns 
-f = e
-f$rel_species = "All_large_carnivores"
-td_dat_pref = rbind(f,e)
-rm(a,b,c,d,e,f)
+td_dat_pref = plot_dat[plot_dat$direction == "top-down" &
+                         plot_dat$preference == "preferred",]
+# insepct
+unique(td_dat_pref$rel_species) # all large carns already accounted for in plot dat! 
 
 ## inspect
 table(td_dat_pref$support);table(td_dat_pref$support_liberal) # all good! 
@@ -1497,24 +1493,10 @@ table(td_dat_pref$support);table(td_dat_pref$support_liberal) # all good!
 #
 ##
 ### Repeat the process for bottom-up 
-bu_dat = plot_dat[plot_dat$direction == "bottom-up",]
-
-## subset for each pref prey and then combine all
-a = bu_dat[bu_dat$rel_species == "Neofelis_genus" &
-                   bu_dat$dom_species %in% guilds$scientificNameStd[guilds$CL_pref == "Yes"],]
-b = bu_dat[bu_dat$rel_species == "Cuon_alpinus" &
-                   bu_dat$dom_species %in% guilds$scientificNameStd[guilds$dhole_pref == "Yes"],]
-c = bu_dat[bu_dat$rel_species == "Panthera_pardus" &
-                   bu_dat$dom_species %in% guilds$scientificNameStd[guilds$leopard_pref == "Yes"],]
-d = bu_dat[bu_dat$rel_species == "Panthera_tigris" &
-                   bu_dat$dom_species %in% guilds$scientificNameStd[guilds$tiger_pref == "Yes"],]
-e = rbind(a,b,c,d)
-
-## double down for all_carns 
-f = e
-f$rel_species = "All_large_carnivores"
-bu_dat_pref = rbind(f,e)
-rm(a,b,c,d,e,f)
+bu_dat_pref = plot_dat[plot_dat$direction == "bottom-up"&
+                         plot_dat$preference == "preferred",]
+# insepct
+unique(bu_dat_pref$rel_species) # all large carns already accounted for in plot dat! 
 
 ## inspect
 table(bu_dat_pref$support);table(bu_dat_pref$support_liberal) # all good! 
@@ -1592,8 +1574,8 @@ rm(d,p,i, min_val, max_val)
 p = plot_grid(plotlist = plot_list, align = "v",
               ncol = 1, nrow = length(plot_list)) #
 # and save it! 
-ggsave(paste("figures/Grouped Histograms/Histogram_SUPP_&_NONSUPP_&_CONSERVATIVE_SIVs_preferred_prey_HALF_LONG_",date, ".png", sep = ""),
-               p, width = 8, height = 10, units = "in")
+# ggsave(paste("figures/Grouped Histograms/Histogram_SUPP_&_NONSUPP_&_CONSERVATIVE_SIVs_preferred_prey_HALF_LONG_",date, ".png", sep = ""),
+#                p, width = 8, height = 10, units = "in")
 
 ## repeat for liberal grouping
 p = plot_grid(plotlist = plot_list_lib, align = "v", 
@@ -1620,8 +1602,57 @@ p =
 # ggsave(paste("figures/Grouped Histograms/Histogram_all_large_carnivores_LIBERAL_unsupported_and_supported_preferred_prey_", date, ".png", sep = ""), p,
 #        width = 12, height = 4, units = "in")
 
+#### COME HERE AND MAKE CONCEPT GRAPH EXACTLY THE SAME! 
+# Set a seed for reproducibility
+set.seed(123)
 
-### determine percentages in each category
+# Function to generate values within a specific range
+generate_values <- function(n, mean, sd, lower_limit, upper_limit) {
+  values <- numeric(n)
+  for (i in seq_len(n)) {
+    while (TRUE) {
+      value <- rnorm(1, mean = mean, sd = sd)
+      if (value >= lower_limit & value <= upper_limit) {
+        values[i] <- value
+        break
+      }
+    }
+  }
+  return(values)
+}
+
+# Generate synthetic data with a bimodal distribution, limiting values to -1 to 1.5
+neg <- data.frame("val" = generate_values(50, mean = -.2, sd = 0.2, lower_limit = -1, upper_limit = -.1), "label" = "top-down")
+pos <- data.frame("val" = generate_values(50, mean = -.4, sd = 0.4, lower_limit = .1, upper_limit = 1.5), "label" = "bottom-up")
+unsup <- data.frame("val" = generate_values(60, mean = 0, sd = 1, lower_limit = -1, upper_limit = 1.5), "label" = "unsupported")
+
+# Combine the dataframes
+dist <- rbind(neg, pos, unsup)
+rm(neg, pos, unsup)
+
+p = 
+ggplot(dist, aes(x = val, fill = label))+
+  geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1, alpha = 1)+#, position = "dodge")+
+  theme_classic()+
+  geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+  scale_fill_manual(values = new_colors) +
+  labs(x = "Species Interaction Value", y = "Count", color = NULL, title = paste("CONCEPT"))+
+  guides(fill = "none") + 
+  theme(axis.text.x = element_text(size = 16),
+        axis.text.y = element_text(size = 16),
+        axis.text = element_text(color = "black"),
+        text = element_text(family = "Helvetica"))
+## save it! 
+# ggsave(paste("figures/Grouped Histograms/Histogram_CONCEPT_Fig1_", date, ".png", sep = ""), p,
+#        width = 13, height = 4, units = "in")
+
+# clean up
+rm(p, dist, generate_values)
+
+#
+##
+###
+#### determine percentages in each category
 pref_perc_table = ddply(pref_dat, .(rel_species, support_simple), summarize,
                    num_lvl = length(Species_Pair))
 # then total number of mods per species
@@ -1833,7 +1864,7 @@ head(coeff)
 
 ## need relevant information from preform
 head(preform)
-add = select(preform, Species_Pair, direction, guild_pair, support_liberal, support )
+add = select(preform, Species_Pair, direction, preference, guild_pair, support_liberal, support )
 
 ## merge them together
 setdiff(coeff$Species_Pair, add$Species_Pair)
@@ -1841,30 +1872,19 @@ setdiff(add$Species_Pair, coeff$Species_Pair) # no diff, safe to merge
 coeff = merge(coeff, add, by = "Species_Pair")
 rm(add)
 
-
 ## double check direction of all large carnivore pairings --> should only be top-down
 table(coeff$direction[coeff$guild_pair == "SUB-Large_Carnivore~DOM-Large_Carnivore"]) # all top-down, good! 
 
-## add a column to coeff to determine if the model is a preferred prey species or not
-coeff$preference = "community"
-# top-downs
-coeff$preference[coeff$dom_sp == "Panthera_tigris" & coeff$sub_sp %in% guilds$scientificNameStd[guilds$tiger_pref == "Yes"]] = "preferred"
-coeff$preference[coeff$dom_sp == "Panthera_pardus" & coeff$sub_sp %in% guilds$scientificNameStd[guilds$leopard_pref == "Yes"]] = "preferred"
-coeff$preference[coeff$dom_sp == "Neofelis_genus" & coeff$sub_sp %in% guilds$scientificNameStd[guilds$CL_pref == "Yes"]] = "preferred"
-coeff$preference[coeff$dom_sp == "Cuon_alpinus" & coeff$sub_sp %in% guilds$scientificNameStd[guilds$dhole_pref == "Yes"]] = "preferred"
-# bottoms-up
-coeff$preference[coeff$sub_sp == "Panthera_tigris" & coeff$dom_sp %in% guilds$scientificNameStd[guilds$tiger_pref == "Yes"]] = "preferred"
-coeff$preference[coeff$sub_sp == "Panthera_pardus" & coeff$dom_sp %in% guilds$scientificNameStd[guilds$leopard_pref == "Yes"]] = "preferred"
-coeff$preference[coeff$sub_sp == "Neofelis_genus" & coeff$dom_sp %in% guilds$scientificNameStd[guilds$CL_pref == "Yes"]] = "preferred"
-coeff$preference[coeff$sub_sp == "Cuon_alpinus" & coeff$dom_sp %in% guilds$scientificNameStd[guilds$dhole_pref == "Yes"]] = "preferred"
-## should have a total of 68 preferred mods 
+## should have a total of 66 preferred mods 
 table(coeff$preference[coeff$var == "Species_Interaction"]) 
+table(preform$preference) # these are the same, good! 
+
 
 ## save this dataframe for Mathew to experiment with
 # write.csv(coeff, paste("results/All_model_coefficents_HALF_LONG_", date, ".csv", sep = ""), row.names = F)
-
 ## import it! 
 # coeff = read.csv("All_model_coefficents_HALF_LONG_20211201.csv")
+
 
 #
 ##
@@ -1882,6 +1902,10 @@ coeff[coeff$mean > 4 & coeff$var == "FLII",] # a pheasant that likes good forest
 summary(coeff$mean[coeff$var == "Hunting"]);hist(coeff$mean[coeff$var == "Hunting"]) # a few major negative outliers
 # who are the negative hunting outliers?
 unique(coeff$species[coeff$mean < -5 & coeff$var == "Hunting"]) # subordinate leopards do poorly w/ hunting! not surprising. Also Hose's civet too. 
+# who likes hunted areas?
+sort(unique(coeff$species[coeff$mean > 0.2 & coeff$var == "Hunting"])) # subordinate leopards do poorly w/ hunting! not surprising. Also Hose's civet too. 
+# plenty of commonly hunted species here! 
+
 
 # the others
 summary(coeff$mean[coeff$var == "HFP"]);hist(coeff$mean[coeff$var == "HFP"]) # no major outliers, much larger spread than elev
@@ -1953,46 +1977,265 @@ hist(coeff$mean[coeff$var == "Species_Interaction"& coeff$support_liberal == "Su
   
   rm(data, weighted_data)
 }
+
+#### The goal is to produce a forest plot with 5 points per variable
+### 1) top-down, 2) bottom-up, 3), predator, 4) prey, 5) non-supported results
+## But graph will be subsetted to preferred prey species, 
+# and 1-4 will only include supported results. 
+
 #
 ##
 ###
-#### Repeat Matthew's attempt at the 'meta-regression' via lmer 
+#### Explore Matthew's recommendation of using regressions via lmer 
 ###
 ##
 #
+
 {
-  # library(lme4);library(metafor)
-  # 
-  # # Select only the relevant variables to examine here
-  # d=coeff[coeff$var %in% c("Abundance_intercept", "Active_cams",
-  #                          "FLII","HFP","Elevation","Hunting",
-  #                          "Species_Interaction"),]
-  # # inspect
-  # head(d); table(d$var)
-  # 
-  # ## split into bottom-up and top-down mods 
-  # td = d[d$direction == "top-down",]
-  # bu = d[d$direction == "bottom-up",]
-  # rm(d)
-  # 
-  # # run a regression weighted by the standard deviation of the effect size
-  # td_m1 = lmer(mean ~ var + (1 |sub_sp),weights = 1/sd,REML=FALSE, data=td)
-  # summary(td_m1)
-  # ### THIS IS PROBLEMATIC! What is the intercept (i.e. control) supposed to represent?! 
-  # ## Abundance intercept is a potential, but its so negative biased, anything will be positive relative to it. 
-  # # sum together intercept and SIV to see overall effect (est_net in matthew's code)
-  # as.data.frame(summary(td_m1)$coefficients)[6,1] + as.data.frame(summary(td_m1)$coefficients)[1,1] # this is positive
-  # 
-  # 
-  # ## test with only supported mods, as this should produce a negative SIV
-  # td_m2 = lmer(mean ~ var + (1 |sub_sp),weights = 1/sd,REML=FALSE, data=td[td$support_liberal == "Supported",])
-  # summary(td_m2) # SIV is still positive, relative to intercept
-  # # account for intercept my summing together SIV and intercept (est_net in matthew's code)
-  # as.data.frame(summary(td_m2)$coefficients)[6,1] + as.data.frame(summary(td_m2)$coefficients)[1,1] # this is negative, unsurprisingly 
-  # 
-  # ## delete this, not working out
-  # rm(td, bu, td_m1, td_m2, weights)
-  }
+  ### For the first test, we will work with a subset of data --> preferred and supported top-down models  
+  dat = coeff[coeff$direction == "top-down" & 
+                coeff$support_liberal == "Supported" &
+                coeff$preference == "preferred",]
+  # how many mods is this?
+  length(unique(dat$Species_Pair)) # only 4... but this checks out
+  
+  ## we are interested in how the SIV compares to other variables,
+  ## and since SIV only applies to subordinate species,
+  ## we will only meta-analyze coefficents from sub-species
+  
+  # susbet for subordinate coefficents
+  dat = dat[grepl("SUB", dat$species),]
+  # only want relevant vars
+  dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
+                           "Species_Interaction"),]
+  ## which species RE should be used?
+  sort(table(dat$sub_sp));sort(table(dat$species)) # they are the same! go w/ species 
+  
+  # run a regression weighted by the standard deviation of the effect size with a random effect per species 
+  td_sub = lmer(mean ~ var-1 + (1 |species),weights = 1/sd,REML=FALSE, data=dat) 
+  
+  # extract coefficents into a DF
+  td_sub = as.data.frame(summary(td_sub)$coefficients)
+  
+  # clean up the DF 
+  td_sub$var = rownames(td_sub)
+  td_sub$var = gsub("var", "", td_sub$var)
+  names(td_sub)[1:2] = c("estimate", "SE")
+  
+  ## Assign direction and position 
+  td_sub$direction = "top-down"
+  td_sub$sp_position = "subordinate"
+  
+
+  #### Repeat for the dominant species here
+  ###
+  ##
+  #
+  dat = coeff[coeff$direction == "top-down" & 
+                coeff$support_liberal == "Supported" &
+                coeff$preference == "preferred",]
+  
+  # susbet for dom coefficents
+  dat = dat[grepl("DOM", dat$species),]
+  # only want relevant vars
+  dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
+                           "Species_Interaction"),] #SIV wont show up, but can leave here anyway 
+ 
+  # run a regression weighted by the standard deviation of the effect size with a random effect per species 
+  td_dom = lmer(mean ~ var-1 + (1 |species),weights = 1/sd,REML=FALSE, data=dat) ## boundary (singular) fit: see help('isSingular')
+  ## NOT GOOD! probably not enough levels here.. 
+  
+  # extract coefficents into a DF
+  td_dom = as.data.frame(summary(td_dom)$coefficients)
+  
+  # clean up the DF 
+  td_dom$var = rownames(td_dom)
+  td_dom$var = gsub("var", "", td_dom$var)
+  names(td_dom)[1:2] = c("estimate", "SE")
+  
+  ## Assign direction and position 
+  td_dom$direction = "top-down"
+  td_dom$sp_position = "dominant"
+  
+  ## combine both td results
+  td = rbind(td_dom, td_sub)
+  rm(td_dom, td_sub)
+  
+  #
+  ##
+  ###
+  #### Repeat for bottom-up
+  ###
+  ##
+  #
+  
+  ### Work with a subset of data --> preferred and supported bottom-up models  
+  dat = coeff[coeff$direction == "bottom-up" & 
+                coeff$support_liberal == "Supported" &
+                coeff$preference == "preferred",]
+  # how many mods is this?
+  length(unique(dat$Species_Pair)) # only 16... but this checks out
+  
+  ## we are interested in how the SIV compares to other variables,
+  ## and since SIV only applies to subordinate species,
+  ## we will only meta-analyze coefficents from sub-species
+  
+  # susbet for subordinate coefficents
+  dat = dat[grepl("SUB", dat$species),]
+  # only want relevant vars
+  dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
+                           "Species_Interaction"),]
+  
+  # run a regression weighted by the standard deviation of the effect size with a random effect per species 
+  bu_sub = lmer(mean ~ var-1 + (1 |species),weights = 1/sd,REML=FALSE, data=dat) ## boundary (singular) fit: see help('isSingular')
+  ## NOT GOOD! probably not enough levels here.. 
+  
+  # extract coefficents into a DF
+  bu_sub = as.data.frame(summary(bu_sub)$coefficients)
+  
+  # clean up the DF 
+  bu_sub$var = rownames(bu_sub)
+  bu_sub$var = gsub("var", "", bu_sub$var)
+  names(bu_sub)[1:2] = c("estimate", "SE")
+  
+  ## Assign direction and position 
+  bu_sub$direction = "bottom-up"
+  bu_sub$sp_position = "subordinate"
+  
+  
+  #### Repeat for the dominant species here
+  ###
+  ##
+  #
+  dat = coeff[coeff$direction == "bottom-up" & 
+                coeff$support_liberal == "Supported" &
+                coeff$preference == "preferred",]
+  
+  # susbet for dom coefficents
+  dat = dat[grepl("DOM", dat$species),]
+  # only want relevant vars
+  dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
+                           "Species_Interaction"),] #SIV wont show up, but can leave here anyway 
+  
+  # run a regression weighted by the standard deviation of the effect size with a random effect per species 
+  bu_dom = lmer(mean ~ var-1 + (1 |species),weights = 1/sd,REML=FALSE, data=dat) 
+  
+  # extract coefficents into a DF
+  bu_dom = as.data.frame(summary(bu_dom)$coefficients)
+  
+  # clean up the DF 
+  bu_dom$var = rownames(bu_dom)
+  bu_dom$var = gsub("var", "", bu_dom$var)
+  names(bu_dom)[1:2] = c("estimate", "SE")
+  
+  ## Assign direction and position 
+  bu_dom$direction = "bottom-up"
+  bu_dom$sp_position = "dominant"
+  
+  ## combine both td results
+  bu = rbind(bu_dom, bu_sub)
+  rm(bu_dom, bu_sub)
+  
+  
+  #
+  ##
+  ###
+  #### Repeat for unsupported results 
+  ###
+  ##
+  #
+
+  ### Work with a subset of data --> preferred and NON-supported models  
+  dat = coeff[coeff$support_liberal != "Supported" &
+                coeff$preference == "preferred",]
+  # how many mods is this?
+  length(unique(dat$Species_Pair)) # 46
+ 
+  #  # susbet for subordinate coefficents
+  # dat = dat[grepl("SUB", dat$species),] # DONT SUBSET, just look at general effect. 
+  
+  # only want relevant vars
+  dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
+                           "Species_Interaction"),]
+  
+  # run a regression weighted by the standard deviation of the effect size with a random effect per species 
+  unsup_sub = lmer(mean ~ var-1 + (1 |species),weights = 1/sd,REML=FALSE, data=dat) 
+  
+  # extract coefficents into a DF
+  unsup_sub = as.data.frame(summary(unsup_sub)$coefficients)
+  
+  # clean up the DF 
+  unsup_sub$var = rownames(unsup_sub)
+  unsup_sub$var = gsub("var", "", unsup_sub$var)
+  names(unsup_sub)[1:2] = c("estimate", "SE")
+  
+  ## Assign direction and position 
+  unsup_sub$direction = "unsupported"
+  # unsup_sub$sp_position = "subordinate" # 
+  unsup_sub$sp_position = "unsupported"
+  
+  ## combine all three together to plot them 
+  res = rbind(td, bu, unsup_sub)
+  
+  rm(td, bu, unsup_sub)
+  
+  ### Clean up the data a bit for plotting 
+  
+  ## DUE TO WEIRD VARIABLE THING, multiply hunting var by -1 to make it a neg effect
+  res$estimate[res$var == "Hunting"] =   res$estimate[res$var == "Hunting"] * -1
+  
+  ## make an upper and lower CI
+  res$upper = res$estimate + res$SE
+  res$lower = res$estimate - res$SE
+  
+  ## rename vars so they are all acronyms and ordered for the graph 
+  res$var[res$var == "Hunting"] = "A) HUNT"
+  res$var[res$var == "HFP"] = "B) HFP"
+  res$var[res$var == "FLII"] = "C) FLII"
+  res$var[res$var == "Elevation"] = "D) ELV"
+  res$var[res$var == "Species_Interaction"] = "E) SIV"
+  
+  ## make position more informative
+  res$sp_position[res$direction == "top-down" & res$sp_position == "dominant"] = "predator"
+  res$sp_position[res$direction == "top-down" & res$sp_position == "subordinate"] = "prey"
+  res$sp_position[res$direction == "bottom-up" & res$sp_position == "dominant"] = "prey"
+  res$sp_position[res$direction == "bottom-up" & res$sp_position == "subordinate"] = "predator"
+  
+  
+  ## set the factor order, putting SIV at the bottom
+  res$var = factor(res$var, levels = c( "E) SIV","D) ELV","C) FLII","B) HFP", "A) HUNT"))
+  res$direction = factor(res$direction, levels = c("top-down", "bottom-up", "unsupported"))
+  res$sp_position = factor(res$sp_position, levels = c("predator", "prey","unsupported"))
+  
+  
+  ## try the ggplot 
+  p =
+    ggplot(res, aes(x = var, y = estimate, ymin=lower, ymax=upper))+
+    geom_pointrange(aes(shape = sp_position, color = direction), size = 1,
+                    position= position_dodge(width=.7))+
+    geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.6)+
+    coord_flip() +  # flip coordinates (puts labels on y axis)
+    labs(y = "regression effect size", x = NULL) +
+    scale_color_manual(values = c("top-down" = "darkorange4","bottom-up" = "springgreen4", "unsupported" = "gray30"))+
+    scale_shape_manual(values = c("prey" = 17, "predator" = 15, "unsupported" = 16))+
+    theme_bw()+
+    theme(axis.text.x = element_text(size = 22),
+          axis.text.y = element_text(size = 22),
+          axis.title.x = element_text(size = 22),
+          axis.text = element_text(color = "black"),
+          text = element_text(family = "Helvetica"))
+  ## Save this
+  # ggsave(paste("explore/Overall_wieghted_coefficents_regression_supported_preferred_prey_mods_forest_plot_", date, ".png", sep = ""),
+  #        p, width = 7, height = 7, units = "in")
+  
+  ## save the second version w/ inverse hunting. 
+  # ggsave(paste("explore/Overall_wieghted_coefficents_regression_supported_preferred_prey_mods_forest_plot_inverse_hunting_", date, ".png", sep = ""),
+  #        p, width = 7, height = 7, units = "in")
+
+  ## clean up time! 
+  rm(p, weights)
+}
+
 #
 ##
 ###
@@ -2000,584 +2243,663 @@ hist(coeff$mean[coeff$var == "Species_Interaction"& coeff$support_liberal == "Su
 ###
 ##
 #
-
-### For the first test, we will work with a subset of data --> top-down models 
-dat = coeff[coeff$direction == "top-down",]
-# should have 150 models
-length(unique(dat$Species_Pair)) # good! 
-
-## we are interested in how the SIV compares to other variables,
-## and since SIV only applies to subordinate species,
-## we will only meta-analyze coefficents from sub-species
-
-# susbet for subordinate coefficents
-dat = dat[grepl("SUB", dat$species),]
-# only want relevant vars
-unique(dat$var)
-dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
-                         "Species_Interaction","Active_cams"),]
-
-## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
-dat = ddply(dat, .(var), transform, 
-            weight_var_sp = 1 / ( # inverse
-              var(mean) + # sampling variance + 
-                (sd/mean)^2 + # coefficent of variation + 
-                length(unique(species)))) # number of distinct species w/ estimate 
-
-# calculate the weighted effect sizes
-sum_td_sub = ddply(dat, .(var), summarise,
-                   SE = sd(mean) / sqrt(length(mean)), # standard error 
-                   weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
-
-## Assign direction and position 
-sum_td_sub$direction = "top-down"
-sum_td_sub$sp_position = "subordinate"
-
-#
-##
-### repeat for the dominant 
-dat = coeff[coeff$direction == "top-down",]
-# susbet for dominant coefficents
-dat = dat[grepl("DOM", dat$species),]
-# only want relevant vars
-dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
-                         "Species_Interaction","Active_cams"),] # wont have SIV here 
-## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
-dat = ddply(dat, .(var), transform, 
-            weight_var_sp = 1 / ( # inverse
-              var(mean) + # sampling variance + 
-                (sd/mean)^2 + # coefficent of variation + 
-                length(unique(species)))) # number of distinct species w/ estimate 
-
-# calculate the weighted effect sizes
-sum_td_dom = ddply(dat, .(var), summarise,
-                   SE = sd(mean) / sqrt(length(mean)), # standard error 
-                   weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
-
-## Assign direction and position 
-sum_td_dom$direction = "top-down"
-sum_td_dom$sp_position = "dominant"
-
-## combine
-sum_td = rbind(sum_td_dom, sum_td_sub)
-rm(sum_td_dom, sum_td_sub)
-
-#
-##
-### repeat for bottom-up
-##
-#
-
-dat = coeff[coeff$direction == "bottom-up",]
-# should have 110 models
-length(unique(dat$Species_Pair)) # good! 
-
-# susbet for subordinate coefficents
-dat = dat[grepl("SUB", dat$species),]
-# only want relevant vars
-dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
-                         "Species_Interaction","Active_cams"),]
-## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
-dat = ddply(dat, .(var), transform, 
-            weight_var_sp = 1 / ( # inverse
-              var(mean) + # sampling variance + 
-                (sd/mean)^2 + # coefficent of variation + 
-                length(unique(species)))) # number of distinct species w/ estimate 
-
-# calculate the weighted effect sizes
-sum_bu_sub = ddply(dat, .(var), summarise,
-                   SE = sd(mean) / sqrt(length(mean)), # standard error 
-                   weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
-
-## Assign direction and position  
-sum_bu_sub$direction = "bottom-up"
-sum_bu_sub$sp_position = "subordinate"
-
-#
-##
-### repeat for the dominant 
-dat = coeff[coeff$direction == "top-down",]
-# susbet for dominant coefficents
-dat = dat[grepl("DOM", dat$species),]
-# only want relevant vars
-dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
-                         "Species_Interaction","Active_cams"),] # wont have SIV here 
-## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
-dat = ddply(dat, .(var), transform, 
-            weight_var_sp = 1 / ( # inverse
-              var(mean) + # sampling variance + 
-                (sd/mean)^2 + # coefficent of variation + 
-                length(unique(species)))) # number of distinct species w/ estimate 
-
-# calculate the weighted effect sizes
-sum_bu_dom = ddply(dat, .(var), summarise,
-                   SE = sd(mean) / sqrt(length(mean)), # standard error 
-                   weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
-
-## Assign direction and position 
-sum_bu_dom$direction = "bottom-up"
-sum_bu_dom$sp_position = "dominant"
-
-## combine
-sum_bu = rbind(sum_bu_dom, sum_bu_sub)
-rm(sum_bu_dom, sum_bu_sub)
-
-## combine td and bu
-sum = rbind(sum_bu, sum_td)
-rm(sum_bu, sum_td, dat)
-head(sum)
-
-# what is the overall effect across ALL models?
-# only want relevant vars
-dat = coeff[coeff$var %in% c("FLII","HFP","Elevation","Hunting",
-                             "Species_Interaction","Active_cams"),] # wont have SIV here 
-## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
-dat = ddply(dat, .(var), transform, 
-            weight_var_sp = 1 / ( # inverse
-              var(mean) + # sampling variance + 
-                (sd/mean)^2 + # coefficent of variation + 
-                length(unique(species)))) # number of distinct species w/ estimate 
-
-# calculate the weighted effect sizes
-sum_all = ddply(dat, .(var), summarise,
-                SE = sd(mean) / sqrt(length(mean)), # standard error 
-                weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
-## Assign direction and position 
-sum_all$direction = "overall"
-sum_all$sp_position = "overall"
-
-## combine
-sum = rbind(sum, sum_all)
-rm(sum_all)
-
-## make an upper and lower CI
-sum$upper = sum$weighted_var_es + sum$SE
-sum$lower = sum$weighted_var_es - sum$SE
-
-## rename vars so they are all acronyms and ordered for the graph 
-sum$var[sum$var == "Hunting"] = "A) HUNT"
-sum$var[sum$var == "HFP"] = "B) HFP"
-sum$var[sum$var == "FLII"] = "C) FLII"
-sum$var[sum$var == "Elevation"] = "D) ELV"
-sum$var[sum$var == "Active_cams"] = "E) CAMS"
-sum$var[sum$var == "Species_Interaction"] = "F) SIV"
-
-## make position more informative
-sum$sp_position[sum$direction == "top-down" & sum$sp_position == "dominant"] = "predator"
-sum$sp_position[sum$direction == "top-down" & sum$sp_position == "subordinate"] = "prey"
-sum$sp_position[sum$direction == "bottom-up" & sum$sp_position == "dominant"] = "prey"
-sum$sp_position[sum$direction == "bottom-up" & sum$sp_position == "subordinate"] = "predator"
-
-
-## set the factor order, putting SIV at the bottom
-sum$var = factor(sum$var, levels = c( "F) SIV","E) CAMS", "D) ELV","C) FLII","B) HFP", "A) HUNT"))
-sum$direction = factor(sum$direction, levels = c("top-down", "bottom-up", "overall"))
-sum$sp_position = factor(sum$sp_position, levels = c("predator", "prey","overall"))
-
-
-## try the ggplot 
-p =
-ggplot(sum, aes(x = var, y = weighted_var_es, ymin=lower, ymax=upper))+
-  geom_pointrange(aes(shape = sp_position, color = direction), size = 1,
-             position= position_dodge(width=.7))+
-  geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.6)+
-  coord_flip() +  # flip coordinates (puts labels on y axis)
-  labs(y = "weighted effect size", x = NULL) +
-  # scale_color_manual(values = c("dominant" = "tan3","subordinate" = "wheat3"))+
-  scale_color_manual(values = c("top-down" = "darkorange4","bottom-up" = "springgreen4", "overall" = "gray30"))+
-  scale_shape_manual(values = c("prey" = 17, "predator" = 15, "overall" = 16))+
-  theme_bw()+
-  theme(axis.text.x = element_text(size = 22),
-        axis.text.y = element_text(size = 22),
-        axis.title.x = element_text(size = 22),
-        axis.text = element_text(color = "black"),
-        text = element_text(family = "Helvetica"))
-## Save this, it looks good! 
-# ggsave(paste("explore/Overall_wieghted_coefficents_all_models_forest_plot_", date, ".png", sep = ""),
-#        p, width = 7, height = 7, units = "in")
-
-
-
-
- #
-##
-###
-####
-##### Repeat for preferred prey
-####
-###
-##
-#
-
-
-### For the first test, we will work with a subset of data --> top-down models 
-dat = coeff[coeff$direction == "top-down" & coeff$preference == "preferred",]
-# should have Xx mods
-length(unique(dat$Species_Pair)) # 33!
-
-## we are interested in how the SIV compares to other variables,
-## and since SIV only applies to subordinate species,
-## we will only meta-analyze coefficents from sub-species
-
-# susbet for subordinate coefficents
-dat = dat[grepl("SUB", dat$species),]
-# only want relevant vars
-dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
-                         "Species_Interaction","Active_cams"),]
-## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
-dat = ddply(dat, .(var), transform, 
-            weight_var_sp = 1 / ( # inverse
-              var(mean) + # sampling variance + 
-                (sd/mean)^2 + # coefficent of variation + 
-                length(unique(species)))) # number of distinct species w/ estimate 
-
-# calculate the weighted effect sizes
-sum_td_sub = ddply(dat, .(var), summarise,
-                SE = sd(mean) / sqrt(length(mean)), # standard error 
-                weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
-## Assign direction and position 
-sum_td_sub$direction = "top-down"
-sum_td_sub$sp_position = "subordinate"
-
-## repeat for the dominant 
-dat = coeff[coeff$direction == "top-down" & coeff$preference == "preferred",]
-# susbet for dominant coefficents
-dat = dat[grepl("DOM", dat$species),]
-# only want relevant vars
-dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
-                         "Species_Interaction","Active_cams"),] # wont have SIV here 
-## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
-dat = ddply(dat, .(var), transform, 
-            weight_var_sp = 1 / ( # inverse
-              var(mean) + # sampling variance + 
-                (sd/mean)^2 + # coefficent of variation + 
-                length(unique(species)))) # number of distinct species w/ estimate 
-
-# calculate the weighted effect sizes
-sum_td_dom = ddply(dat, .(var), summarise,
-                SE = sd(mean) / sqrt(length(mean)), # standard error 
-                weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
-## Assign direction and position 
-sum_td_dom$direction = "top-down"
-sum_td_dom$sp_position = "dominant"
-
-## combine
-sum_td = rbind(sum_td_dom, sum_td_sub)
-rm(sum_td_dom, sum_td_sub)
-
-
-## repeat for bottom-up
-dat = coeff[coeff$direction == "bottom-up" & coeff$preference == "preferred",]
-length(unique(dat$Species_Pair)) # 33 mods, good  
-
-# susbet for subordinate coefficents
-dat = dat[grepl("SUB", dat$species),]
-# only want relevant vars
-dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
-                         "Species_Interaction","Active_cams"),]
-## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
-dat = ddply(dat, .(var), transform, 
-            weight_var_sp = 1 / ( # inverse
-              var(mean) + # sampling variance + 
-                (sd/mean)^2 + # coefficent of variation + 
-                length(unique(species)))) # number of distinct species w/ estimate 
-
-# calculate the weighted effect sizes
-sum_bu_sub = ddply(dat, .(var), summarise,
-                SE = sd(mean) / sqrt(length(mean)), # standard error 
-                weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
-## Assign direction and position 
-sum_bu_sub$direction = "bottom-up"
-sum_bu_sub$sp_position = "subordinate"
-
-## repeat for the dominant 
-dat = coeff[coeff$direction == "top-down" & coeff$preference == "preferred",]
-# susbet for dominant coefficents
-dat = dat[grepl("DOM", dat$species),]
-# only want relevant vars
-dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
-                         "Species_Interaction","Active_cams"),] # wont have SIV here 
-## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
-dat = ddply(dat, .(var), transform, 
-            weight_var_sp = 1 / ( # inverse
-              var(mean) + # sampling variance + 
-                (sd/mean)^2 + # coefficent of variation + 
-                length(unique(species)))) # number of distinct species w/ estimate 
-
-# calculate the weighted effect sizes
-sum_bu_dom = ddply(dat, .(var), summarise,
-                SE = sd(mean) / sqrt(length(mean)), # standard error 
-                weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
-## Assign direction and position 
-sum_bu_dom$direction = "bottom-up"
-sum_bu_dom$sp_position = "dominant"
-
-## combine
-sum_bu = rbind(sum_bu_dom, sum_bu_sub)
-rm(sum_bu_dom, sum_bu_sub)
-
-## combine td and bu
-sum = rbind(sum_bu, sum_td)
-rm(sum_bu, sum_td, dat)
-head(sum)
-
-
-# what is the overall effect across ALL models?
-# only want relevant vars
-dat = coeff[coeff$var %in% c("FLII","HFP","Elevation","Hunting",
-                             "Species_Interaction","Active_cams") &
-              coeff$preference == "preferred",] # wont have SIV here 
-## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
-dat = ddply(dat, .(var), transform, 
-            weight_var_sp = 1 / ( # inverse
-              var(mean) + # sampling variance + 
-                (sd/mean)^2 + # coefficent of variation + 
-                length(unique(species)))) # number of distinct species w/ estimate 
-
-# calculate the weighted effect sizes
-sum_all = ddply(dat, .(var), summarise,
-                SE = sd(mean) / sqrt(length(mean)), # standard error 
-                weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
-## Assign direction and position 
-sum_all$direction = "overall"
-sum_all$sp_position = "overall"
-
-## combine
-sum = rbind(sum, sum_all)
-rm(sum_all)
-
-## make an upper and lower CI
-sum$upper = sum$weighted_var_es + sum$SE
-sum$lower = sum$weighted_var_es - sum$SE
-
-## rename vars so they are all acronyms and ordered for the graph 
-sum$var[sum$var == "Hunting"] = "A) HUNT"
-sum$var[sum$var == "HFP"] = "B) HFP"
-sum$var[sum$var == "FLII"] = "C) FLII"
-sum$var[sum$var == "Elevation"] = "D) ELV"
-sum$var[sum$var == "Active_cams"] = "E) CAMS"
-sum$var[sum$var == "Species_Interaction"] = "F) SIV"
-
-## make position more informative
-sum$sp_position[sum$direction == "top-down" & sum$sp_position == "dominant"] = "predator"
-sum$sp_position[sum$direction == "top-down" & sum$sp_position == "subordinate"] = "prey"
-sum$sp_position[sum$direction == "bottom-up" & sum$sp_position == "dominant"] = "prey"
-sum$sp_position[sum$direction == "bottom-up" & sum$sp_position == "subordinate"] = "predator"
-
-## set the factor order, putting SIV at the bottom
-sum$var = factor(sum$var, levels = c( "F) SIV","E) CAMS", "D) ELV","C) FLII","B) HFP", "A) HUNT"))
-sum$direction = factor(sum$direction, levels = c("top-down", "bottom-up", "overall"))
-sum$sp_position = factor(sum$sp_position, levels = c("predator", "prey","overall"))
-
-## try the ggplot 
-p = 
-  ggplot(sum, aes(x = var, y = weighted_var_es, ymin=lower, ymax=upper))+
-  geom_pointrange(aes(shape = sp_position, color = direction), size = 1,
-                  position= position_dodge(width=.7))+
-  geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.6)+
-  coord_flip() +  # flip coordinates (puts labels on y axis)
-  labs(y = "weighted effect size", x = NULL) +
-  scale_color_manual(values = c("top-down" = "darkorange4","bottom-up" = "springgreen4", "overall" = "gray30"))+
-  scale_shape_manual(values = c("prey" = 17, "predator" = 15, "overall" = 16))+
-  theme_bw()+
-  theme(axis.text.x = element_text(size = 22),
-        axis.text.y = element_text(size = 22),
-        axis.title.x = element_text(size = 22),
-        axis.text = element_text(color = "black"),
-        text = element_text(family = "Helvetica"))
-## Save this and send to Matthew for prelim results
-# ggsave(paste("explore/Overall_weighted_coefficents_preferred_prey_forest_plot_", date, ".png", sep = ""),
-#        p, width = 7, height = 7, units = "in")
-
-#
-##
-###
-#### Repeat for only supported & preferred models 
-###
-##
-#
-
-### For the first test, we will work with a subset of data --> top-down models 
-dat = coeff[coeff$direction == "top-down" & coeff$support_liberal == "Supported" & coeff$preference == "preferred",]
-# 
-length(unique(dat$Species_Pair)) # only 4 pairs! 
-
-## we are interested in how the SIV compares to other variables,
-## and since SIV only applies to subordinate species,
-## we will only meta-analyze coefficents from sub-species
-
-# susbet for subordinate coefficents
-dat = dat[grepl("SUB", dat$species),]
-# only want relevant vars
-dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
-                         "Species_Interaction","Active_cams"),]
-## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
-dat = ddply(dat, .(var), transform, 
-            weight_var_sp = 1 / ( # inverse
-              var(mean) + # sampling variance + 
-                (sd/mean)^2 + # coefficent of variation + 
-                length(unique(species)))) # number of distinct species w/ estimate 
-
-# calculate the weighted effect sizes
-sum_td_sub = ddply(dat, .(var), summarise,
-                SE = sd(mean) / sqrt(length(mean)), # standard error 
-                weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
-## Assign direction and position 
-sum_td_sub$direction = "top-down"
-sum_td_sub$sp_position = "subordinate"
-
-## repeat for the dominant 
-dat = coeff[coeff$direction == "top-down"  & coeff$support_liberal == "Supported"  & coeff$preference == "preferred",]
-# susbet for dominant coefficents
-dat = dat[grepl("DOM", dat$species),]
-# only want relevant vars
-dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
-                         "Species_Interaction","Active_cams"),] # wont have SIV here 
-## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
-dat = ddply(dat, .(var), transform, 
-            weight_var_sp = 1 / ( # inverse
-              var(mean) + # sampling variance + 
-                (sd/mean)^2 + # coefficent of variation + 
-                length(unique(species)))) # number of distinct species w/ estimate 
-
-# calculate the weighted effect sizes
-sum_td_dom = ddply(dat, .(var), summarise,
-                SE = sd(mean) / sqrt(length(mean)), # standard error 
-                weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
-## Assign direction and position 
-sum_td_dom$direction = "top-down"
-sum_td_dom$sp_position = "dominant"
-
-## combine
-sum_td = rbind(sum_td_dom, sum_td_sub)
-rm(sum_td_dom, sum_td_sub)
-
-
-## repeat for bottom-up
-dat = coeff[coeff$direction == "bottom-up" & coeff$support_liberal == "Supported" & coeff$preference == "preferred",]
-# 
-length(unique(dat$Species_Pair)) # only 16 models  
-
-# susbet for subordinate coefficents
-dat = dat[grepl("SUB", dat$species),]
-# only want relevant vars
-unique(dat$var)
-dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
-                         "Species_Interaction","Active_cams"),]
-## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
-dat = ddply(dat, .(var), transform, 
-            weight_var_sp = 1 / ( # inverse
-              var(mean) + # sampling variance + 
-                (sd/mean)^2 + # coefficent of variation + 
-                length(unique(species)))) # number of distinct species w/ estimate 
-
-# calculate the weighted effect sizes
-sum_bu_sub = ddply(dat, .(var), summarise,
-                SE = sd(mean) / sqrt(length(mean)), # standard error 
-                weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
-## Assign direction and position 
-sum_bu_sub$direction = "bottom-up"
-sum_bu_sub$sp_position = "subordinate"
-
-## repeat for the dominant 
-dat = coeff[coeff$direction == "top-down" & coeff$support_liberal == "Supported"  & coeff$preference == "preferred",]
-# susbet for dominant coefficents
-dat = dat[grepl("DOM", dat$species),]
-# only want relevant vars
-dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
-                         "Species_Interaction","Active_cams"),] # wont have SIV here 
-## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
-dat = ddply(dat, .(var), transform, 
-            weight_var_sp = 1 / ( # inverse
-              var(mean) + # sampling variance + 
-                (sd/mean)^2 + # coefficent of variation + 
-                length(unique(species)))) # number of distinct species w/ estimate 
-
-# calculate the weighted effect sizes
-sum_bu_dom = ddply(dat, .(var), summarise,
-                SE = sd(mean) / sqrt(length(mean)), # standard error 
-                weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
-## Assign direction and position 
-sum_bu_dom$direction = "bottom-up"
-sum_bu_dom$sp_position = "dominant"
-
-## combine
-sum_bu = rbind(sum_bu_dom, sum_bu_sub)
-rm(sum_bu_dom, sum_bu_sub)
-
-## combine td and bu
-sum = rbind(sum_bu, sum_td)
-rm(sum_bu, sum_td, dat)
-head(sum)
-
-# what is the overall effect across ALL models?
-# only want relevant vars
-dat = coeff[coeff$var %in% c("FLII","HFP","Elevation","Hunting",
-                             "Species_Interaction","Active_cams") &
-              coeff$preference == "preferred" & coeff$support_liberal == "Supported",] 
-## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
-dat = ddply(dat, .(var), transform, 
-            weight_var_sp = 1 / ( # inverse
-              var(mean) + # sampling variance + 
-                (sd/mean)^2 + # coefficent of variation + 
-                length(unique(species)))) # number of distinct species w/ estimate 
-
-# calculate the weighted effect sizes
-sum_all = ddply(dat, .(var), summarise,
-                SE = sd(mean) / sqrt(length(mean)), # standard error 
-                weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
-## Assign direction and position 
-sum_all$direction = "overall"
-sum_all$sp_position = "overall"
-
-## combine
-sum = rbind(sum, sum_all)
-rm(sum_all)
-
-## make an upper and lower CI
-sum$upper = sum$weighted_var_es + sum$SE
-sum$lower = sum$weighted_var_es - sum$SE
-
-## rename vars so they are all acronyms and ordered for the graph 
-sum$var[sum$var == "Hunting"] = "A) HUNT"
-sum$var[sum$var == "HFP"] = "B) HFP"
-sum$var[sum$var == "FLII"] = "C) FLII"
-sum$var[sum$var == "Elevation"] = "D) ELV"
-sum$var[sum$var == "Active_cams"] = "E) CAMS"
-sum$var[sum$var == "Species_Interaction"] = "F) SIV"
-
-## make position more informative
-sum$sp_position[sum$direction == "top-down" & sum$sp_position == "dominant"] = "predator"
-sum$sp_position[sum$direction == "top-down" & sum$sp_position == "subordinate"] = "prey"
-sum$sp_position[sum$direction == "bottom-up" & sum$sp_position == "dominant"] = "prey"
-sum$sp_position[sum$direction == "bottom-up" & sum$sp_position == "subordinate"] = "predator"
-
-## set the factor order, putting SIV at the bottom
-sum$var = factor(sum$var, levels = c( "F) SIV","E) CAMS", "D) ELV","C) FLII","B) HFP", "A) HUNT"))
-sum$direction = factor(sum$direction, levels = c("top-down", "bottom-up", "overall"))
-sum$sp_position = factor(sum$sp_position, levels = c("predator", "prey","overall"))
-
-## try the ggplot 
-p = 
-  ggplot(sum, aes(x = var, y = weighted_var_es, ymin=lower, ymax=upper))+
-  geom_pointrange(aes(shape = sp_position, color = direction), size = 1,
-                  position= position_dodge(width=.7))+
-  geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.6)+
-  coord_flip() +  # flip coordinates (puts labels on y axis)
-  labs(y = "weighted effect size", x = NULL) +
-  scale_color_manual(values = c("top-down" = "darkorange4","bottom-up" = "springgreen4", "overall" = "gray30"))+
-  scale_shape_manual(values = c("prey" = 17, "predator" = 15, "overall" = 16))+
-  theme_bw()+
-  theme(axis.text.x = element_text(size = 22),
-        axis.text.y = element_text(size = 22),
-        axis.title.x = element_text(size = 22),
-        axis.text = element_text(color = "black"),
-        text = element_text(family = "Helvetica"))
-## Save this 
-# ggsave(paste("explore/Overall_weighted_coefficents_preferred_prey_and_supported_mods_forest_plot_", date, ".png", sep = ""),
-#        p, width = 7, height = 7, units = "in")
-
-
+{
+  
+  ### For the first test, we will work with a subset of data --> supportive and preferred prey top-down models 
+  dat = coeff[coeff$direction == "top-down" & coeff$support_liberal == "Supported" & coeff$preference == "preferred",]
+  length(unique(dat$Species_Pair)) # only 4
+  
+  ## we are interested in how the SIV compares to other variables,
+  ## and since SIV only applies to subordinate species,
+  ## we will only meta-analyze coefficents from sub-species
+  
+  # susbet for subordinate coefficents
+  dat = dat[grepl("SUB", dat$species),]
+  # only want relevant vars
+  unique(dat$var)
+  dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
+                           "Species_Interaction","Active_cams"),]
+  
+  ## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
+  dat = ddply(dat, .(var), transform, 
+              weight_var_sp = 1 / ( # inverse
+                var(mean) + # sampling variance + 
+                  (sd/mean)^2 + # coefficent of variation + 
+                  length(unique(species)))) # number of distinct species w/ estimate 
+  
+  # calculate the weighted effect sizes
+  sum_td_sub = ddply(dat, .(var), summarise,
+                     SE = sd(mean) / sqrt(length(mean)), # standard error 
+                     weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
+  
+  ## Assign direction and position 
+  sum_td_sub$direction = "top-down"
+  sum_td_sub$sp_position = "subordinate"
+  
+  #
+  ##
+  ### repeat for the dominant 
+  dat = coeff[coeff$direction == "top-down" & coeff$support_liberal == "Supported" & coeff$preference == "preferred",]
+  # susbet for dominant coefficents
+  dat = dat[grepl("DOM", dat$species),]
+  # only want relevant vars
+  dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
+                           "Species_Interaction","Active_cams"),] # wont have SIV here 
+  ## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
+  dat = ddply(dat, .(var), transform, 
+              weight_var_sp = 1 / ( # inverse
+                var(mean) + # sampling variance + 
+                  (sd/mean)^2 + # coefficent of variation + 
+                  length(unique(species)))) # number of distinct species w/ estimate 
+  
+  # calculate the weighted effect sizes
+  sum_td_dom = ddply(dat, .(var), summarise,
+                     SE = sd(mean) / sqrt(length(mean)), # standard error 
+                     weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
+  
+  ## Assign direction and position 
+  sum_td_dom$direction = "top-down"
+  sum_td_dom$sp_position = "dominant"
+  
+  ## combine
+  sum_td = rbind(sum_td_dom, sum_td_sub)
+  rm(sum_td_dom, sum_td_sub)
+  
+  #
+  ##
+  ### repeat for bottom-up
+  ##
+  #
+  
+  dat = coeff[coeff$direction == "bottom-up" & coeff$support_liberal == "Supported" & coeff$preference == "preferred",]
+  length(unique(dat$Species_Pair)) # 16 mods
+  
+  # susbet for subordinate coefficents
+  dat = dat[grepl("SUB", dat$species),]
+  # only want relevant vars
+  dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
+                           "Species_Interaction","Active_cams"),]
+  ## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
+  dat = ddply(dat, .(var), transform, 
+              weight_var_sp = 1 / ( # inverse
+                var(mean) + # sampling variance + 
+                  (sd/mean)^2 + # coefficent of variation + 
+                  length(unique(species)))) # number of distinct species w/ estimate 
+  
+  # calculate the weighted effect sizes
+  sum_bu_sub = ddply(dat, .(var), summarise,
+                     SE = sd(mean) / sqrt(length(mean)), # standard error 
+                     weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
+  
+  ## Assign direction and position  
+  sum_bu_sub$direction = "bottom-up"
+  sum_bu_sub$sp_position = "subordinate"
+  
+  #
+  ##
+  ### repeat for the dominant 
+  dat = coeff[coeff$direction == "bottom-up" & coeff$support_liberal == "Supported" & coeff$preference == "preferred",]
+  # susbet for dominant coefficents
+  dat = dat[grepl("DOM", dat$species),]
+  # only want relevant vars
+  dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
+                           "Species_Interaction","Active_cams"),] # wont have SIV here 
+  ## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
+  dat = ddply(dat, .(var), transform, 
+              weight_var_sp = 1 / ( # inverse
+                var(mean) + # sampling variance + 
+                  (sd/mean)^2 + # coefficent of variation + 
+                  length(unique(species)))) # number of distinct species w/ estimate 
+  
+  # calculate the weighted effect sizes
+  sum_bu_dom = ddply(dat, .(var), summarise,
+                     SE = sd(mean) / sqrt(length(mean)), # standard error 
+                     weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
+  
+  ## Assign direction and position 
+  sum_bu_dom$direction = "bottom-up"
+  sum_bu_dom$sp_position = "dominant"
+  
+  ## combine
+  sum_bu = rbind(sum_bu_dom, sum_bu_sub)
+  rm(sum_bu_dom, sum_bu_sub)
+  
+  ## combine td and bu
+  sum = rbind(sum_bu, sum_td)
+  rm(sum_bu, sum_td, dat)
+  head(sum)
+  
+  # what is the  effect across all unsupported models?
+  # only want relevant vars
+  dat = coeff[coeff$var %in% c("FLII","HFP","Elevation","Hunting",
+                               "Species_Interaction","Active_cams") &
+                coeff$support_liberal != "Supported",] 
+  
+  ## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
+  dat = ddply(dat, .(var), transform, 
+              weight_var_sp = 1 / ( # inverse
+                var(mean) + # sampling variance + 
+                  (sd/mean)^2 + # coefficent of variation + 
+                  length(unique(species)))) # number of distinct species w/ estimate 
+  
+  # calculate the weighted effect sizes
+  sum_all = ddply(dat, .(var), summarise,
+                  SE = sd(mean) / sqrt(length(mean)), # standard error 
+                  weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
+  ## Assign direction and position 
+  sum_all$direction = "unsupported"
+  sum_all$sp_position = "unsupported"
+  
+  ## combine
+  sum = rbind(sum, sum_all)
+  rm(sum_all)
+  
+  ## make an upper and lower CI
+  sum$upper = sum$weighted_var_es + sum$SE
+  sum$lower = sum$weighted_var_es - sum$SE
+  
+  ## rename vars so they are all acronyms and ordered for the graph 
+  sum$var[sum$var == "Hunting"] = "A) HUNT"
+  sum$var[sum$var == "HFP"] = "B) HFP"
+  sum$var[sum$var == "FLII"] = "C) FLII"
+  sum$var[sum$var == "Elevation"] = "D) ELV"
+  sum$var[sum$var == "Active_cams"] = "E) CAMS"
+  sum$var[sum$var == "Species_Interaction"] = "F) SIV"
+  
+  ## make position more informative
+  sum$sp_position[sum$direction == "top-down" & sum$sp_position == "dominant"] = "predator"
+  sum$sp_position[sum$direction == "top-down" & sum$sp_position == "subordinate"] = "prey"
+  sum$sp_position[sum$direction == "bottom-up" & sum$sp_position == "dominant"] = "prey"
+  sum$sp_position[sum$direction == "bottom-up" & sum$sp_position == "subordinate"] = "predator"
+  
+  
+  ## set the factor order, putting SIV at the bottom
+  sum$var = factor(sum$var, levels = c( "F) SIV","E) CAMS", "D) ELV","C) FLII","B) HFP", "A) HUNT"))
+  sum$direction = factor(sum$direction, levels = c("top-down", "bottom-up", "unsupported"))
+  sum$sp_position = factor(sum$sp_position, levels = c("predator", "prey","unsupported"))
+  
+  
+  ## try the ggplot 
+  p =
+    ggplot(sum[sum$var != "E) CAMS",], aes(x = var, y = weighted_var_es, ymin=lower, ymax=upper))+
+    geom_pointrange(aes(shape = sp_position, color = direction), size = 1,
+                    position= position_dodge(width=.7))+
+    geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.6)+
+    coord_flip() +  # flip coordinates (puts labels on y axis)
+    labs(y = "weighted effect size", x = NULL) +
+    scale_color_manual(values = c("top-down" = "darkorange4","bottom-up" = "springgreen4", "unsupported" = "gray30"))+
+    scale_shape_manual(values = c("prey" = 17, "predator" = 15, "unsupported" = 16))+
+    theme_bw()+
+    theme(axis.text.x = element_text(size = 22),
+          axis.text.y = element_text(size = 22),
+          axis.title.x = element_text(size = 22),
+          axis.text = element_text(color = "black"),
+          text = element_text(family = "Helvetica"))
+  ## Save this, it looks good! 
+  # ggsave(paste("explore/Overall_weighted_coefficents_mathematical_preferred_prey_and_supported_mods_forest_plot_", date, ".png", sep = ""),
+  #        p, width = 7, height = 7, units = "in")
+
+  
+  ## compare some values from res and sum, as they seem very close
+  
+  # elevation
+  res[res$var == "D) ELV" & res$direction == "top-down" & res$sp_position == "prey",] # 0.035
+  sum[sum$var == "D) ELV" & sum$direction == "top-down" & sum$sp_position == "prey",] # 0.001
+  ## doesnt matter, both values are so close to zeor 
+  
+  # hunting
+  res[res$var == "A) HUNT" & res$sp_position == "predator",] # 0.2 & 0.1
+  sum[sum$var == "A) HUNT" & sum$sp_position == "predator",] # -1 for both. 
+  
+  ## examine the true range for hunting to see which is more accurate 
+  summary(coeff$mean[coeff$var == "Hunting" & coeff$support_liberal == "Supported" & coeff$preference == "preferred"])
+  hist(coeff$mean[coeff$var == "Hunting" & coeff$support_liberal == "Supported" & coeff$preference == "preferred"], breaks =10)
+  ## hist shows a few strong negative outliers. 
+  length(coeff$mean[coeff$var == "Hunting" & 
+                      coeff$support_liberal == "Supported" & 
+                      coeff$preference == "preferred" &
+                      coeff$mean < -2]) # 6 values 
+  length(coeff$mean[coeff$var == "Hunting" & 
+                      coeff$support_liberal == "Supported" & 
+                      coeff$preference == "preferred" &
+                      coeff$mean > -2]) # 38 values! 
+  ## based on figures, the strongly negative values must be from a predator
+  unique(coeff$species[coeff$var == "Hunting" & 
+                         coeff$support_liberal == "Supported" & 
+                         coeff$preference == "preferred" &
+                         coeff$mean < -2]) # ONLY leopards. 
+  ## how many observations? Are many leopard detections driving the negative result in the weighted version?
+  sort(table(coeff$species[coeff$var == "Hunting" & 
+                         coeff$support_liberal == "Supported" & 
+                         coeff$preference == "preferred"])) # leopards have many values here! probably driving trends. 
+  
+  ## check HFP unsupported 
+  res[res$var == "B) HFP" & res$sp_position == "unsupported",] # -0.06
+  sum[sum$var == "B) HFP" & sum$sp_position == "unsupported",] # +0.22
+  
+  ## results from hunting suggest regression is better at handling outliers. 
+  # inspect HFP results distribution
+  hist(coeff$mean[coeff$var == "HFP" & coeff$support_liberal != "Supported" & coeff$preference == "preferred"], breaks =10)
+  # normal distribution, a few outliers 
+  summary(coeff$mean[coeff$var == "HFP" & coeff$support_liberal != "Supported" & coeff$preference == "preferred"])
+  ## how many neg and pos results?
+  length(coeff$mean[coeff$var == "HFP" & 
+                      coeff$support_liberal != "Supported" & 
+                      coeff$preference == "preferred" &
+                      coeff$mean < 0]) # 56 neg
+  length(coeff$mean[coeff$var == "HFP" & 
+                      coeff$support_liberal != "Supported" & 
+                      coeff$preference == "preferred" &
+                      coeff$mean > 0]) # 36 pos
+  ## how many species for each?
+  length(unique(coeff$species[coeff$var == "HFP" & 
+                                coeff$support_liberal != "Supported" & 
+                                coeff$preference == "preferred" &
+                                coeff$mean < 0])) # 26 neg
+  length(unique(coeff$species[coeff$var == "HFP" & 
+                                coeff$support_liberal != "Supported" & 
+                                coeff$preference == "preferred" &
+                                coeff$mean > 0])) # 15 pos
+  ## more negative results from more negative species --> negative makes more sense for an overall outcome. 
+  
+  
+  
+  #
+  ##
+  ###
+  ####
+  ##### Repeat for preferred prey
+  ####
+  ###
+  ##
+  #
+  
+  # 
+  # ### For the first test, we will work with a subset of data --> top-down models 
+  # dat = coeff[coeff$direction == "top-down" & coeff$preference == "preferred",]
+  # # should have Xx mods
+  # length(unique(dat$Species_Pair)) # 33!
+  # 
+  # ## we are interested in how the SIV compares to other variables,
+  # ## and since SIV only applies to subordinate species,
+  # ## we will only meta-analyze coefficents from sub-species
+  # 
+  # # susbet for subordinate coefficents
+  # dat = dat[grepl("SUB", dat$species),]
+  # # only want relevant vars
+  # dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
+  #                          "Species_Interaction","Active_cams"),]
+  # ## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
+  # dat = ddply(dat, .(var), transform, 
+  #             weight_var_sp = 1 / ( # inverse
+  #               var(mean) + # sampling variance + 
+  #                 (sd/mean)^2 + # coefficent of variation + 
+  #                 length(unique(species)))) # number of distinct species w/ estimate 
+  # 
+  # # calculate the weighted effect sizes
+  # sum_td_sub = ddply(dat, .(var), summarise,
+  #                    SE = sd(mean) / sqrt(length(mean)), # standard error 
+  #                    weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
+  # ## Assign direction and position 
+  # sum_td_sub$direction = "top-down"
+  # sum_td_sub$sp_position = "subordinate"
+  # 
+  # ## repeat for the dominant 
+  # dat = coeff[coeff$direction == "top-down" & coeff$preference == "preferred",]
+  # # susbet for dominant coefficents
+  # dat = dat[grepl("DOM", dat$species),]
+  # # only want relevant vars
+  # dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
+  #                          "Species_Interaction","Active_cams"),] # wont have SIV here 
+  # ## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
+  # dat = ddply(dat, .(var), transform, 
+  #             weight_var_sp = 1 / ( # inverse
+  #               var(mean) + # sampling variance + 
+  #                 (sd/mean)^2 + # coefficent of variation + 
+  #                 length(unique(species)))) # number of distinct species w/ estimate 
+  # 
+  # # calculate the weighted effect sizes
+  # sum_td_dom = ddply(dat, .(var), summarise,
+  #                    SE = sd(mean) / sqrt(length(mean)), # standard error 
+  #                    weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
+  # ## Assign direction and position 
+  # sum_td_dom$direction = "top-down"
+  # sum_td_dom$sp_position = "dominant"
+  # 
+  # ## combine
+  # sum_td = rbind(sum_td_dom, sum_td_sub)
+  # rm(sum_td_dom, sum_td_sub)
+  # 
+  # 
+  # ## repeat for bottom-up
+  # dat = coeff[coeff$direction == "bottom-up" & coeff$preference == "preferred",]
+  # length(unique(dat$Species_Pair)) # 33 mods, good  
+  # 
+  # # susbet for subordinate coefficents
+  # dat = dat[grepl("SUB", dat$species),]
+  # # only want relevant vars
+  # dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
+  #                          "Species_Interaction","Active_cams"),]
+  # ## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
+  # dat = ddply(dat, .(var), transform, 
+  #             weight_var_sp = 1 / ( # inverse
+  #               var(mean) + # sampling variance + 
+  #                 (sd/mean)^2 + # coefficent of variation + 
+  #                 length(unique(species)))) # number of distinct species w/ estimate 
+  # 
+  # # calculate the weighted effect sizes
+  # sum_bu_sub = ddply(dat, .(var), summarise,
+  #                    SE = sd(mean) / sqrt(length(mean)), # standard error 
+  #                    weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
+  # ## Assign direction and position 
+  # sum_bu_sub$direction = "bottom-up"
+  # sum_bu_sub$sp_position = "subordinate"
+  # 
+  # ## repeat for the dominant 
+  # dat = coeff[coeff$direction == "top-down" & coeff$preference == "preferred",]
+  # # susbet for dominant coefficents
+  # dat = dat[grepl("DOM", dat$species),]
+  # # only want relevant vars
+  # dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
+  #                          "Species_Interaction","Active_cams"),] # wont have SIV here 
+  # ## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
+  # dat = ddply(dat, .(var), transform, 
+  #             weight_var_sp = 1 / ( # inverse
+  #               var(mean) + # sampling variance + 
+  #                 (sd/mean)^2 + # coefficent of variation + 
+  #                 length(unique(species)))) # number of distinct species w/ estimate 
+  # 
+  # # calculate the weighted effect sizes
+  # sum_bu_dom = ddply(dat, .(var), summarise,
+  #                    SE = sd(mean) / sqrt(length(mean)), # standard error 
+  #                    weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
+  # ## Assign direction and position 
+  # sum_bu_dom$direction = "bottom-up"
+  # sum_bu_dom$sp_position = "dominant"
+  # 
+  # ## combine
+  # sum_bu = rbind(sum_bu_dom, sum_bu_sub)
+  # rm(sum_bu_dom, sum_bu_sub)
+  # 
+  # ## combine td and bu
+  # sum = rbind(sum_bu, sum_td)
+  # rm(sum_bu, sum_td, dat)
+  # head(sum)
+  # 
+  # 
+  # # what is the overall effect across ALL models?
+  # # only want relevant vars
+  # dat = coeff[coeff$var %in% c("FLII","HFP","Elevation","Hunting",
+  #                              "Species_Interaction","Active_cams") &
+  #               coeff$preference == "preferred",] # wont have SIV here 
+  # ## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
+  # dat = ddply(dat, .(var), transform, 
+  #             weight_var_sp = 1 / ( # inverse
+  #               var(mean) + # sampling variance + 
+  #                 (sd/mean)^2 + # coefficent of variation + 
+  #                 length(unique(species)))) # number of distinct species w/ estimate 
+  # 
+  # # calculate the weighted effect sizes
+  # sum_all = ddply(dat, .(var), summarise,
+  #                 SE = sd(mean) / sqrt(length(mean)), # standard error 
+  #                 weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
+  # ## Assign direction and position 
+  # sum_all$direction = "overall"
+  # sum_all$sp_position = "overall"
+  # 
+  # ## combine
+  # sum = rbind(sum, sum_all)
+  # rm(sum_all)
+  # 
+  # ## make an upper and lower CI
+  # sum$upper = sum$weighted_var_es + sum$SE
+  # sum$lower = sum$weighted_var_es - sum$SE
+  # 
+  # ## rename vars so they are all acronyms and ordered for the graph 
+  # sum$var[sum$var == "Hunting"] = "A) HUNT"
+  # sum$var[sum$var == "HFP"] = "B) HFP"
+  # sum$var[sum$var == "FLII"] = "C) FLII"
+  # sum$var[sum$var == "Elevation"] = "D) ELV"
+  # sum$var[sum$var == "Active_cams"] = "E) CAMS"
+  # sum$var[sum$var == "Species_Interaction"] = "F) SIV"
+  # 
+  # ## make position more informative
+  # sum$sp_position[sum$direction == "top-down" & sum$sp_position == "dominant"] = "predator"
+  # sum$sp_position[sum$direction == "top-down" & sum$sp_position == "subordinate"] = "prey"
+  # sum$sp_position[sum$direction == "bottom-up" & sum$sp_position == "dominant"] = "prey"
+  # sum$sp_position[sum$direction == "bottom-up" & sum$sp_position == "subordinate"] = "predator"
+  # 
+  # ## set the factor order, putting SIV at the bottom
+  # sum$var = factor(sum$var, levels = c( "F) SIV","E) CAMS", "D) ELV","C) FLII","B) HFP", "A) HUNT"))
+  # sum$direction = factor(sum$direction, levels = c("top-down", "bottom-up", "overall"))
+  # sum$sp_position = factor(sum$sp_position, levels = c("predator", "prey","overall"))
+  # 
+  # ## try the ggplot 
+  # p = 
+  #   ggplot(sum, aes(x = var, y = weighted_var_es, ymin=lower, ymax=upper))+
+  #   geom_pointrange(aes(shape = sp_position, color = direction), size = 1,
+  #                   position= position_dodge(width=.7))+
+  #   geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.6)+
+  #   coord_flip() +  # flip coordinates (puts labels on y axis)
+  #   labs(y = "weighted effect size", x = NULL) +
+  #   scale_color_manual(values = c("top-down" = "darkorange4","bottom-up" = "springgreen4", "overall" = "gray30"))+
+  #   scale_shape_manual(values = c("prey" = 17, "predator" = 15, "overall" = 16))+
+  #   theme_bw()+
+  #   theme(axis.text.x = element_text(size = 22),
+  #         axis.text.y = element_text(size = 22),
+  #         axis.title.x = element_text(size = 22),
+  #         axis.text = element_text(color = "black"),
+  #         text = element_text(family = "Helvetica"))
+  # ## Save this and send to Matthew for prelim results
+  # # ggsave(paste("explore/Overall_weighted_coefficents_preferred_prey_forest_plot_", date, ".png", sep = ""),
+  # #        p, width = 7, height = 7, units = "in")
+  
+  # #
+  # ##
+  # ###
+  # #### Repeat for only supported & preferred models 
+  # ###
+  # ##
+  # #
+  # 
+  # ### For the first test, we will work with a subset of data --> top-down models 
+  # dat = coeff[coeff$direction == "top-down" & coeff$support_liberal == "Supported" & coeff$preference == "preferred",]
+  # # 
+  # length(unique(dat$Species_Pair)) # only 4 pairs! 
+  # 
+  # ## we are interested in how the SIV compares to other variables,
+  # ## and since SIV only applies to subordinate species,
+  # ## we will only meta-analyze coefficents from sub-species
+  # 
+  # # susbet for subordinate coefficents
+  # dat = dat[grepl("SUB", dat$species),]
+  # # only want relevant vars
+  # dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
+  #                          "Species_Interaction","Active_cams"),]
+  # ## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
+  # dat = ddply(dat, .(var), transform, 
+  #             weight_var_sp = 1 / ( # inverse
+  #               var(mean) + # sampling variance + 
+  #                 (sd/mean)^2 + # coefficent of variation + 
+  #                 length(unique(species)))) # number of distinct species w/ estimate 
+  # 
+  # # calculate the weighted effect sizes
+  # sum_td_sub = ddply(dat, .(var), summarise,
+  #                    SE = sd(mean) / sqrt(length(mean)), # standard error 
+  #                    weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
+  # ## Assign direction and position 
+  # sum_td_sub$direction = "top-down"
+  # sum_td_sub$sp_position = "subordinate"
+  # 
+  # ## repeat for the dominant 
+  # dat = coeff[coeff$direction == "top-down"  & coeff$support_liberal == "Supported"  & coeff$preference == "preferred",]
+  # # susbet for dominant coefficents
+  # dat = dat[grepl("DOM", dat$species),]
+  # # only want relevant vars
+  # dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
+  #                          "Species_Interaction","Active_cams"),] # wont have SIV here 
+  # ## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
+  # dat = ddply(dat, .(var), transform, 
+  #             weight_var_sp = 1 / ( # inverse
+  #               var(mean) + # sampling variance + 
+  #                 (sd/mean)^2 + # coefficent of variation + 
+  #                 length(unique(species)))) # number of distinct species w/ estimate 
+  # 
+  # # calculate the weighted effect sizes
+  # sum_td_dom = ddply(dat, .(var), summarise,
+  #                    SE = sd(mean) / sqrt(length(mean)), # standard error 
+  #                    weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
+  # ## Assign direction and position 
+  # sum_td_dom$direction = "top-down"
+  # sum_td_dom$sp_position = "dominant"
+  # 
+  # ## combine
+  # sum_td = rbind(sum_td_dom, sum_td_sub)
+  # rm(sum_td_dom, sum_td_sub)
+  # 
+  # 
+  # ## repeat for bottom-up
+  # dat = coeff[coeff$direction == "bottom-up" & coeff$support_liberal == "Supported" & coeff$preference == "preferred",]
+  # # 
+  # length(unique(dat$Species_Pair)) # only 16 models  
+  # 
+  # # susbet for subordinate coefficents
+  # dat = dat[grepl("SUB", dat$species),]
+  # # only want relevant vars
+  # unique(dat$var)
+  # dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
+  #                          "Species_Interaction","Active_cams"),]
+  # ## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
+  # dat = ddply(dat, .(var), transform, 
+  #             weight_var_sp = 1 / ( # inverse
+  #               var(mean) + # sampling variance + 
+  #                 (sd/mean)^2 + # coefficent of variation + 
+  #                 length(unique(species)))) # number of distinct species w/ estimate 
+  # 
+  # # calculate the weighted effect sizes
+  # sum_bu_sub = ddply(dat, .(var), summarise,
+  #                    SE = sd(mean) / sqrt(length(mean)), # standard error 
+  #                    weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
+  # ## Assign direction and position 
+  # sum_bu_sub$direction = "bottom-up"
+  # sum_bu_sub$sp_position = "subordinate"
+  # 
+  # ## repeat for the dominant 
+  # dat = coeff[coeff$direction == "top-down" & coeff$support_liberal == "Supported"  & coeff$preference == "preferred",]
+  # # susbet for dominant coefficents
+  # dat = dat[grepl("DOM", dat$species),]
+  # # only want relevant vars
+  # dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
+  #                          "Species_Interaction","Active_cams"),] # wont have SIV here 
+  # ## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
+  # dat = ddply(dat, .(var), transform, 
+  #             weight_var_sp = 1 / ( # inverse
+  #               var(mean) + # sampling variance + 
+  #                 (sd/mean)^2 + # coefficent of variation + 
+  #                 length(unique(species)))) # number of distinct species w/ estimate 
+  # 
+  # # calculate the weighted effect sizes
+  # sum_bu_dom = ddply(dat, .(var), summarise,
+  #                    SE = sd(mean) / sqrt(length(mean)), # standard error 
+  #                    weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
+  # ## Assign direction and position 
+  # sum_bu_dom$direction = "bottom-up"
+  # sum_bu_dom$sp_position = "dominant"
+  # 
+  # ## combine
+  # sum_bu = rbind(sum_bu_dom, sum_bu_sub)
+  # rm(sum_bu_dom, sum_bu_sub)
+  # 
+  # ## combine td and bu
+  # sum = rbind(sum_bu, sum_td)
+  # rm(sum_bu, sum_td, dat)
+  # head(sum)
+  # 
+  # # what is the overall effect across ALL models?
+  # # only want relevant vars
+  # dat = coeff[coeff$var %in% c("FLII","HFP","Elevation","Hunting",
+  #                              "Species_Interaction","Active_cams") &
+  #               coeff$preference == "preferred" & coeff$support_liberal == "Supported",] 
+  # ## first calculate the weights that account for sampling variance, standard deviation (via CV) and obs per species 
+  # dat = ddply(dat, .(var), transform, 
+  #             weight_var_sp = 1 / ( # inverse
+  #               var(mean) + # sampling variance + 
+  #                 (sd/mean)^2 + # coefficent of variation + 
+  #                 length(unique(species)))) # number of distinct species w/ estimate 
+  # 
+  # # calculate the weighted effect sizes
+  # sum_all = ddply(dat, .(var), summarise,
+  #                 SE = sd(mean) / sqrt(length(mean)), # standard error 
+  #                 weighted_var_es = sum(mean * weight_var_sp)/ sum(weight_var_sp)) # weighted estimate 
+  # ## Assign direction and position 
+  # sum_all$direction = "overall"
+  # sum_all$sp_position = "overall"
+  # 
+  # ## combine
+  # sum = rbind(sum, sum_all)
+  # rm(sum_all)
+  # 
+  # ## make an upper and lower CI
+  # sum$upper = sum$weighted_var_es + sum$SE
+  # sum$lower = sum$weighted_var_es - sum$SE
+  # 
+  # ## rename vars so they are all acronyms and ordered for the graph 
+  # sum$var[sum$var == "Hunting"] = "A) HUNT"
+  # sum$var[sum$var == "HFP"] = "B) HFP"
+  # sum$var[sum$var == "FLII"] = "C) FLII"
+  # sum$var[sum$var == "Elevation"] = "D) ELV"
+  # sum$var[sum$var == "Active_cams"] = "E) CAMS"
+  # sum$var[sum$var == "Species_Interaction"] = "F) SIV"
+  # 
+  # ## make position more informative
+  # sum$sp_position[sum$direction == "top-down" & sum$sp_position == "dominant"] = "predator"
+  # sum$sp_position[sum$direction == "top-down" & sum$sp_position == "subordinate"] = "prey"
+  # sum$sp_position[sum$direction == "bottom-up" & sum$sp_position == "dominant"] = "prey"
+  # sum$sp_position[sum$direction == "bottom-up" & sum$sp_position == "subordinate"] = "predator"
+  # 
+  # ## set the factor order, putting SIV at the bottom
+  # sum$var = factor(sum$var, levels = c( "F) SIV","E) CAMS", "D) ELV","C) FLII","B) HFP", "A) HUNT"))
+  # sum$direction = factor(sum$direction, levels = c("top-down", "bottom-up", "overall"))
+  # sum$sp_position = factor(sum$sp_position, levels = c("predator", "prey","overall"))
+  # 
+  # ## try the ggplot 
+  # p = 
+  #   ggplot(sum, aes(x = var, y = weighted_var_es, ymin=lower, ymax=upper))+
+  #   geom_pointrange(aes(shape = sp_position, color = direction), size = 1,
+  #                   position= position_dodge(width=.7))+
+  #   geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.6)+
+  #   coord_flip() +  # flip coordinates (puts labels on y axis)
+  #   labs(y = "weighted effect size", x = NULL) +
+  #   scale_color_manual(values = c("top-down" = "darkorange4","bottom-up" = "springgreen4", "overall" = "gray30"))+
+  #   scale_shape_manual(values = c("prey" = 17, "predator" = 15, "overall" = 16))+
+  #   theme_bw()+
+  #   theme(axis.text.x = element_text(size = 22),
+  #         axis.text.y = element_text(size = 22),
+  #         axis.title.x = element_text(size = 22),
+  #         axis.text = element_text(color = "black"),
+  #         text = element_text(family = "Helvetica"))
+  # ## Save this 
+  # # ggsave(paste("explore/Overall_weighted_coefficents_preferred_prey_and_supported_mods_forest_plot_", date, ".png", sep = ""),
+  # #        p, width = 7, height = 7, units = "in")
+  
+}
+
+### What does the hunting variable mean? 
+## Matthew thinks it should be inversed on the plot 
+# Summarize hunting accessability per landscape --> gut check it! 
+hunt_sum = ddply(og_meta, .(Landscape), summarize,
+                 min_hunt = round(min(hunting_accessibility_3km), 2),
+                 max_hunt = round(max(hunting_accessibility_3km),2),
+                 mean_hunt = round(mean(hunting_accessibility_3km), 2))
+# order from largest mean 
+hunt_sum = hunt_sum[order(hunt_sum$mean_hunt),]
+hunt_sum = na.omit(hunt_sum)
+hunt_sum
+
+ggplot(og_meta, aes(x = hunting_accessibility_3km, y = human_footprint_3km))+
+  geom_point()+
+  stat_smooth(method = "lm")
+## uh oh, I think this is supposed to be negative... 
 
 # ## make an upper and lower CI
 # sum$upper = sum$weighted_var_es + sum$SE
@@ -2943,6 +3265,14 @@ ddply(og_captures[og_captures$Species %in% c("Panthera_pardus", "Panthera_tigris
                                              "Neofelis_diardi" ),], .(Species), summarize,
       num_cap = length(Individuals))
 
+## what about total number of detections for our species?
+sp = unique(unique(coeff$sub_sp), unique(coeff$dom_sp)) # all 44
+nrow(og_captures[og_captures$Species %in% sp, ]) #140,334
+head(og_captures[og_captures$Species == "Muntiacus_genus" ,]) ## missing combined species! 
+nrow(og_resamp_captures[og_resamp_captures$Species %in% sp,]) # 131,481 rows, but some rows have multiple detections
+sum(og_resamp_captures$independent_events[og_resamp_captures$Species %in% sp]) # 173,428!
+rm(sp)
+
 ### effort per survey?
 og_meta$camera_end.date = as.Date(og_meta$camera_end.date, format = "%Y-%m-%d")
 og_meta$camera_start.date = as.Date(og_meta$camera_start.date, format = "%Y-%m-%d")
@@ -2960,10 +3290,6 @@ rm(eff)
 summary(og_meta$effort)
 summary(og_resamp_meta$Cell_Effort)
 summary(og_resamp_meta$Avg_effort) # this is probably the most faithful data to include based on what was analyzed
-
-### how many detections of our study species 
-og_captures$Species = gsub(" ", "_", og_captures$Species)
-nrow(og_captures[og_captures$Species %in% preform$sub_species,]) # 140,334
 
 ## how many surveys before removal?
 length(unique(og_meta$survey_id)) #361
@@ -3288,7 +3614,6 @@ set.seed(123)
 # Central Normal distribution with mean=0
 normal_data <- rnorm(100, mean = 0, sd = 6) # equal
 # normal_data <- rnorm(150, mean = 0, sd = 6) # realistic
-
 
 # Negative-skewed Normal distribution with mean= -2
 # Using shape parameter to achieve negative skewness

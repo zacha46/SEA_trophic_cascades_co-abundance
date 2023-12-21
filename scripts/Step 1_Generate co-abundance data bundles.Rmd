@@ -1,7 +1,7 @@
 ---
 title: "Step 1_Prepare data for bundling"
 author: "Zachary Amir"
-date: "2023-11-06"
+date: "2023-12-21"
 output: html_document
 ---
 
@@ -33,7 +33,7 @@ library(traitdata)
 ### captures first 
 
 ## import and combine here
-files = list.files("/Users/zachary_amir/Dropbox/CT capture histories database/Asian ECL raw CT data/Step5_HPC_import_resampled_captures/")
+files = list.files("CT capture histories database/Asian ECL raw CT data/Step5_HPC_import_resampled_captures/")
 files = files[!grepl("OLD", files)] # remove old data folder
 
 ## thin to the relevant scale were interested in -- 3km 
@@ -1270,7 +1270,8 @@ for(i in 1:length(umfs)){ # repeat for each first speices
   
 } # end 1st species
 rm(i,l,sp_dom,sp_sub, sp_dom_dat, sp_sub_dat, obs, temp, z.dom, z.sub,
-   bdata, all_else, data.dom, data.sub, covs, exp, non_det_SU, dom_tg, non_det_land)
+   bdata, all_else, data.dom, data.sub, covs, exp, non_det_SU, dom_tg, 
+   non_det_land, dom_det, sub_det, lands, pres)
 
 
 ## flatten the list of lists into a single list
@@ -1279,6 +1280,110 @@ length(bdata_list) #260 combos after removing species that have less than 100 de
 names(bdata_list) # looks good! 
 
 ```
+
+### Reorganize list for efficent analysis
+
+After some prelimiary testing, I realized that all co-abundance models should NOT run on the same amount of RAM... Most complete w/ 100 GB, but some need 250 or even 500 GB to complete. Rather than letting heavy models fail for a slow burn, I will reorganize the list into 100, 250, or 500 GB lists. This process will be acheived by inspecting the OE (output or error) files extracted from the HPC when each job runs. 
+```{r Use OE files to determine GB per list, echo=FALSE}
+
+## First, examine how many OE files we have 
+file = list.files("/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_trophic_cascades_co-abundance/results/HALF_LONG_testing_Oct_2023/HALF_LONG_OE_files/")
+
+## Then extract the unique job numbers 
+jobs = unique(str_extract(file, pattern = "(?<=-|_)[0-9]+(?=-|_)")) #Thx chat GPT for the RegEx
+unique(jobs) # good, should only have three. 
+
+# ## assign each a GB level in a new DF
+# GB = data.frame("number" = jobs, 
+#                 "RAM" = c("100GB", "250GB", "500GB"))
+
+## and save job numbers, GB,  and species pairs  
+jobs = data.frame("number" = jobs, 
+                  "RAM" = c("100GB", "250GB", "500GB"),
+                  "Species_Pair" = as.character(NA))
+## End goal is to fill this species_pair column
+
+# Loop to the rescue as usual!
+
+# Only need to work with .out files, all relevant info is here. 
+out = file[grepl(".out", file)]
+
+for(i in 1:length(bdata_list)){
+  
+  # grab one sp pair
+  sp = names(bdata_list)[i]
+
+  ## import each out file to find the correct one 
+  for(f in 1:length(out)){
+    
+    ## import an out file 
+    o = read.delim(paste("/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_trophic_cascades_co-abundance/results/HALF_LONG_testing_Oct_2023/HALF_LONG_OE_files/", 
+                         out[f], sep = ""), sep = "\t")
+    
+    ## grab the job number too 
+    job_num = str_extract(out[f], pattern = "(?<=-|_)[0-9]+(?=-|_)")
+    
+    ## and the relevant GB that matches the job num
+    gb = unique(jobs$RAM[jobs$number == job_num])
+    
+    ## grab the 8th word from the first line of the out file to grab the species pair 
+    sp_out = strsplit(o[1,], "\\s+")[[1]]
+    sp_out = sp_out[8]
+    
+    ## Verify the out file has the correct species pair by skipping the iteration if it is wrong! 
+    if(sp != sp_out){next}
+    
+    ## now verify the out file actually completed the job,
+    # by checking for "Finished running co-abundance model" on line 9
+    if(grepl("Finished running co-abundance model", o[9,])){
+      
+      # if it is a match, make a new row to add to the jobs DF 
+      new = data.frame("number" = job_num, 
+                       "RAM" = gb, 
+                       "Species_Pair" = sp)
+      
+      # and combine with jobs 
+      jobs = rbind(jobs, new)
+      
+      
+    }else{} # end finished mod conditional 
+    
+  } # end per out file 
+    
+} # end per sp_pair
+rm(o,f,i,gb,file,job_num,out,sp,sp_out,new)
+
+## remove NA species pairs from making the df
+jobs_final = jobs[!is.na(jobs$Species_Pair),]
+
+## verify all jobs are accounted for 
+setdiff(names(bdata_list), jobs_final$Species_Pair) #all here! 
+
+## inspect to make sure no mods have multiple job numbers
+inspect = ddply(jobs_final, .(Species_Pair), summarize,
+                num_job = length(unique(number)))
+sp = inspect$Species_Pair[inspect$num_job > 1] # 5 mods were completed twice! 
+## verify
+jobs_final[jobs_final$Species_Pair %in% sp,] #Only want the smaller job number
+
+# remove duplicated by taking the min number 
+jobs_final = jobs_final %>%
+  group_by(Species_Pair) %>%
+  filter(number == min(number))
+
+## verify all species are present still! 
+setdiff(names(bdata_list), jobs_final$Species_Pair) #all here! 
+
+## make sure there is no NA
+anyNA(jobs_final)
+
+## clean up
+rm(inspect, jobs)
+
+
+```
+
+
 
 ### Save the final list of bundled data
 
@@ -1293,68 +1398,47 @@ year<-str_sub(Sys.Date(),-10,-7)
 date = paste(year,month,day, sep = "")
 rm(day,month,year)
  
-# saveRDS(bdata_list, here::here(paste("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_", length(bdata_list), "_species_pairs_", date, ".RDS", sep = "")))
 
+# ## Save data per GB requirements! 
+# save = bdata_list[names(bdata_list) %in% jobs_final$Species_Pair[jobs_final$RAM == "100GB"]]
+# saveRDS(save, here::here(paste("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_100GB_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
+# 
+# save = bdata_list[names(bdata_list) %in% jobs_final$Species_Pair[jobs_final$RAM == "250GB"]]
+# saveRDS(save, here::here(paste("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_250GB_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
+# 
+# save = bdata_list[names(bdata_list) %in% jobs_final$Species_Pair[jobs_final$RAM == "500GB"]]
+# saveRDS(save, here::here(paste("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_500GB_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
 
 ```
 
 
 ### Generate data bundles for sensetivity testing
 
-After some preliminary tests, some species pairs are generating wild species interaction values (SIV), such as |5|, or are consistently failing to preform in terms of Bayes p-values. The goal here is to grab at least three species pairs, and play with the data to explore how SIVs and bayes p-vales change based on the underlying data. These three models will include-
-1) poor SIV & bayes p-value and rare: "SUB-Lophura_ignita~DOM-Panthera_pardus"  (the inverse, SUB = leopard, is also crazy) (both < 1000 detections)
-Other options--
-
-SUB-Trichys_fasciculata~DOM-Panthera_tigris (just over 100 shared detections)
-SUB-Macaca_fascicularis~DOM-Cuon_alpinus (< 100 shared detections each)
-
-
-
-
-2) good SIV & bayes p-value and common (and supports a hypothesis): "SUB-Muntiacus_genus~DOM-Panthera_tigris" (both > 1000 detections)
-
-Seems like a mismatch between sample sizes (one really common, one rare), or both rare species tend to produce issues, tho this is not always the case! 
+After running a meta-regression of hunting's effect on all species, we observed a counter-intuitive positive trend. Therefore, to make sure results are robust to the effect of hunting, I will save the 20 preferred models we have significant results for, and re-run them with log(hunting) and without the hunting var. Any sensitive results to hunting should then make itself clear. 
 
 ```{r generate testing bundles, echo=FALSE}
 
-# # how many detections for probelm species? Added a few additional problem critters, but wont explore further. 
-# sp_count = ddply(caps[caps$Species %in% c("Lophura_ignita","Muntiacus_genus", "Herpestes_brachyurus", "Trichys_fasciculata",
-#                                           "Panthera_tigris", "Panthera_pardus", "Cuon_alpinus", "Neofelis_genus"),], .(Species), summarize,
-#                  num_cap = length(Species),
-#                  num_lands = length(unique(Landscape)))
-# sp_count
-# 
-# 
-# ## Create a vector of conditions that will be met when making bundled data. 
-# conditions = c("2x_SUB", "2x_DOM", # multiple counts by two
-#                "8x_SUB", "8x_DOM", # multiple counts by eight
-#                "2/SUB", "2/DOM",   # subtract counts by two 
-#                "8/SUB", "8/DOM"    # subtract counts by two 
-#                )
-# 
-# ## save the relevant species pairs 
-# pairs = c("SUB-Lophura_ignita~DOM-Panthera_pardus", "SUB-Muntiacus_genus~DOM-Panthera_tigris")
-# 
-# ## just double check which landscapes BOTH species are detected at. 
-# leo_lands = unique(caps$Lanscape[caps$Species == "Panthera_pardus"]) 
-# bird_lands = unique(caps$Landscape[caps$Species == "Lophura_ignita"]) ## this isnt supposed to overlap w/ leopards... 
-# unique(caps$survey_id[caps$Species == "Lophura_ignita" &
-#                         grepl("P_", caps$Landscape)]) # four surveys @ pasoh
-# nrow(caps[caps$Species == "Lophura_ignita" &
-#                         grepl("P_", caps$Landscape),]) #12 detections! 
-# 
-# 
-# 
-# other_lands = unique(caps$Landscape[caps$Species == "Trichys_fasciculata"]) ## IUCN says this isnt in thailand... 
-# 
-# unique(caps$survey_id[caps$Species == "Trichys_fasciculata" &
-#                         grepl("Thai", caps$Landscape)]) # two surveys
-# nrow(caps[caps$Species == "Trichys_fasciculata" &
-#                         grepl("Thai", caps$Landscape),]) # 16 detections! 
-# 
-# 
-# 
-# # Trichys_fasciculata
+## import results of completed mods and results 
+preform = read.csv("/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_trophic_cascades_co-abundance/results/summarized_results/model_performance_and_SIVs_20231215.csv")
+# inspect
+head(preform)
+
+## grab the sp pairs that are supported and preferred
+preform = preform[preform$support_liberal == "Supported" & preform$preference == "preferred",]
+
+## verify which GBs we need here
+table(jobs_final$RAM[jobs_final$Species_Pair %in% preform$Species_Pair]) # all options, lovely. 
+# majority are 250, so work with that. 
+preform = preform[preform$Species_Pair %in% jobs_final$Species_Pair[jobs_final$RAM == "250GB"],]
+
+## who are we working with?
+select(preform, Species_Pair, Significance, direction)
+# significant top-down and bottom-up results. Good! 
+
+## save em! 
+# new_dat = bdata_list[names(bdata_list) %in% preform$Species_Pair]
+# saveRDS(save, here::here(paste("data/send_to_HPC/Bundled_data_for_HUNTING_SENSITIVITY_co-abundance_mods_250GB_", length(new_dat), "_species_pairs_", date, ".RDS", sep = "")))
+# rm(new_dat)
 
 ```
 

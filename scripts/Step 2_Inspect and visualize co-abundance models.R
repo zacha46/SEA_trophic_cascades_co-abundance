@@ -3255,6 +3255,247 @@ rm(bpv, chat, i, path, day,month,year,date,plot_dat,
    n, dat,add, text_data)
 
 
+######## Examine & Visualize hunting variable tests ######
+
+### Due to counter-intuitve positive trend in the hunting variable from the forest plots,
+### We ran 2 tests with the hunting variable on 13 models 
+## 1) Remove hunting variable completly
+## 2) Use the log10 transformation of the hunting variable 
+# All tests were run with HALF_LONG settings to ensure valid comparisons. 
+
+## The goal is to compare the SIV between these different tests to examine
+## if hunting drives species interations
+### OR 
+## If we see a positve result with the negative log10 version b/c values are negative 
+
+
+## First import relevant coefficent files 
+files = list.files("results/Hunting_test_Dec_2023/coefficent_dataframes/")
+
+# store results here
+coeff.res = list()
+
+# loop thru each file to import into list
+for(i in 1:length(files)){
+  
+  # import 
+  d = read.csv(paste("results/Hunting_test_Dec_2023/coefficent_dataframes/", files[i], sep = ""))
+  
+  ## if there are pesky row.names, remove em!
+  d$X = NULL
+  
+  ## create a new column for the test 
+  if(grepl("NO_HUNT", files[i])){
+    d$test = "NO_HUNT"
+  }
+  if(grepl("LOG_HUNT", files[i])){
+    d$test = "LOG_HUNT"
+  }
+  
+  # save it in the list 
+  coeff.res[[i]] = d
+  
+  if(ncol(d) != 11){
+    print(paste("The file", files[i], "with the index value of", i, 
+                "has the wrong number of columns and wont combine well. INVESTIGTE!"))
+  }
+}
+rm(d,i, files)
+
+## bind together and inspect
+hunt_coeff = do.call(rbind, coeff.res)
+
+## quick inspection
+head(hunt_coeff)
+str(hunt_coeff)
+sort(unique(hunt_coeff$Species_Pair)) # 13 pairs
+rm(coeff.res)
+
+## split apart species pair into sub vs dom species
+hunt_coeff <- within(hunt_coeff, {
+  sub_sp <- sapply(strsplit(Species_Pair, "~"), function(x) x[1])
+  dom_sp <- sapply(strsplit(Species_Pair, "~"), function(x) x[2])
+})
+hunt_coeff$dom_sp = gsub("DOM-", "", hunt_coeff$dom_sp)
+hunt_coeff$sub_sp = gsub("SUB-", "", hunt_coeff$sub_sp)
+
+## grab the matching results from OG tests
+d = coeff[coeff$Species_Pair %in% hunt_coeff$Species_Pair, ]
+
+# and assign a test name for easy binding and differentiation
+d$test = "NORM_HUNT"
+
+# combine them 
+hunt_coeff = rbind(hunt_coeff, d)
+rm(d)
+
+## check if all mods finished
+sort(table(hunt_coeff$Species_Pair[hunt_coeff$var == "Species_Interaction"])) # a few mods missing 
+sort(table(hunt_coeff$test[hunt_coeff$var == "Species_Interaction"])) 
+# ideally ^these^ are equal... in time they will be 
+
+## split apart position into dominant or subordinate
+hunt_coeff$position[grepl("SUB", hunt_coeff$species)] = "subordinate"
+hunt_coeff$position[grepl("DOM", hunt_coeff$species)] = "dominant"
+table(hunt_coeff$position) # good
+
+
+#
+##
+###
+#### Visualize difference between log vs norm hunting 
+###
+##
+#
+
+## just pull out the hunting variable first
+d = hunt_coeff[hunt_coeff$var == "Hunting",]
+table(d$position) # should be equal 
+
+## remove mod w/out final results
+d= d[d$Species_Pair !=  "SUB-Neofelis_genus~DOM-Arctictis_binturong", ]
+
+dodge_width = 1
+
+## make the plot
+p = 
+ggplot(d, aes(x = test, y = mean, fill = position))+
+  geom_bar(stat = "identity", position = position_dodge(width = dodge_width), color = "black", width = dodge_width) +
+  geom_errorbar(aes(ymin = mean-sd, ymax = mean+sd), position = position_dodge(width = dodge_width), width = 0, color = "black") +
+  # geom_col()+
+  facet_wrap(~Species_Pair)+
+  coord_cartesian(ylim = c(-1,1.5))+
+  labs(y = "Hunting variable effect size", x = NULL)+
+  scale_fill_manual(values = c("tan3","wheat3"))+
+  theme(axis.text.y = element_text(size = 22),
+        axis.title.x = element_text(size = 22),
+        axis.text = element_text(color = "black"),
+        text = element_text(family = "Helvetica"))
+## Looks like log vs norm makes no difference! 
+# save it! 
+# ggsave(paste("explore/Norm_vs_log_hunting_12_mods_HALF_LONG_", date, ".png", sep = ""), p,
+#        height = 8, width = 12, units = "in")
+rm(d, p)
+
+
+#
+##
+###
+#### Visualize difference in SIV between log, norm, and no hunting 
+###
+##
+#
+
+d = hunt_coeff[hunt_coeff$var == "Species_Interaction",]
+table(d$test) # should be equal, but mods are still running. 
+
+
+dodge_width = 1
+
+## make the plot
+p =
+  ggplot(d, aes(x = test, y = mean, fill = test))+
+  geom_bar(stat = "identity", position = position_dodge(width = dodge_width), 
+           color = "black", width = dodge_width) +
+  geom_errorbar(aes(ymin = mean-sd, ymax = mean+sd), 
+                position = position_dodge(width = dodge_width), 
+                width = 0, color = "black") +
+  facet_wrap(~Species_Pair)+
+  labs(y = "SIV", x = NULL)+
+  theme(axis.text.y = element_text(size = 22),
+        axis.title.x = element_text(size = 22),
+        axis.text = element_text(color = "black"),
+        text = element_text(family = "Helvetica"))
+## looks like two models preformed differnetly, inspect further... 
+
+# but save it first! 
+# ggsave(paste("explore/Norm_vs_log_vs_no_hunting_13_mods_SIV_HALF_LONG_", date, ".png", sep = ""), p,
+#        height = 8, width = 12, units = "in")
+rm(p,dodge_width)
+
+## inspect two weird results 
+d[d$Species_Pair %in% c("SUB-Panthera_tigris~DOM-Arctictis_binturong"),]
+## No hunting mod failed hard --> bad Rhat and non-significant CI. 
+## Log and normal hunting are essentially the same. 
+
+d[d$Species_Pair %in% c("SUB-Panthera_pardus~DOM-Arctictis_binturong" ),]
+## Well normal mod failed also --> I sent the wrong models to the HPC :( 
+## All parameters Rhat > 1.3, so all fail. But logged hutning is closest. 
+## both logged and norm are the same direction, but logged is larger effect size.
+
+rm(d)
+
+#
+##
+###
+#### Compare PPC between different tests
+###
+##
+#
+
+## first need to import the PPC files 
+files = list.files("results/Hunting_test_Dec_2023/PPC_dataframes/")
+## dont want plot data 
+files = files[!grepl("plotdata", files)]
+
+## split apart tests 
+no = files[grepl("NO_HUNT", files)]
+log = files[grepl("LOG_HUNT", files)]
+# combine and clean
+files = c(no, log)
+rm(no, log)
+
+## save em here
+hunt_ppc = list()
+
+# loop thru each file to import into list
+for(i in 1:length(files)){
+  
+  # import 
+  d = read.csv(paste("results/Hunting_test_Dec_2023/PPC_dataframes/", files[i], sep = ""))
+  
+  ## if there are pesky row.names, remove em!
+  d$X = NULL
+  
+  ## create a new column for the test 
+  if(grepl("NO_HUNT", files[i])){
+    d$test = "NO_HUNT"
+  }
+  if(grepl("LOG_HUNT", files[i])){
+    d$test = "LOG_HUNT"
+  }
+  
+  # save it in the list 
+  hunt_ppc[[i]] = d
+  
+}
+rm(d,i, files)
+
+## turn list into df
+hunt_ppc = do.call(rbind, hunt_ppc)
+
+## inspect
+unique(hunt_ppc$Species_Pair) # 13 mods here, good 
+head(hunt_ppc)
+
+## add the normal results 
+norm_ppc = ppc_values[ppc_values$Species_Pair %in% hunt_ppc$Species_Pair, ]
+norm_ppc$test = "NORM_HUNT"
+
+## combine
+ppc = rbind(norm_ppc, hunt_ppc)
+rm(norm_ppc, hunt_ppc)
+
+
+### Establish degree of support 
+
+preform$parameter_valid[preform$Rhat >= 0.99 & preform$Rhat <= 1.2] = "Yes"
+preform$OD_valid[preform$Chat.dom >= 0.98 & preform$Chat.dom <= 1.1 &
+                   preform$Chat.sub >= 0.98 & preform$Chat.sub <= 1.1] = "Yes"
+preform$BPV_valid_liberal[preform$BPV.dom >= 0.15 & preform$BPV.dom <= 0.85 &
+                            preform$BPV.sub >= 0.15 & preform$BPV.sub <= 0.85] = "Yes"
+
+
 
 ######## Summary statistics to describe overall dataset ######
 

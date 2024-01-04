@@ -1,7 +1,7 @@
 ---
 title: "Step 1_Prepare data for bundling"
 author: "Zachary Amir"
-date: "2023-12-21"
+date: "2024-01-03"
 output: html_document
 ---
 
@@ -33,7 +33,7 @@ library(traitdata)
 ### captures first 
 
 ## import and combine here
-files = list.files("CT capture histories database/Asian ECL raw CT data/Step5_HPC_import_resampled_captures/")
+files = list.files("/Users/zachary_amir/Dropbox/CT capture histories database/Asian ECL raw CT data/Step5_HPC_import_resampled_captures/")
 files = files[!grepl("OLD", files)] # remove old data folder
 
 ## thin to the relevant scale were interested in -- 3km 
@@ -607,8 +607,9 @@ sort(traits$scientificNameStd[traits$tiger_pref == "Yes"]) # 10 species, ok
 #who is missing?
 sort(traits$scientificNameStd[traits$tiger_pref == "No"]) # seems ok, 33 species
 
-## are leopards a preferred prey species for tigers? There is all sorts of literature saying they are subordinate, so maybe yes
-traits$tiger_pref[traits$scientificNameStd == "Panthera_pardus"] = "Yes"
+## Make sure there are no tigers preferentially prey upon other big cats
+traits$tiger_pref[grepl("Panthera", traits$scientificNameStd)] = "No" 
+
 
 #### Leopards 
 #  https://doi.org/10.1111/j.1469-7998.2006.00139.x
@@ -1293,14 +1294,11 @@ file = list.files("/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release proj
 jobs = unique(str_extract(file, pattern = "(?<=-|_)[0-9]+(?=-|_)")) #Thx chat GPT for the RegEx
 unique(jobs) # good, should only have three. 
 
-# ## assign each a GB level in a new DF
-# GB = data.frame("number" = jobs, 
-#                 "RAM" = c("100GB", "250GB", "500GB"))
-
 ## and save job numbers, GB,  and species pairs  
 jobs = data.frame("number" = jobs, 
-                  "RAM" = c("100GB", "250GB", "500GB"),
+                  "RAM" = c("100GB", "250GB", "500GB"), # Based on personal knowledge of job submissions
                   "Species_Pair" = as.character(NA))
+jobs
 ## End goal is to fill this species_pair column
 
 # Loop to the rescue as usual!
@@ -1346,7 +1344,7 @@ for(i in 1:length(bdata_list)){
       jobs = rbind(jobs, new)
       
       
-    }else{} # end finished mod conditional 
+    } # end finished mod conditional 
     
   } # end per out file 
     
@@ -1375,11 +1373,56 @@ jobs_final = jobs_final %>%
 setdiff(names(bdata_list), jobs_final$Species_Pair) #all here! 
 
 ## make sure there is no NA
-anyNA(jobs_final)
+anyNA(jobs_final) # MUST BE F
+
+### Begin to add preferred prey column
+
+## First, split apart species pair into dom and sub species 
+jobs_final <- within(jobs_final, {
+  sub_sp <- sapply(strsplit(Species_Pair, "~"), function(x) x[1])
+  dom_sp <- sapply(strsplit(Species_Pair, "~"), function(x) x[2])
+})
+jobs_final$dom_sp = gsub("DOM-", "", jobs_final$dom_sp)
+jobs_final$sub_sp = gsub("SUB-", "", jobs_final$sub_sp)
+
+## inspect
+setdiff(keep, jobs_final$dom_sp) # makes sense, small carnivores are not dominant! 
+setdiff(keep, jobs_final$sub_sp) # all here! 
+length(unique(jobs_final$sub_sp)) == length(keep) # MUST BE TRUE
+
+## now add a new column if the model is preferred or not 
+jobs_final$preference = "community" # not preferred
+# top-downs
+jobs_final$preference[jobs_final$dom_sp == "Panthera_tigris" &
+                        jobs_final$sub_sp %in% 
+                        traits$scientificNameStd[traits$tiger_pref == "Yes"]] = "preferred"
+jobs_final$preference[jobs_final$dom_sp == "Panthera_pardus" &
+                        jobs_final$sub_sp %in% 
+                        traits$scientificNameStd[traits$leopard_pref == "Yes"]] = "preferred"
+jobs_final$preference[jobs_final$dom_sp == "Cuon_alpinus" &
+                        jobs_final$sub_sp %in% 
+                        traits$scientificNameStd[traits$dhole_pref == "Yes"]] = "preferred"
+jobs_final$preference[jobs_final$dom_sp == "Neofelis_genus" &
+                        jobs_final$sub_sp %in% 
+                        traits$scientificNameStd[traits$CL_pref == "Yes"]] = "preferred"
+# bottom-ups
+jobs_final$preference[jobs_final$sub_sp == "Panthera_tigris" &
+                        jobs_final$dom_sp %in% 
+                        traits$scientificNameStd[traits$tiger_pref == "Yes"]] = "preferred"
+jobs_final$preference[jobs_final$sub_sp == "Panthera_pardus" &
+                        jobs_final$dom_sp %in% 
+                        traits$scientificNameStd[traits$leopard_pref == "Yes"]] = "preferred"
+jobs_final$preference[jobs_final$sub_sp == "Cuon_alpinus" &
+                        jobs_final$dom_sp %in% 
+                        traits$scientificNameStd[traits$dhole_pref == "Yes"]] = "preferred"
+jobs_final$preference[jobs_final$sub_sp == "Neofelis_genus" &
+                        jobs_final$dom_sp %in% 
+                        traits$scientificNameStd[traits$CL_pref == "Yes"]] = "preferred"
+## how many do we have?
+table(jobs_final$preference) # 66 preferred, 194 not. 66 + 194 = 260, all accounted for! 
 
 ## clean up
-rm(inspect, jobs)
-
+rm(inspect, jobs, sp)
 
 ```
 
@@ -1399,15 +1442,44 @@ date = paste(year,month,day, sep = "")
 rm(day,month,year)
  
 
-# ## Save data per GB requirements! 
-# save = bdata_list[names(bdata_list) %in% jobs_final$Species_Pair[jobs_final$RAM == "100GB"]]
-# saveRDS(save, here::here(paste("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_100GB_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
-# 
-# save = bdata_list[names(bdata_list) %in% jobs_final$Species_Pair[jobs_final$RAM == "250GB"]]
-# saveRDS(save, here::here(paste("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_250GB_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
-# 
-# save = bdata_list[names(bdata_list) %in% jobs_final$Species_Pair[jobs_final$RAM == "500GB"]]
-# saveRDS(save, here::here(paste("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_500GB_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
+## Save data per preference AND GB requirements!
+# pref 100 GB
+# save = bdata_list[names(bdata_list) %in% 
+#                     jobs_final$Species_Pair[jobs_final$RAM == "100GB"] & 
+#                     names(bdata_list) %in% 
+#                             jobs_final$Species_Pair[jobs_final$preference == "preferred"]]
+# saveRDS(save, here::here(paste("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_preferred_100GB_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
+# pref 250 GB
+# save = bdata_list[names(bdata_list) %in% 
+#                     jobs_final$Species_Pair[jobs_final$RAM == "250GB"] & 
+#                     names(bdata_list) %in% 
+#                             jobs_final$Species_Pair[jobs_final$preference == "preferred"]]
+# saveRDS(save, here::here(paste("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_preferred_250GB_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
+# pref 500 GB
+# save = bdata_list[names(bdata_list) %in% 
+#                     jobs_final$Species_Pair[jobs_final$RAM == "500GB"] & 
+#                     names(bdata_list) %in% 
+#                             jobs_final$Species_Pair[jobs_final$preference == "preferred"]]
+# saveRDS(save, here::here(paste("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_preferred_500GB_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
+# NON-pref 100 GB
+# save = bdata_list[names(bdata_list) %in% 
+#                     jobs_final$Species_Pair[jobs_final$RAM == "100GB"] & 
+#                     names(bdata_list) %in% 
+#                             jobs_final$Species_Pair[jobs_final$preference == "community"]]
+# saveRDS(save, here::here(paste("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_community_100GB_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
+# NON-pref 250 GB
+# save = bdata_list[names(bdata_list) %in%
+#                     jobs_final$Species_Pair[jobs_final$RAM == "250GB"] &
+#                     names(bdata_list) %in%
+#                             jobs_final$Species_Pair[jobs_final$preference == "community"]]
+# saveRDS(save, here::here(paste("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_community_250GB_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
+# NON-pref 500 GB
+# save = bdata_list[names(bdata_list) %in%
+#                     jobs_final$Species_Pair[jobs_final$RAM == "500GB"] &
+#                     names(bdata_list) %in%
+#                             jobs_final$Species_Pair[jobs_final$preference == "community"]]
+# saveRDS(save, here::here(paste("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_community_500GB_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
+
 
 ```
 
@@ -1436,9 +1508,9 @@ select(preform, Species_Pair, Significance, direction)
 # significant top-down and bottom-up results. Good! 
 
 ## save em! 
-# new_dat = bdata_list[names(bdata_list) %in% preform$Species_Pair]
-# saveRDS(save, here::here(paste("data/send_to_HPC/Bundled_data_for_HUNTING_SENSITIVITY_co-abundance_mods_250GB_", length(new_dat), "_species_pairs_", date, ".RDS", sep = "")))
-# rm(new_dat)
+# save = bdata_list[names(bdata_list) %in% preform$Species_Pair]
+# saveRDS(save, here::here(paste("data/send_to_HPC/Bundled_data_for_HUNTING_SENSITIVITY_co-abundance_mods_250GB_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
+# rm(save)
 
 ```
 

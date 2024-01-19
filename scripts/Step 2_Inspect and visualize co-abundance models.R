@@ -208,7 +208,7 @@ anyNA(preform) # Must be F
 ## assess which models are completed
 preform$mod_completion = "uncompleted"
 preform$mod_completion[preform$Species_Pair %in% coeff$Species_Pair] = "completed"
-table(preform$mod_completion) # 110 completed, 150 uncompleted. 
+table(preform$mod_completion) # 150 completed, 110 uncompleted. 
 
 ######## Import co-abundance PPC dataframes ######
 

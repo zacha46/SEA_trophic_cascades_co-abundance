@@ -13,8 +13,9 @@ rm(list = ls())
 ## load libs 
 library(tidyverse)
 library(plyr)
-library(cowplot) # for arranging plots 
-library(lme4) # For post-hoc regressions of model coefficents
+library(cowplot)   # for arranging plots 
+library(lme4)      # For meta-regressions of model coefficents
+library(MuMIn)     # for R2 values in meta-regressions 
 
 
 # library(metafor) # for meta-analysis of effect sizes
@@ -77,6 +78,7 @@ all_combos = names(bdata)
 
 # List all files in the coefficents folder
 file_list <- dir("results/HALF_LONG_final_Jan_2024/coefficent_dataframes/", full.names = TRUE)
+# file_list <- dir("results/HALF_LONG_testing_Oct_2023/coefficent_dataframes/", full.names = TRUE)
 file_list = file_list[!grepl("OLD", file_list)] # remove the old 
 
 # Extract the filenames without the date
@@ -110,6 +112,7 @@ rm(current_files, earliest_date, files_to_move, name, duplicated_names, file_nam
 
 # list all files
 files = list.files("results/HALF_LONG_final_Jan_2024/coefficent_dataframes/")
+# files = list.files("results/HALF_LONG_testing_Oct_2023/coefficent_dataframes/")
 files = files[!grepl("OLD", files)] # remove any old data 
 
 ## Have a few long and all middle files in this directory, subset for one
@@ -126,6 +129,8 @@ coeff.res = list()
 for(i in 1:length(files)){
   
   d = read.csv(paste("results/HALF_LONG_final_Jan_2024/coefficent_dataframes/", files[i], sep = ""))
+  # d = read.csv(paste("results/HALF_LONG_testing_Oct_2023/coefficent_dataframes/", files[i], sep = ""))
+  
 
   ## if there are pesky row.names, remove em!
   d$X = NULL
@@ -149,7 +154,7 @@ rm(coeff.res)
 
 ## how many models do we have?
 length(unique(coeff$Species_Pair)) 
-# Jan 17th, 2024 --> only 110
+# Feb 1st, 2024 --> 243, missing 17 mods! 
 
 ## inspect effective sample size
 summary(coeff$n.eff[coeff$var == "Species_Interaction"]) # large range, but median and mean are good 
@@ -208,7 +213,7 @@ anyNA(preform) # Must be F
 ## assess which models are completed
 preform$mod_completion = "uncompleted"
 preform$mod_completion[preform$Species_Pair %in% coeff$Species_Pair] = "completed"
-table(preform$mod_completion) # 150 completed, 110 uncompleted. 
+table(preform$mod_completion) # 243 completed, 17 uncompleted. 
 
 ######## Import co-abundance PPC dataframes ######
 
@@ -216,6 +221,7 @@ table(preform$mod_completion) # 150 completed, 110 uncompleted.
 
 # list all files
 files = list.files("results/HALF_LONG_final_Jan_2024/PPC_dataframes/")
+# files = list.files("results/HALF_LONG_testing_Oct_2023/PPC_dataframes/")
 files = files[!grepl("OLD", files)] # remove any old data 
 
 ## Subset files for one setting, especially if multiple are in the mix. 
@@ -263,7 +269,7 @@ for(i in 1:length(files)){
   
   ## read the file 
   d = read.csv(paste("results/HALF_LONG_final_Jan_2024/PPC_dataframes/", files[i], sep = ""))
-  # d = read.csv(paste("results/MIDDLE_testing_Jul_2023/PPC_dataframes/", files[i], sep = ""))
+  # d = read.csv(paste("results/HALF_LONG_testing_Oct_2023/PPC_dataframes/", files[i], sep = ""))
   
   
   ## save plotdata vs values in nested list. 
@@ -312,9 +318,71 @@ ppc_values[ppc_values$Interaction_Estimate > 3, ] # nothing on positive side!
 # remove list now that were all stored in dfs. 
 rm(ppc_res)
 
-### Inspect which species pairs are present/missing, 20240117
-setdiff(all_combos, ppc_plotdat$Species_Pair) # same 150 are still missing
+### Inspect which species pairs are present/missing, 20240201
+setdiff(all_combos, ppc_plotdat$Species_Pair) # same 17 are still missing
 
+## Lets pull out these 17 missing models for further investigation and re-running
+missing = bdata[names(bdata) %in% setdiff(all_combos, ppc_plotdat$Species_Pair)]
+
+## Find out which RAM settings are needed for these mods 
+missing_df = data.frame("Species_Pair" = names(missing),
+                        "GB" = as.character(NA),
+                        "position" = as.character(NA))
+## list the relevant data files 
+files = list.files("data/send_to_HPC/")
+files = files[grepl("Bundled", files)]
+
+## thin files to only include the relevant species pairs 
+
+## check each file
+for(i in 1:length(files)){
+  ## but import the file first 
+  b = readRDS(paste("data/send_to_HPC/", files[i], sep = ""))
+  ## so we can get a vector of names 
+  b_names = names(b)
+  ## check each possible name 
+  for(n in 1:length(b_names)){
+    
+    ## and each missing species pair 
+    for(l in 1:length(missing_df$Species_Pair)){
+      
+      ## if they happen to match 
+      if(missing_df$Species_Pair[l] == b_names[n]){
+        
+        ## grab the GB from the file name 
+        gb = gsub(".*?([0-9]+)GB.*", "\\1", files[i])
+        ## and save it
+        missing_df$GB[missing_df$Species_Pair == missing_df$Species_Pair[l]] = gb
+        ## and the corresponding position
+        missing_df$position[missing_df$Species_Pair == missing_df$Species_Pair[l]] = n
+        
+        ## but if there is no match
+      }else{
+        ## skip it 
+        next
+      }
+    } # end per missing species pair 
+  } # end b_names
+} # end per file 
+rm(l,i,n,b, b_names, gb)
+
+## Consult the HPC to find out why these mods did not finish. 
+### All the 250 GB mods that failed are due to low RAM! 
+### and the rest are 500 GB mods that ran into maintence window. 
+
+### Save the missing mods for running on local computers 
+# but grab the date first 
+day<-str_sub(Sys.Date(),-2)
+month<-str_sub(Sys.Date(),-5,-4)
+year<-str_sub(Sys.Date(),-10,-7)
+date = paste(year,month,day, sep = "")
+rm(year,month,day)
+# save 
+# saveRDS(missing, paste("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_community_500GB_", 
+#                        length(missing), "_MISSING_species_pairs_", date, ".RDS", sep = ""))
+
+## clean up
+rm(files, missing_df, missing)
 
 ######## Import co-abundance prediction dataframes ######
 
@@ -915,11 +983,12 @@ ggplot(plot_dat[plot_dat$preference == "preferred",], aes(x = Interaction_Estima
 #
 ##
 ###
-#### Top-down non-support first 
+#### Top-down & preferred non-support first 
 
 ## subset rel_species for top-down models 
 table(plot_dat$direction)
-td_dat = plot_dat[plot_dat$direction == "top-down",]
+td_dat = plot_dat[plot_dat$direction == "top-down" &
+                    plot_dat$preference == "preferred",]
 table(td_dat$support); table(td_dat$support_conserv) # should have zero bottom-ups! 
 
 ## frequency plot version --> make one for each species 
@@ -947,8 +1016,13 @@ for(i in 1:length(order)){
     theme_classic()+
     geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
     scale_fill_manual(values = new_colors) +
-    coord_cartesian(xlim = c(min_val, max_val))+
-    labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])
+    scale_y_continuous(breaks = seq(0, max(table(d$support)), by = 1)) + 
+    coord_cartesian(xlim = c(min_val, max_val)) +
+    labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])+
+    theme(axis.text.x = element_text(size = 16),
+          axis.text.y = element_text(size = 16),
+          axis.text = element_text(color = "black"),
+          text = element_text(family = "Helvetica"))
   
   # save it! 
   plot_list[[i]] = p
@@ -967,8 +1041,13 @@ for(i in 1:length(order)){
     theme_classic()+
     geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
     scale_fill_manual(values = new_colors) +
+    scale_y_continuous(breaks = seq(0, max(table(d$support)), by = 1)) + 
     coord_cartesian(xlim = c(min_val_cons, max_val_cons))+
-    labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])
+    labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])+
+    theme(axis.text.x = element_text(size = 16),
+          axis.text.y = element_text(size = 16),
+          axis.text = element_text(color = "black"),
+          text = element_text(family = "Helvetica"))
   
   # save it! 
   plot_list_cons[[i]] = p
@@ -993,16 +1072,16 @@ date = paste(year,month,day, sep = "")
 rm(year,month,day)
 
 # and save it!
-# ggsave(paste("figures/Grouped Histograms/Histogram_UNSUPPORTED__top-down_SIV_HALF_LONG_",date, ".png", sep = ""),
+# ggsave(paste("figures/Grouped Histograms/Histogram_UNSUPPORTED_preferred_top-down_SIV_HALF_LONG_",date, ".png", sep = ""),
 #                p, width = 10, height = 10, units = "in")
 
-## repeat for the conservative plots 
+ ## repeat for the conservative plots 
 p = plot_grid(plotlist = plot_list_cons, align = "v",
               ncol = 1, nrow = length(plot_list))
 p
 
 # and save it!
-# ggsave(paste("figures/Grouped Histograms/Histogram_UNSUPPORTED_&_CONSERVATIVE_top-down_SIV_HALF_LONG_",date, ".png", sep = ""),
+# ggsave(paste("figures/Grouped Histograms/Histogram_UNSUPPORTED_&_CONSERVATIVE_preferred_top-down_SIV_HALF_LONG_",date, ".png", sep = ""),
 #                p, width = 10, height = 10, units = "in")
 
 
@@ -1061,7 +1140,7 @@ top_down_nonsupport = rbind(top_down_nonsupport, top_down_nonsupport_cons)
 
 
 ## keep it clean 
-rm(a, p, plot_list, plot_list_cons, top_down_nonsupport_cons)
+rm(p, plot_list, plot_list_cons, top_down_nonsupport_cons)
 
 
 #
@@ -1071,7 +1150,8 @@ rm(a, p, plot_list, plot_list_cons, top_down_nonsupport_cons)
 
 ## subset plot_dat for bottom-up models 
 table(plot_dat$direction)
-bu_dat = plot_dat[plot_dat$direction == "bottom-up",]
+bu_dat = plot_dat[plot_dat$direction == "bottom-up" &
+                    plot_dat$preference == "preferred",]
 table(bu_dat$support); table(bu_dat$support_conserv) # Must have zero top-downs! 
 
 ## frequency plot version --> make one for each species 
@@ -1099,8 +1179,13 @@ for(i in 1:length(order)){
     theme_classic()+
     geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
     scale_fill_manual(values = new_colors) +
+    scale_y_continuous(breaks = seq(0, max(table(d$support)), by = 1)) + 
     coord_cartesian(xlim = c(min_val, max_val))+
-    labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])
+    labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])+
+    theme(axis.text.x = element_text(size = 16),
+          axis.text.y = element_text(size = 16),
+          axis.text = element_text(color = "black"),
+          text = element_text(family = "Helvetica"))
   
   # save it! 
   plot_list[[i]] = p
@@ -1119,8 +1204,13 @@ for(i in 1:length(order)){
     theme_classic()+
     geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
     scale_fill_manual(values = new_colors) +
+    scale_y_continuous(breaks = seq(0, max(table(d$support)), by = 1)) + 
     coord_cartesian(xlim = c(min_val_cons, max_val_cons))+
-    labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])
+    labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])+
+    theme(axis.text.x = element_text(size = 16),
+          axis.text.y = element_text(size = 16),
+          axis.text = element_text(color = "black"),
+          text = element_text(family = "Helvetica"))
   
   # save it! 
   plot_list_cons[[i]] = p
@@ -1133,10 +1223,10 @@ p = plot_grid(plotlist = plot_list, align = "v",
               ncol = 1, nrow = length(plot_list))
 p
 # and save it! 
-# ggsave(paste("figures/Grouped Histograms/Histogram_UNSUPPORTED_bottom-up_SIV_HALF_LONG_",date, ".png", sep = ""),
+# ggsave(paste("figures/Grouped Histograms/Histogram_UNSUPPORTED_preferred_bottom-up_SIV_HALF_LONG_",date, ".png", sep = ""),
 #                p, width = 10, height = 10, units = "in")
 
-## repeat for the liberal plots 
+## repeat for the conservative plots 
 p = plot_grid(plotlist = plot_list_cons, align = "v",
               ncol = 1, nrow = length(plot_list))
 # and save it!
@@ -1204,9 +1294,15 @@ table(nonsupport$direction)
 
 ## order by PPC setting before saving
 nonsupport = nonsupport[order(nonsupport$PPC_setting),]
+table(nonsupport$direction)
+table(nonsupport$PPC_setting)
+
+## add the preference just to be totall clear! 
+nonsupport$preference = "preferred"
+
 
 # save it for fig making 
-# write.csv(nonsupport, paste("results/summarized_results/percentages_for_all_unsupported_histograms_", date, ".csv", sep = ""), row.names = F)
+# write.csv(nonsupport, paste("results/summarized_results/percentages_for_all_preferred_unsupported_histograms_", date, ".csv", sep = ""), row.names = F)
 
 
 ## keep it clean 
@@ -1238,8 +1334,8 @@ plot_list_cons = list()
 order = c("All_large_carnivores","Panthera_tigris","Panthera_pardus", 
           "Cuon_alpinus", "Neofelis_genus")
 # grab min and max vals 
-min_val = min(plot_dat$Interaction_Estimate)
-max_val = max(plot_dat$Interaction_Estimate)
+min_val = min(plot_dat$Interaction_Estimate[plot_dat$Interaction_Estimate > -2]) # remove one outlier 
+max_val = max(plot_dat$Interaction_Estimate[plot_dat$Interaction_Estimate > -2])
 
 for(i in 1:length(order)){
   
@@ -1255,6 +1351,7 @@ for(i in 1:length(order)){
     geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
     scale_fill_manual(values = new_colors) +
     coord_cartesian(xlim = c(min_val, max_val))+
+    # scale_y_continuous(breaks = seq(0, max(table(d$support_simple)), by = 2)) + 
     labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])+
     theme(axis.text.x = element_text(size = 16),
           axis.text.y = element_text(size = 16),
@@ -1275,6 +1372,7 @@ for(i in 1:length(order)){
     geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
     scale_fill_manual(values = new_colors) +
     coord_cartesian(xlim = c(min_val, max_val))+
+    # scale_y_continuous(breaks = seq(0, max(table(d$support_simple)), by = 3)) + 
     labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])+
     theme(axis.text.x = element_text(size = 16),
           axis.text.y = element_text(size = 16),
@@ -1362,15 +1460,24 @@ p =
   theme_classic()+
   geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
   scale_fill_manual(values = new_colors) +
-  labs(x = "Species Interaction Value", y = "Count", color = NULL, title = paste("all_large_carnivores all prey conservative"))+
+  scale_y_continuous(breaks = seq(0, max(table(plot_dat$support_simple_conserv[plot_dat$rel_species == "All_large_carnivores" &
+                                                                                 plot_dat$Interaction_Estimate > -2])), by = 5)) + 
+  labs(x = "Species Interaction Value", y = "Count", color = NULL, title = paste("all_large_carnivores all prey"))+
   guides(fill = "none") + 
   theme(axis.text.x = element_text(size = 16),
         axis.text.y = element_text(size = 16),
         axis.text = element_text(color = "black"),
         text = element_text(family = "Helvetica"))
 ## save it! 
-# ggsave(paste("figures/Grouped Histograms/Histogram_all_large_carnivores_LIBERAL_unsupported_and_supported_all_mods_", date, ".png", sep = ""), p,
+# ggsave(paste("figures/Grouped Histograms/Histogram_all_large_carnivores_unsupported_and_supported_all_mods_", date, ".png", sep = ""), p,
 #        width = 12, height = 4, units = "in")
+
+## Take note of which models were excluded because of extreme estimates! 
+unique(plot_dat$Species_Pair[plot_dat$Interaction_Estimate < -2])
+## 3 mods--
+# "SUB-Macaca_fascicularis~DOM-Cuon_alpinus"    
+# "SUB-Trichys_fasciculata~DOM-Panthera_tigris"
+# "SUB-Cuon_alpinus~DOM-Tapirus_indicus"  
 
 
 #
@@ -1431,6 +1538,9 @@ for(i in 1:length(order)){
   # subset the data
   d = pref_dat[pref_dat$rel_species == order[i], ]
   
+  # determine y-axis spacing based on species name --> CL has too many observations! 
+  by_value <- if (order[i] != "Neofelis_genus") 1 else 2
+  
   # make the plot 
   p = ggplot(d, aes(x = Interaction_Estimate, fill = support_simple))+
     geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1, alpha = 1)+#, position = "dodge")+
@@ -1439,12 +1549,15 @@ for(i in 1:length(order)){
     theme_classic()+
     geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
     scale_fill_manual(values = new_colors) +
+    scale_y_continuous(breaks = seq(0, max(table(d$support_simple)), by = by_value)) + 
     coord_cartesian(xlim = c(min_val, max_val))+
     labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])+
     theme(axis.text.x = element_text(size = 16),
           axis.text.y = element_text(size = 16),
           axis.text = element_text(color = "black"),
           text = element_text(family = "Helvetica"))
+  
+  
   
   # save it! 
   plot_list[[i]] = p
@@ -1454,11 +1567,10 @@ for(i in 1:length(order)){
   # make the plot 
   p = ggplot(d, aes(x = Interaction_Estimate, fill = support_simple_conserv))+
     geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1, alpha = 1)+#, position = "dodge")+
-    # theme_minimal()+
-    # theme_test()+
     theme_classic()+
     geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
     scale_fill_manual(values = new_colors) +
+    scale_y_continuous(breaks = seq(0, max(table(d$support_simple_conserv)), by = by_value)) + 
     coord_cartesian(xlim = c(min_val, max_val))+
     labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])+
     theme(axis.text.x = element_text(size = 16),
@@ -1495,6 +1607,7 @@ p =
   theme_classic()+
   geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
   scale_fill_manual(values = new_colors) +
+  scale_y_continuous(breaks = seq(0, max(table(pref_dat$support_simple[pref_dat$rel_species == "All_large_carnivores"])), by = 2)) + 
   labs(x = "Species Interaction Value", y = "Count", color = NULL, title = paste("all_large_carnivores preferred prey normal"))+
   guides(fill = "none") + 
   theme(axis.text.x = element_text(size = 16),
@@ -1505,7 +1618,7 @@ p =
 # ggsave(paste("figures/Grouped Histograms/Histogram_all_large_carnivores_unsupported_and_supported_preferred_prey_", date, ".png", sep = ""), p,
 #        width = 12, height = 4, units = "in")
 
-#### COME HERE AND MAKE CONCEPT GRAPH EXACTLY THE SAME! 
+#### MAKE CONCEPT GRAPH EXACTLY THE SAME! 
 # Set a seed for reproducibility
 set.seed(123)
 
@@ -1612,7 +1725,6 @@ rm(p, pref_perc_table_cons,pref_perc_table, perc_table,
 
 ############# Visualize coefficient effect sizes ###### 
 
-#### ONLY RUN THRU THIS ONCE ALL MODELS ARE COMPLETED! 
 
 
 ### Will be making a graph comparing the effect sizes for each state and detection variable
@@ -1661,7 +1773,7 @@ for(i in 1:length(unique(coeff$Species_Pair))){
   ## subset for relevant variables 
   # dat = dat[dat$var %in% c("Abundance_intercept","FLII","HFP","Elevation","Hunting",
   #                          "Species_Interaction","Detection_intercept","Active_cams"),]
-  dat = dat[dat$var %in% c("FLII","HFP","Elevation","Hunting",
+  dat = dat[dat$var %in% c("FLII","HFP","Elevation",#"Hunting",
                            "Species_Interaction","Active_cams"),] # removing intercepts b/c they skew graphs
   
   ## replace _ with space for vars for clean x-vars
@@ -1669,10 +1781,15 @@ for(i in 1:length(unique(coeff$Species_Pair))){
   
   ## Change active cams to effort for easier understanding
   dat$var[dat$var == "Active cams"] = "Effort"
+  ## Change Species_Interaction to SIV for shorter 
+  dat$var[dat$var == "Species Interaction"] = "SIV"
+  ## same for elevation
+  dat$var[dat$var == "Elevation"] = "ELEV"
+  
   
   ## order the factor levels for each variable
-  dat$var = factor(dat$var, levels = c("Species Interaction","FLII","HFP", "Hunting", # state vars
-                                       "Elevation", # more state vars
+  dat$var = factor(dat$var, levels = c("SIV","FLII","HFP", #"Hunting", # state vars
+                                       "ELEV", # more state vars
                                        "Effort")) # then det vars. 
   
   # Add a column for significance marker
@@ -1680,7 +1797,7 @@ for(i in 1:length(unique(coeff$Species_Pair))){
   
   # Find the position of "Abundance intercept" on the x-axis to add the dashed line. 
   # split_position <- which(levels(dat$var) == "Abundance intercept")
-  split_position <- which(levels(dat$var) == "Elevation")
+  split_position <- which(levels(dat$var) == "ELEV")
   
   
   # specify the distance were spacing error bars and stars
@@ -1718,9 +1835,11 @@ for(i in 1:length(unique(coeff$Species_Pair))){
     labs(x = NULL, y = "Mean Effect Size", fill = NULL, title = title) +
     theme_test()+
     theme(
-      axis.text.x = element_text(size = 12, angle = 45, hjust = 1),   # Increase x-axis label font size and tilt it
-      axis.text.y = element_text(size = 12)                           # Increase y-axis tick label font size
-    )
+      # axis.text.x = element_text(size = 16, angle = 45, hjust = 1), # if you want tilted x-axis. 
+      axis.text.x = element_text(size = 16),
+      axis.text.y = element_text(size = 16),
+      axis.text = element_text(color = "black"),
+      text = element_text(family = "Helvetica"))
   ## looks good! 
   
   ## save it 
@@ -1833,9 +1952,9 @@ hist(coeff$mean[coeff$var == "Species_Interaction"& coeff$support == "Supported"
 #
 {
   ### How can we account for standard deviation and sampling variance in generating a unified effect?
-  head(select(coeff[coeff$var %in% c("FLII","HFP","Elevation","Hunting",
+  head(select(coeff[coeff$var %in% c("FLII","HFP","Elevation",#"Hunting",
                                      "Species_Interaction"),], Species_Pair, mean, sd, var,species), 18) # send this to chat GPT
-  data = head(select(coeff[coeff$var %in% c("FLII","HFP","Elevation","Hunting",
+  data = head(select(coeff[coeff$var %in% c("FLII","HFP","Elevation",#"Hunting",
                                             "Species_Interaction"),], Species_Pair, mean, sd, var,species), 18) 
   
   ## First calculate the relative standard deviation (RSD) --> standard deviation is X percent of the mean
@@ -1908,6 +2027,9 @@ hist(coeff$mean[coeff$var == "Species_Interaction"& coeff$support == "Supported"
                            "Species_Interaction"),]
   ## which species RE should be used?
   sort(table(dat$sub_sp));sort(table(dat$species)) # they are the same! go w/ species 
+  
+  # set variable as a factor
+  dat$var = as.factor(dat$var)
   
   # run a regression weighted by the standard deviation of the effect size with a random effect per species 
   td_sub = lmer(mean ~ var-1 + (1 |species),weights = 1/sd,REML=FALSE, data=dat) 
@@ -1983,6 +2105,8 @@ hist(coeff$mean[coeff$var == "Species_Interaction"& coeff$support == "Supported"
   # only want relevant vars
   dat = dat[dat$var %in% c("FLII","HFP","Elevation",#"Hunting",
                            "Species_Interaction"),]
+  # make em a factor
+  dat$var = as.factor(dat$var)
   
   # run a regression weighted by the standard deviation of the effect size with a random effect per species 
   bu_sub = lmer(mean ~ var-1 + (1 |species),weights = 1/sd,REML=FALSE, data=dat) 
@@ -2055,21 +2179,53 @@ hist(coeff$mean[coeff$var == "Species_Interaction"& coeff$support == "Supported"
   dat = dat[dat$var %in% c("FLII","HFP","Elevation",#"Hunting",
                            "Species_Interaction"),]
   
-  # run a regression weighted by the standard deviation of the effect size with a random effect per species 
-  unsup_sub = lmer(mean ~ var-1 + (1 |species),weights = 1/sd,REML=FALSE, data=dat) 
+  ### Do this one a little bit differently so we can examine R2 for each variable in 
+  ## the unsupproted results to see if they are more explanitory than SIV. 
   
-  # extract coefficents into a DF
-  unsup_sub = as.data.frame(summary(unsup_sub)$coefficients)
+  # Create an empty vector to store R-squared values
+  r_squared_values <- data.frame("R2" = numeric(length(unique(dat$var))),
+                                 "var" = unique(dat$var))
   
-  # clean up the DF 
-  unsup_sub$var = rownames(unsup_sub)
-  unsup_sub$var = gsub("var", "", unsup_sub$var)
-  names(unsup_sub)[1:2] = c("estimate", "SE")
+  # and a list to store DFs 
+  res = list()
   
-  ## Assign direction and position 
-  unsup_sub$direction = "unsupported"
-  # unsup_sub$sp_position = "subordinate" # 
-  unsup_sub$sp_position = "unsupported"
+  # Fit separate models for each level of 'var'
+  for (i in seq_along(unique(dat$var))) {
+    
+    # Subset the data for the relevatn variable 
+    subset_data <- subset(dat, var == unique(dat$var)[i])
+    
+    # Fit the model for the current level
+    unsup_sub <- lmer(mean ~ 1 + (1 | species), weights = 1/sd, REML = FALSE, data = subset_data)
+    
+    # Calculate R-squared for the current model
+    r_squared_values$R2[r_squared_values$var == unique(dat$var)[i]] <- r.squaredGLMM(unsup_sub)[2] # only want the marginal effect, not conditonal
+    
+    # extract coefficents into a DF
+    unsup_sub = as.data.frame(summary(unsup_sub)$coefficients)
+    
+    # clean up the DF 
+    unsup_sub$var = rownames(unsup_sub)
+    unsup_sub$var = gsub("var", "", unsup_sub$var)
+    names(unsup_sub)[1:2] = c("estimate", "SE")
+    
+    ## Assign direction and position 
+    unsup_sub$direction = "unsupported"
+    unsup_sub$sp_position = "unsupported"
+    
+    ## save in the list 
+    res[[i]] = unsup_sub
+  }
+  rm(i, subset_data)
+  
+  ## combine res into one df. 
+  unsup_sub = do.call(rbind, res)
+  rm(res)
+  
+  ## inspect r2
+  r_squared_values ### Other variables clearly have more explanitory power than SIV 
+  # include these in the MS, results section! 
+  
   
   ## combine all three together to plot them 
   res = rbind(td, bu, unsup_sub)
@@ -2638,10 +2794,16 @@ for(i in 1:length(unique(ppc_values$Species_Pair))){
                         "position" = c("Dominant", "Subordinate"),
                         "species" = str_split(n, "~")[[1]])
   
+  # # Define labels and positions for text
+  # text_data <- data.frame(
+  #   label = c("liberal","liberal", "conservative", "conservative", "perfect fit"),
+  #   y = c(0.85, 0.15, 0.75, 0.25, 0.5)  # Adjust these values based on your needs
+  # )
+  
   # Define labels and positions for text
   text_data <- data.frame(
-    label = c("liberal","liberal", "conservative", "conservative", "perfect fit"),
-    y = c(0.85, 0.15, 0.75, 0.25, 0.5)  # Adjust these values based on your needs
+    label = c("Too high","Too low", "perfect fit"),
+    y = c(0.85, 0.15, 0.5)  # Adjust these values based on your needs
   )
   
   ## BPV plot
@@ -2649,8 +2811,8 @@ for(i in 1:length(unique(ppc_values$Species_Pair))){
   ggplot(plot_dat, aes(x = species, y = BPV, fill = position))+
     geom_col(color = "black", position = "dodge", color = 'black')+
     geom_hline(yintercept = 0.5)+
-    geom_hline(yintercept = 0.75, linetype = "dashed", color = "gray32", alpha = 0.5)+
-    geom_hline(yintercept = 0.25, linetype = "dashed", color = "gray32", alpha = 0.5)+
+    # geom_hline(yintercept = 0.75, linetype = "dashed", color = "gray32", alpha = 0.5)+
+    # geom_hline(yintercept = 0.25, linetype = "dashed", color = "gray32", alpha = 0.5)+
     geom_hline(yintercept = 0.85, linetype = "dashed", color = "red")+
     geom_hline(yintercept = 0.15, linetype = "dashed", color = "red")+
     geom_text(data = text_data, aes(x = Inf, y = y, label = label), hjust = 1.2, vjust = -1, size = 5, inherit.aes = F)+
@@ -2658,8 +2820,11 @@ for(i in 1:length(unique(ppc_values$Species_Pair))){
     labs(y = "Bayesian P-Value", x = NULL, fill = NULL)+
     coord_cartesian(ylim = c(0,1))+
     scale_fill_manual(values = c("tan3","wheat3"))+
-    theme(axis.text.x = element_text(size = 12, face = "bold"))
-  
+    theme(axis.text.x = element_text(size = 16),
+          axis.text.y = element_text(size = 16),
+          axis.text = element_text(color = "black"),
+          text = element_text(family = "Helvetica"))
+
   # grab today's date
   day<-str_sub(Sys.Date(),-2)
   month<-str_sub(Sys.Date(),-5,-4)
@@ -2672,10 +2837,16 @@ for(i in 1:length(unique(ppc_values$Species_Pair))){
   # save it! 
   ggsave(path, bpv, width = 7.5, height = 7, units = "in")
   
+  # # Define labels and positions for text
+  # text_data <- data.frame(
+  #   label = c("liberal", "conservative", "perfect fit"),
+  #   y = c(1.3, 1.1, 1)  # Adjust these values based on your needs
+  # )
+  
   # Define labels and positions for text
   text_data <- data.frame(
-    label = c("liberal", "conservative", "perfect fit"),
-    y = c(1.3, 1.1, 1)  # Adjust these values based on your needs
+    label = c("Too high", "perfect fit"),
+    y = c(1.1, 1)  # Adjust these values based on your needs
   )
   
   ##Chat plot
@@ -2683,15 +2854,18 @@ for(i in 1:length(unique(ppc_values$Species_Pair))){
     ggplot(plot_dat, aes(x = species, y = Chat, fill = position))+
     geom_col(color = "black", position = "dodge", color = 'black')+
     geom_hline(yintercept = 1)+
-    geom_hline(yintercept = 1.1, linetype = "dashed", color = "gray32", alpha = 0.5)+
-    geom_hline(yintercept = 1.3, linetype = "dashed", color = "red")+
+    geom_hline(yintercept = 1.1, linetype = "dashed", color = "red", alpha = 0.5)+
+    # geom_hline(yintercept = 1.3, linetype = "dashed", color = "red")+
     geom_text(data = text_data, aes(x = Inf, y = y, label = label), hjust = 1.2, vjust = -1, size = 5, inherit.aes = F)+
     theme_test()+
     labs(y = "Magnitude of Over-Dispersion (C-hat)", x = NULL, fill = NULL)+ 
     coord_cartesian(ylim = c(0.9,1.35))+
     scale_fill_manual(values = c("tan3","wheat3"))+
-    theme(axis.text.x = element_text(size = 12, face = "bold"))
-  
+    theme(axis.text.x = element_text(size = 16),
+          axis.text.y = element_text(size = 16),
+          axis.text = element_text(color = "black"),
+          text = element_text(family = "Helvetica"))
+
   # grab today's date
   day<-str_sub(Sys.Date(),-2)
   month<-str_sub(Sys.Date(),-5,-4)

@@ -1,32 +1,32 @@
 ##### Inspect and visualize completed co-abundance models
 #### Data was prepared on R Script: Step 1_Generate co-abundance data bundles.Rmd
-#### and ran on HPC on R Script: HPC_co-abundance_model.R
+#### and ran on HPC on R Script: HPC_co-abundance_model_final.R
 ### Will convert this to Rmd when ready, but R script for exploring now
 ## Import dataframes, not complete models b/c theyre too heavy
 
 # Zachary Amir, Z.Amir@uq.edu.au
-# Last updated on Jan 17th, 2024
+# Last updated on Feb 19th, 2024
 
 ## start fresh
 rm(list = ls())
 
 ## load libs 
-library(tidyverse)
-library(plyr)
-library(cowplot)   # for arranging plots 
-library(lme4)      # For meta-regressions of model coefficents
-library(MuMIn)     # for R2 values in meta-regressions 
+library(tidyverse)    # for lots of functions
+library(plyr)         # for ddply
+library(cowplot)      # for arranging plots 
 
-
-# library(metafor) # for meta-analysis of effect sizes
-# library(ggpubr) # for fancy histo + density plots 
-# library(fs) # for moving files around 
-# library(ggridges) # for ridgeline plots 
-# library(reshape2) # for making checkerboard matrix 
-# library(leaflet) # for creating concepts of study map
-# library(colortools) # for nice colors in the map
-# library(jagsUI) # for running co-abundance mods and inspecting jags output 
-# library(traitdata) # for species trait data
+# library(ggridges)    # for ridgeline plots
+# library(lme4)        # For meta-regressions of model coefficents
+# library(MuMIn)       # for R2 values in meta-regressions 
+# library(metafor)     # for meta-analysis of effect sizes
+# library(ggpubr)      # for fancy histo + density plots 
+# library(fs)          # for moving files around 
+# library(ggridges)    # for ridgeline plots 
+# library(reshape2)    # for making checkerboard matrix 
+# library(leaflet)     # for creating concepts of study map
+# library(colortools)  # for nice colors in the map
+# library(jagsUI)      # for running co-abundance mods and inspecting jags output 
+# library(traitdata)   # for species trait data
 
 ## set WD (should be automatic b/c RProj, but being safe anyway)
 setwd("/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_trophic_cascades_co-abundance")
@@ -46,6 +46,7 @@ og_meta = read.csv("/Users/zachary_amir/Dropbox/CT capture histories database/As
 # but since I split the bundled data into multiple files, I must import them all. 
 files = list.files("data/send_to_HPC/")
 files = files[grepl("Bundled", files)]
+files = files[!grepl("MISSING", files)] # avoid reading in repeated data 
 
 # import them all
 res = list()
@@ -69,55 +70,14 @@ rm(res)
 all_combos = names(bdata)
 
 
-# Initate data management-- 
-##
-###
-#### If you made a mistake and forgot to move old data to the OLD folder when importing from HPC, 
-### use this code below to automatically look for duplicates and move the older files to the OLD folder. 
-## This will do nothing if there are no duplicates, so its ok to run thru. 
-
-# List all files in the coefficents folder
-file_list <- dir("results/HALF_LONG_final_Jan_2024/coefficent_dataframes/", full.names = TRUE)
-# file_list <- dir("results/HALF_LONG_testing_Oct_2023/coefficent_dataframes/", full.names = TRUE)
-file_list = file_list[!grepl("OLD", file_list)] # remove the old 
-
-# Extract the filenames without the date
-file_names <- basename(file_list) %>% str_remove("\\d{8}\\.csv$")
-
-# Find the duplicated file names
-duplicated_names <- file_names[duplicated(file_names)]
-
-# Iterate over the duplicated names
-for (name in duplicated_names) {
-  # Get the files with the current name
-  current_files <- file_list[file_names == name]
-  
-  # Find the earliest date among the duplicated files
-  earliest_date <- as.character(min(as.Date(str_extract(current_files, "\\d{8}"), format = "%Y%m%d")))
-  
-  # replace - with nothing to match existing format
-  earliest_date = gsub("-", "", earliest_date)
-  
-  # Get the files with the earliest date
-  files_to_move <- current_files[str_extract(current_files, "\\d{8}") == earliest_date]
-  
-  # Move the files to the destination folder
-  file_move(files_to_move, "results/coefficent_dataframes/OLD")
-}
-rm(current_files, earliest_date, files_to_move, name, duplicated_names, file_names, file_list)
-
-
-
-### Import coefficent dataframes
+### Import coefficient dataframes
 
 # list all files
 files = list.files("results/HALF_LONG_final_Jan_2024/coefficent_dataframes/")
-# files = list.files("results/HALF_LONG_testing_Oct_2023/coefficent_dataframes/")
 files = files[!grepl("OLD", files)] # remove any old data 
 
 ## Have a few long and all middle files in this directory, subset for one
 files = files[grepl("HALF_LONG", files)]
-# files = files[grepl("LONG", files)]
 # files = files[grepl("MIDDLE", files)]
 # files = files[grepl("SHORT", files)]
 
@@ -154,7 +114,7 @@ rm(coeff.res)
 
 ## how many models do we have?
 length(unique(coeff$Species_Pair)) 
-# Feb 1st, 2024 --> 243, missing 17 mods! 
+# Feb 19th, 2024 --> 260, were all here! 
 
 ## inspect effective sample size
 summary(coeff$n.eff[coeff$var == "Species_Interaction"]) # large range, but median and mean are good 
@@ -165,7 +125,7 @@ summary(coeff$Rhat[coeff$var == "Species_Interaction"])
 
 ## Which models failed to converge?
 sort(unique(coeff$Species_Pair[coeff$Rhat > 1.2 & coeff$var == "Species_Interaction"])) 
-#65 models @ middle, 57 @ half long! 
+# 49 @ half long
 
 ## vis Rhat
 hist(coeff$Rhat[coeff$var == "Species_Interaction"]) # thankfully most are small, but some biggies exist! 
@@ -180,8 +140,8 @@ coeff$dom_sp = gsub("DOM-", "", coeff$dom_sp)
 coeff$sub_sp = gsub("SUB-", "", coeff$sub_sp)
 
 
-### Inspect which species pairs are present/missing, 20240117, HALF_LONG settings
-setdiff(all_combos, coeff$Species_Pair) # 150 models are missing! 
+### Inspect which species pairs are present/missing, 20240119, HALF_LONG settings
+setdiff(all_combos, coeff$Species_Pair) # we're all here! 
 
 ## create a dataframe to track our model performance
 preform = data.frame("Species_Pair" = all_combos,
@@ -213,53 +173,20 @@ anyNA(preform) # Must be F
 ## assess which models are completed
 preform$mod_completion = "uncompleted"
 preform$mod_completion[preform$Species_Pair %in% coeff$Species_Pair] = "completed"
-table(preform$mod_completion) # 243 completed, 17 uncompleted. 
+table(preform$mod_completion) # 260 completed! 
 
 ######## Import co-abundance PPC dataframes ######
 
-## Make sure all_combos is loaded here! 
+## Make sure all_combos is loaded in your environment here! 
 
 # list all files
 files = list.files("results/HALF_LONG_final_Jan_2024/PPC_dataframes/")
-# files = list.files("results/HALF_LONG_testing_Oct_2023/PPC_dataframes/")
 files = files[!grepl("OLD", files)] # remove any old data 
 
 ## Subset files for one setting, especially if multiple are in the mix. 
 files = files[grepl("HALF_LONG", files)]
-# files = files[grepl("LONG", files)]
 # files = files[grepl("MIDDLE", files)]
 # files = files[grepl("SHORT", files)]
-
-### Noticed a typo that included generated results for species that dont spatially overlap
-## and these have been removed from bdata, but not worth re-running models b/c they take long.
-# so thin files to match relevant combos and exclude pointless mods via loop
-### This will be irrelevant w/ updated models and testing. 
-
-# create a new files vector to save good files
-matched_files_vals <- vector("character", length(all_combos))
-matched_files_plot <- vector("character", length(all_combos))
-
-for(i in 1:length(all_combos)){
-  # if there are any TRUE matches for all_combos in files w/ PPC values
-  if(any(grepl(all_combos[i], files[grepl("values", files)]))){
-    ## save that file name in the new vector
-    matched_files_vals[i] = files[grepl("values", files)][grepl(all_combos[i], files[grepl("values", files)])]
-  }
-  # Repeat this process also for PPC plotting
-  if(any(grepl(all_combos[i], files[grepl("plotdata", files)]))){
-    ## save that file name in the new vector
-    matched_files_plot[i] = files[grepl("plotdata", files)][grepl(all_combos[i], files[grepl("plotdata", files)])]
-  }
-}
-rm(i)
-
-## remove matched_files w/ blank names (likely b/c mod never left HPC)
-matched_files_vals = matched_files_vals[matched_files_vals != ""]
-matched_files_plot = matched_files_plot[matched_files_plot != ""]
-
-## update files w/ the good ones (for consistent naming)
-files = c(matched_files_vals, matched_files_plot)
-rm(matched_files_vals, matched_files_plot)
 
 # store results here
 ppc_res = list()
@@ -312,77 +239,14 @@ length(coeff$n.eff[coeff$var == "Species_Interaction" &
 
 ## summary of SIV
 summary(ppc_values$Interaction_Estimate) # who are the crazy ones?
-ppc_values[ppc_values$Interaction_Estimate < -3, ] # none! 
-ppc_values[ppc_values$Interaction_Estimate > 3, ] # nothing on positive side! 
+ppc_values[ppc_values$Interaction_Estimate < -3, ] # 1) SUB-Cuon_alpinus~DOM-Tapirus_indicus
+ppc_values[ppc_values$Interaction_Estimate > 3, ] # none!
 
 # remove list now that were all stored in dfs. 
 rm(ppc_res)
 
-### Inspect which species pairs are present/missing, 20240201
-setdiff(all_combos, ppc_plotdat$Species_Pair) # same 17 are still missing
-
-## Lets pull out these 17 missing models for further investigation and re-running
-missing = bdata[names(bdata) %in% setdiff(all_combos, ppc_plotdat$Species_Pair)]
-
-## Find out which RAM settings are needed for these mods 
-missing_df = data.frame("Species_Pair" = names(missing),
-                        "GB" = as.character(NA),
-                        "position" = as.character(NA))
-## list the relevant data files 
-files = list.files("data/send_to_HPC/")
-files = files[grepl("Bundled", files)]
-
-## thin files to only include the relevant species pairs 
-
-## check each file
-for(i in 1:length(files)){
-  ## but import the file first 
-  b = readRDS(paste("data/send_to_HPC/", files[i], sep = ""))
-  ## so we can get a vector of names 
-  b_names = names(b)
-  ## check each possible name 
-  for(n in 1:length(b_names)){
-    
-    ## and each missing species pair 
-    for(l in 1:length(missing_df$Species_Pair)){
-      
-      ## if they happen to match 
-      if(missing_df$Species_Pair[l] == b_names[n]){
-        
-        ## grab the GB from the file name 
-        gb = gsub(".*?([0-9]+)GB.*", "\\1", files[i])
-        ## and save it
-        missing_df$GB[missing_df$Species_Pair == missing_df$Species_Pair[l]] = gb
-        ## and the corresponding position
-        missing_df$position[missing_df$Species_Pair == missing_df$Species_Pair[l]] = n
-        
-        ## but if there is no match
-      }else{
-        ## skip it 
-        next
-      }
-    } # end per missing species pair 
-  } # end b_names
-} # end per file 
-rm(l,i,n,b, b_names, gb)
-
-## Consult the HPC to find out why these mods did not finish. 
-### All the 250 GB mods that failed are due to low RAM! 
-### and the rest are 500 GB mods that ran into maintence window. 
-
-### Save the missing mods for running on local computers 
-# but grab the date first 
-day<-str_sub(Sys.Date(),-2)
-month<-str_sub(Sys.Date(),-5,-4)
-year<-str_sub(Sys.Date(),-10,-7)
-date = paste(year,month,day, sep = "")
-rm(year,month,day)
-# save 
-# saveRDS(missing, paste("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_community_500GB_", 
-#                        length(missing), "_MISSING_species_pairs_", date, ".RDS", sep = ""))
-
-## clean up
-rm(files, missing_df, missing)
+### Inspect which species pairs are present/missing, 20240219
+setdiff(all_combos, ppc_plotdat$Species_Pair) # were all here! 
 
 ######## Import co-abundance prediction dataframes ######
 
@@ -397,7 +261,6 @@ files = list.files("results/MIDDLE_testing_Jul_2023/prediction_dataframes/")
 files = files[!grepl("OLD", files)] # remove any old data 
 
 ## Subset files for one setting, especially if multiple are in the mix. 
-# files = files[grepl("LONG", files)]
 files = files[grepl("MIDDLE", files)]
 # files = files[grepl("SHORT", files)]
 
@@ -409,7 +272,6 @@ files = files[grepl("MIDDLE", files)]
 # create a new files vector to save good files
 matched_files_est <- vector("character", length(all_combos))
 matched_files_pred <- vector("character", length(all_combos))
-
 
 for(i in 1:length(all_combos)){
   # if there are any TRUE matches for all_combos in files w/ estimated abundance
@@ -471,7 +333,7 @@ str(pred_abund) # looks good!
 rm(predict_res)
 
 
-### Inspect which species pairs are present/missing,  20230724
+### Inspect which species pairs are present/missing, 20230724
 setdiff(all_combos, pred_abund$Species_Pair) #14 missing models based off name spelling differences from old to new bundled data
 ## this wont matter anyway, dont worry about them. 
 
@@ -538,7 +400,8 @@ preform = merge(preform, ppc_values, by = "Species_Pair", all.x = T) # make sure
 
 ## inspect
 head(preform) # looks good 
-head(preform[preform$mod_completion == "uncompleted",]) # all NA values here for BPV,Chat,Rhat,etc for the models that havent finished 
+## Check if any are still uncompleted --> will have NA values for BPV,Chat,Rhat,etc
+head(preform[preform$mod_completion == "uncompleted",]) # all good! 
 str(preform) # looks good! 
 
 ## Add a column denoting if the BPV values converged based on a wide range to account for many mods 
@@ -550,7 +413,7 @@ table(preform$BPV_valid[!is.na(preform$Interaction_Estimate)])
 
 table(preform$BPV_valid[!is.na(preform$Interaction_Estimate)])[1]/
   length(preform$Species_Pair[!is.na(preform$Interaction_Estimate)]) * 100
-#20% are not a good fit. 
+#21% are not a good fit. 
 
 
 ## Add another column that is a more conservative BPV interpretation --> same as co-abundance MS 
@@ -560,7 +423,7 @@ preform$BPV_valid_conserv[preform$BPV.dom >= 0.25 & preform$BPV.dom <= 0.75 &
 table(preform$BPV_valid_conserv[!is.na(preform$Interaction_Estimate)]) # No is the majority
 table(preform$BPV_valid_conserv[!is.na(preform$Interaction_Estimate)])[1]/
   length(preform$Species_Pair[!is.na(preform$Interaction_Estimate)]) * 100
-#76% are not a good fit. 
+#69% are not a good fit. 
 
 ## add a column denoting if over dispersion remains with a wide range to account for many mods 
 preform$OD_valid = "No"
@@ -574,7 +437,7 @@ table(preform$OD_valid[!is.na(preform$Interaction_Estimate)])
 preform$OD_valid_conserv = "No"
 preform$OD_valid_conserv[preform$Chat.dom >= 0.98 & preform$Chat.dom <= 1.1 &
                            preform$Chat.sub >= 0.98 & preform$Chat.sub <= 1.1] = "Yes"
-table(preform$OD_valid_conserv[!is.na(preform$Interaction_Estimate)]) # only 1 failed 
+table(preform$OD_valid_conserv[!is.na(preform$Interaction_Estimate)]) # only 2 failed 
 
 
 ## add a column denoting if the species interaction parameter converged 
@@ -653,7 +516,8 @@ preform$support[preform$BPV_valid == "Yes" &
 ## inspect
 table(preform$support);anyNA(preform$support) # must be F for NA! 
 # who is supported?
-preform[preform$support == "Supported", ] # mostly bottom up! Only 2 top-down! 
+preform[preform$support == "Supported" & preform$preference == "preferred", ] 
+# mostly bottom up! Only 2 top-down! 
 
 
 #### Do the same thing, but with the conservative values
@@ -691,20 +555,18 @@ preform$support_conserv[preform$BPV_valid_conserv == "Yes" &
                           preform$direction == "bottom-up" &
                           preform$Interaction_Estimate >= 0] = "Supported" # Same as above, but applied for bottom-up direction. 
 ## inspect
-table(preform$support_conserv[!is.na(preform$Interaction_Estimate)]);anyNA(preform$support[!is.na(preform$Interaction_Estimate)]) 
-# must be F for NA! 
-## MANY more fall into the supported category, and unsupported _3 and _2 are very similar 
+table(preform$support_conserv[!is.na(preform$Interaction_Estimate)])
+anyNA(preform$support[!is.na(preform$Interaction_Estimate)]) # must be F for NA! 
 # who is supported?
-preform[preform$support_conserv == "Supported", ] # mostly bottom up! Also lots of random species pairings here... 
+preform[preform$support_conserv == "Supported" & preform$preference == "preferred", ] 
+# mostly bottom up! 
 
 ## Which species pairs involved large carnivores significantly regulating the abundance of other critters?
-## conservative settings-
 preform$Species_Pair[preform$Interaction_Estimate < 0 & 
                        preform$Significance == "Significant" &
                        preform$parameter_valid == "Yes" & 
                        preform$BPV_valid == "Yes" & 
                        grepl("DOM-Large_Carnivore", preform$guild_pair)] 
-## only 2! tigers regulate muntjac, leopards regulate pig-tailed macaques
 
 ## conservative settings
 preform$Species_Pair[preform$Interaction_Estimate < 0 & 
@@ -712,12 +574,8 @@ preform$Species_Pair[preform$Interaction_Estimate < 0 &
                        preform$parameter_valid == "Yes" & 
                        preform$BPV_valid_conserv == "Yes" & 
                        grepl("DOM-Large_Carnivore", preform$guild_pair)] 
-## only the tiger muntjac mod
+## less!
 
-
-## Are there models with a good fit, but invalid SIV?
-preform$Species_Pair[preform$BPV_valid == "Yes" &
-                       preform$parameter_valid == "No"] # 14! This is odd
 
 ### This is a super useful dataframe, will need to share this in the supplmentary tables section
 ## save it! 
@@ -796,23 +654,16 @@ if(any(is.na(plot_dat$Interaction_Estimate))){
 ## Check if there are extreme species interaction values (> |2|)
 summary(plot_dat$Interaction_Estimate) 
 plot_dat[plot_dat$Interaction_Estimate < -3,] 
-## none for now!
-
-### Maybe this in the future. 
-## 2 Problematic species pairs: SUB-Panthera_pardus~DOM-Paradoxurus_hermaphroditus & SUB-Cuon_alpinus~DOM-Tapirus_indicus 
+## 1 Problematic species pair: SUB-Cuon_alpinus~DOM-Tapirus_indicus 
 ## both are a good model fit, but unsupported_1 (SIV in wrong direction). Not preferred prey anyway
+
+### Make note in figure description that the SUB-Cuon_alpinus~DOM-Tapirus_indicus mod was NOT included
+### b/c interaction estimate is -8 (SD = 5.541, CI = -20.0117 to -0.7938)
 
 ## check for even less extreme values
 plot_dat[plot_dat$Interaction_Estimate < -2,] 
+## 6 mods here, but none are preferred prey --> main figs are ok. 
 
-## all g for now, but maybe will change with community mods 
-
-## SUB-Macaca_fascicularis~DOM-Cuon_alpinus, SUB-Trichys_fasciculata~DOM-Panthera_tigris
-## but these are supported top-down interactions!! They are large effects, but not in preferred prey 
-
-## for plotting sake, remove anything < -3
-# plot_dat = plot_dat[plot_dat$Interaction_Estimate > -3,]
-## NOT REMOVING THESE FROM THE DATA --> these will only be supplementary figures anyway b/c it wont make it into preferred prey figs. 
 
 ## set factors so unsupported is in the back 
 plot_dat$support_simple = factor(plot_dat$support_simple, levels = c("top-down", "bottom-up", "unsupported"))
@@ -836,7 +687,6 @@ plot_dat$support = factor(plot_dat$support, levels = c("top-down", "bottom-up",
 plot_dat$support_conserv = factor(plot_dat$support_conserv, levels = c("top-down", "bottom-up", 
                                                                        "unsupported_1", "unsupported_2",
                                                                        "unsupported_3"))
-
 ### set up colors for all values 
 new_colors = c("unsupported_1" = "gray87",
                "unsupported_2" = "gray55",
@@ -883,59 +733,59 @@ new_colors = c("unsupported_1" = "gray87",
   
   ## A frequency distribution, colored per category
   # p= 
-  ggplot(plot_dat[plot_dat$rel_species == "All_large_carnivores", ], aes(x = Interaction_Estimate, fill = direction))+
-    geom_histogram(aes(y=after_stat(count)), colour="black", bins = 20, alpha = 1)+#, position = "dodge")+
-    # geom_density(alpha=.6, bw = .1)+
-    theme_test()+
-    scale_fill_manual(values = new_colors) +
-    labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = "all mods")
+  # ggplot(plot_dat[plot_dat$rel_species == "All_large_carnivores", ], aes(x = Interaction_Estimate, fill = direction))+
+  #   geom_histogram(aes(y=after_stat(count)), colour="black", bins = 20, alpha = 1)+#, position = "dodge")+
+  #   # geom_density(alpha=.6, bw = .1)+
+  #   theme_test()+
+  #   scale_fill_manual(values = new_colors) +
+  #   labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = "all mods")
   # ggsave(paste("explore/SIV_distribution_frequency_plot_",date, ".png", sep = ""),
   #        p, width = 7, height = 3, units = "in")
   
   ## A frequency distribution with density overlaid
   # p=
-  ggplot(plot_dat[plot_dat$rel_species == "All_large_carnivores", ], aes(x = Interaction_Estimate, fill = direction))+
-    geom_histogram(aes(y=after_stat(count)), colour="black", bins = 80, alpha = 1)+
-    geom_density(alpha=.8, bw = .1)+
-    theme_test()+
-    scale_fill_manual(values = new_colors) +
-    labs(x = "Species Interaction Value", y = "Frequency", fill = NULL, color = NULL, title = "all mods")
+  # ggplot(plot_dat[plot_dat$rel_species == "All_large_carnivores", ], aes(x = Interaction_Estimate, fill = direction))+
+  #   geom_histogram(aes(y=after_stat(count)), colour="black", bins = 80, alpha = 1)+
+  #   geom_density(alpha=.8, bw = .1)+
+  #   theme_test()+
+  #   scale_fill_manual(values = new_colors) +
+  #   labs(x = "Species Interaction Value", y = "Frequency", fill = NULL, color = NULL, title = "all mods")
   # ggsave(paste("explore/SIV_distribution_frequency_plot_with_density_",date, ".png", sep = ""),
   #        p, width = 7, height = 3, units = "in")
   
   ## a regular gg density plot
   # p=
-  ggplot(plot_dat[plot_dat$rel_species == "All_large_carnivores", ], aes(x = Interaction_Estimate, fill = direction))+
-    geom_density(bw = .1, alpha=.8, )+
-    theme_test()+
-    scale_fill_manual(values = new_colors) +
-    labs(x = "Species Interaction Value", y = "Density", fill = NULL, color = NULL, title = "all mods")
-  # ggsave(paste("explore/SIV_distribution_density_plot_",date, ".png", sep = ""),
-  #        p, width = 7, height = 3, units = "in")
+  # ggplot(plot_dat[plot_dat$rel_species == "All_large_carnivores", ], aes(x = Interaction_Estimate, fill = direction))+
+  #   geom_density(bw = .1, alpha=.8, )+
+  #   theme_test()+
+  #   scale_fill_manual(values = new_colors) +
+  #   labs(x = "Species Interaction Value", y = "Density", fill = NULL, color = NULL, title = "all mods")
+  # # ggsave(paste("explore/SIV_distribution_density_plot_",date, ".png", sep = ""),
+  # #        p, width = 7, height = 3, units = "in")
   
   ## density plot with only one category, so the area under the curve MUST be 1
   # p=
-  ggplot(plot_dat[plot_dat$rel_species == "All_large_carnivores", ], aes(x = Interaction_Estimate))+#, fill = direction))+
-    geom_density(bw = .1, alpha=.8, )+
-    # geom_histogram(aes(y=after_stat(count)), colour="black", bins = 80, alpha = 1)+
-    theme_test()+
-    # scale_fill_manual(values = new_colors) +
-    labs(x = "Species Interaction Value", y = "Density", fill = NULL, color = NULL, title = "all mods")
-  # ggsave(paste("explore/SIV_distribution_density_plot_one_level_",date, ".png", sep = ""),
-  #        p, width = 7, height = 3, units = "in")
+  # ggplot(plot_dat[plot_dat$rel_species == "All_large_carnivores", ], aes(x = Interaction_Estimate))+#, fill = direction))+
+  #   geom_density(bw = .1, alpha=.8, )+
+  #   # geom_histogram(aes(y=after_stat(count)), colour="black", bins = 80, alpha = 1)+
+  #   theme_test()+
+  #   # scale_fill_manual(values = new_colors) +
+  #   labs(x = "Species Interaction Value", y = "Density", fill = NULL, color = NULL, title = "all mods")
+  # # ggsave(paste("explore/SIV_distribution_density_plot_one_level_",date, ".png", sep = ""),
+  # #        p, width = 7, height = 3, units = "in")
   
   
   ### Try to overlay the one-category density plot with the frequency plot 
   
   # Frequency plot 
   # f_plot = 
-  ggplot(plot_dat[plot_dat$rel_species == "All_large_carnivores", ], 
-         aes(x = Interaction_Estimate, fill = direction))+
-    geom_histogram(aes(y=after_stat(count)), colour="black", bins = 80, alpha = 1)+ #, position = "dodge")+
-    scale_fill_manual(values = new_colors) +
-    geom_vline(aes(xintercept = 0), linetype = "dashed", alpha = 0.6)+
-    theme_classic()+
-    labs(x = "Species Interaction Value", y = "Frequency") 
+  # ggplot(plot_dat[plot_dat$rel_species == "All_large_carnivores", ], 
+  #        aes(x = Interaction_Estimate, fill = direction))+
+  #   geom_histogram(aes(y=after_stat(count)), colour="black", bins = 80, alpha = 1)+ #, position = "dodge")+
+  #   scale_fill_manual(values = new_colors) +
+  #   geom_vline(aes(xintercept = 0), linetype = "dashed", alpha = 0.6)+
+  #   theme_classic()+
+  #   labs(x = "Species Interaction Value", y = "Frequency") 
   
   ### LOAD ggpubr and cowplot libraries to make this work. 
   # # Density plot
@@ -978,7 +828,7 @@ ggplot(plot_dat[plot_dat$preference == "preferred",], aes(x = Interaction_Estima
 
 
 
-############# Visualize unsupported SIVs using frequency plots ######
+############# Visualize unsupported & preferred SIVs using frequency plots ######
 
 #
 ##
@@ -1146,7 +996,7 @@ rm(p, plot_list, plot_list_cons, top_down_nonsupport_cons)
 #
 ##
 ###
-#### Bottom-up non-support next 
+#### Bottom-up & preferred non-support next 
 
 ## subset plot_dat for bottom-up models 
 table(plot_dat$direction)
@@ -1230,7 +1080,7 @@ p
 p = plot_grid(plotlist = plot_list_cons, align = "v",
               ncol = 1, nrow = length(plot_list))
 # and save it!
-# ggsave(paste("figures/Grouped Histograms/Histogram_UNSUPPORTED_&_LIBERAL_bottom-up_SIV_HALF_LONG_",date, ".png", sep = ""),
+# ggsave(paste("figures/Grouped Histograms/Histogram_UNSUPPORTED_&_CONSERVATIVE_preferred_bottom-up_SIV_HALF_LONG_",date, ".png", sep = ""),
 #                p, width = 10, height = 10, units = "in")
 
 
@@ -1300,14 +1150,15 @@ table(nonsupport$PPC_setting)
 ## add the preference just to be totall clear! 
 nonsupport$preference = "preferred"
 
-
 # save it for fig making 
 # write.csv(nonsupport, paste("results/summarized_results/percentages_for_all_preferred_unsupported_histograms_", date, ".csv", sep = ""), row.names = F)
-
 
 ## keep it clean 
 rm(p, plot_list, plot_list_cons, bottom_up_nonsupport_cons, bottom_up_nonsupport, 
    top_down_nonsupport, bu_dat, td_dat)
+
+
+
 
 
 ############# Visualize ALL SIVs using frequency plots ######
@@ -1334,8 +1185,8 @@ plot_list_cons = list()
 order = c("All_large_carnivores","Panthera_tigris","Panthera_pardus", 
           "Cuon_alpinus", "Neofelis_genus")
 # grab min and max vals 
-min_val = min(plot_dat$Interaction_Estimate[plot_dat$Interaction_Estimate > -2]) # remove one outlier 
-max_val = max(plot_dat$Interaction_Estimate[plot_dat$Interaction_Estimate > -2])
+min_val = min(plot_dat$Interaction_Estimate[plot_dat$Interaction_Estimate > -3]) # remove one outlier 
+max_val = max(plot_dat$Interaction_Estimate[plot_dat$Interaction_Estimate > -3])
 
 for(i in 1:length(order)){
   
@@ -1351,7 +1202,7 @@ for(i in 1:length(order)){
     geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
     scale_fill_manual(values = new_colors) +
     coord_cartesian(xlim = c(min_val, max_val))+
-    # scale_y_continuous(breaks = seq(0, max(table(d$support_simple)), by = 2)) + 
+    scale_y_continuous(breaks = seq(0, max(table(d$support_simple)), by = 3)) +
     labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])+
     theme(axis.text.x = element_text(size = 16),
           axis.text.y = element_text(size = 16),
@@ -1372,7 +1223,7 @@ for(i in 1:length(order)){
     geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
     scale_fill_manual(values = new_colors) +
     coord_cartesian(xlim = c(min_val, max_val))+
-    # scale_y_continuous(breaks = seq(0, max(table(d$support_simple)), by = 3)) + 
+    scale_y_continuous(breaks = seq(0, max(table(d$support_simple)), by = 3)) +
     labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])+
     theme(axis.text.x = element_text(size = 16),
           axis.text.y = element_text(size = 16),
@@ -1455,13 +1306,13 @@ rm(perc_table, perc_table_cons)
 ## make the graph, omititng the very negative values 
 p = 
   ggplot(plot_dat[plot_dat$rel_species == "All_large_carnivores" &
-                    plot_dat$Interaction_Estimate > -2,], aes(x = Interaction_Estimate, fill = support_simple_conserv))+
+                    plot_dat$Interaction_Estimate > -3,], aes(x = Interaction_Estimate, fill = support_simple_conserv))+
   geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1, alpha = 1)+#, position = "dodge")+
   theme_classic()+
   geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
   scale_fill_manual(values = new_colors) +
   scale_y_continuous(breaks = seq(0, max(table(plot_dat$support_simple_conserv[plot_dat$rel_species == "All_large_carnivores" &
-                                                                                 plot_dat$Interaction_Estimate > -2])), by = 5)) + 
+                                                                                 plot_dat$Interaction_Estimate > -3])), by = 5)) + 
   labs(x = "Species Interaction Value", y = "Count", color = NULL, title = paste("all_large_carnivores all prey"))+
   guides(fill = "none") + 
   theme(axis.text.x = element_text(size = 16),
@@ -1473,11 +1324,11 @@ p =
 #        width = 12, height = 4, units = "in")
 
 ## Take note of which models were excluded because of extreme estimates! 
-unique(plot_dat$Species_Pair[plot_dat$Interaction_Estimate < -2])
-## 3 mods--
-# "SUB-Macaca_fascicularis~DOM-Cuon_alpinus"    
-# "SUB-Trichys_fasciculata~DOM-Panthera_tigris"
+unique(plot_dat$Species_Pair[plot_dat$Interaction_Estimate < -3])
+## only one mod--
 # "SUB-Cuon_alpinus~DOM-Tapirus_indicus"  
+### Make note in figure description that the SUB-Cuon_alpinus~DOM-Tapirus_indicus mod was NOT included
+### b/c interaction estimate is -8 (SD = 5.541, CI = -20.0117 to -0.7938)
 
 
 #
@@ -1618,7 +1469,13 @@ p =
 # ggsave(paste("figures/Grouped Histograms/Histogram_all_large_carnivores_unsupported_and_supported_preferred_prey_", date, ".png", sep = ""), p,
 #        width = 12, height = 4, units = "in")
 
+
+
+#
+##
+###
 #### MAKE CONCEPT GRAPH EXACTLY THE SAME! 
+
 # Set a seed for reproducibility
 set.seed(123)
 
@@ -1668,7 +1525,7 @@ rm(p, dist, generate_values)
 #
 ##
 ###
-#### determine percentages in each category
+#### determine percentages in each preferred prey category
 pref_perc_table = ddply(pref_dat, .(rel_species, support_simple), summarize,
                    num_lvl = length(Species_Pair))
 # then total number of mods per species
@@ -1724,7 +1581,6 @@ rm(p, pref_perc_table_cons,pref_perc_table, perc_table,
 
 
 ############# Visualize coefficient effect sizes ###### 
-
 
 
 ### Will be making a graph comparing the effect sizes for each state and detection variable
@@ -1879,7 +1735,304 @@ rm(p,n,gp,i,path,day,month,year,date)
 # dont need these plots anymore as they are saved
 rm(sp_pair_coeff_plots)
 
-############# Visualize coefficent forest plot ######
+############# Visualize prediction plots ########
+
+## Goal is to visualze the co-abundance relationship between every pairwise interaction
+## With so much data now, we will not use est_abund b/c it makes the graphs too messy. 
+
+## Inspect data
+head(est_abund) #estimated abundance per sampling unit --> no longer using 
+str(est_abund) # already numeric
+
+head(pred_abund) #Predicted change in subordinate abundance as a function of dominant species abundance --> this is what we want! 
+str(pred_abund) # already numeric
+
+## set colors 
+three_colors = c("unsupported" = "gray32",
+                 "top-down" = "darkorange4",
+                 "bottom-up" = "springgreen4")
+
+## repeat for each species pair and save directly to species-pair directory
+for(i in 1:length(unique(pred_abund$Species_Pair))){
+  
+  # save one pair name
+  n = unique(pred_abund$Species_Pair)[i]
+  
+  ## subset est and pred
+  est = est_abund[est_abund$Species_Pair == n,]
+  pred = pred_abund[pred_abund$Species_Pair == n,]
+  
+  ## grab the relevant guild pair for saving later
+  gp = preform$guild_pair[preform$Species_Pair == n]
+  
+  ## and the date while were at it
+  day<-str_sub(Sys.Date(),-2)
+  month<-str_sub(Sys.Date(),-5,-4)
+  year<-str_sub(Sys.Date(),-10,-7)
+  date = paste(year,month,day, sep = "")
+  
+  ## split species apart for nicer names 
+  n_split = str_split(n, "~")[[1]]
+  n_split = gsub("SUB-", "", n_split)
+  n_split = gsub("DOM-", "", n_split)
+  
+  
+  ## make a nice title 
+  title = paste("Dominant species:", n_split[2], 
+                "affects subordinate species:", n_split[1])
+  
+  ## make plots according to support level color 
+  if(preform$support[preform$Species_Pair == n] == "Supported"){
+    
+    ## make the top-down plot 
+    if(preform$direction[preform$Species_Pair == n] == "top-down"){
+      
+      p = 
+        ggplot(pred, aes(y = Predicted.N, x = var))+
+        geom_line(color = "darkorange4", linewidth = 2)+
+        geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.1, color = "black", linetype = "dashed")+
+        labs(y = paste0(n_split[1], " Abundance"), 
+             x = paste0(n_split[2], " Abundance"),
+             title = title, color = NULL)+ 
+        theme_test()+
+        theme(axis.text.x = element_text(size = 22),
+              axis.text.y = element_text(size = 22),
+              axis.text = element_text(color = "black"),
+              text = element_text(family = "Helvetica"))
+      
+    } # end top-down
+    
+    # make the bottom-up plot
+    if(preform$direction[preform$Species_Pair == n] == "bottom-up"){
+      
+      
+      p = 
+        ggplot(pred, aes(y = Predicted.N, x = var))+
+        geom_line(color = "springgreen4", linewidth = 2)+
+        geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.1, color = "black", linetype = "dashed")+
+        labs(y = paste0(n_split[1], " Abundance"), 
+             x = paste0(n_split[2], " Abundance"),
+             title = title, color = NULL)+ 
+        theme_test()+
+        theme(axis.text.x = element_text(size = 22),
+              axis.text.y = element_text(size = 22),
+              axis.text = element_text(color = "black"),
+              text = element_text(family = "Helvetica"))
+      
+    } # end bottom-up
+    
+  }else{
+    
+    ## make the unsupported plot 
+    p = 
+      ggplot(pred, aes(y = Predicted.N, x = var))+
+      geom_line(color = "black", linewidth = 2, linetype = "dashed")+
+      geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.1, color = "black")+
+      labs(y = paste0(n_split[1], " Abundance"), 
+           x = paste0(n_split[2], " Abundance"),
+           title = title, color = NULL)+ 
+      guides(color = "none") + # way too many landscapes to list them now. 
+      theme_test()+
+      theme(axis.text.x = element_text(size = 22),
+            axis.text.y = element_text(size = 22),
+            axis.text = element_text(color = "black"),
+            text = element_text(family = "Helvetica"))
+    
+  }
+  
+  ## construct the saving path
+  path = paste("figures/", paste(gp, n, sep = "/"), "/Prediction_plot_", n, "_", date, ".png", sep = "")
+  
+  ## save the dang thang 
+  ggsave(path, p, width = 5, height = 4, units = "in")
+  
+}
+rm(path, p,i, title, n, n_split, gp, est, pred, day, month, year, date, 
+   three_colors)
+
+
+
+
+
+############# Visualize PPC plots ########
+
+## Will generate two plots, 2 w/ the scatter (one for dom and one for sub) and 1 w/ the bars 
+## and will save in species-pair directory in the loop. 
+
+## scatter first 
+# add guild_pair to the data
+add = select(preform, Species_Pair, guild_pair)
+ppc_plotdat = merge(ppc_plotdat, add, by = "Species_Pair") # this is a long merge b/c plotdat has soooo much data. 
+
+## loop thru each species pair to make the scatter plots per species and save them directly. 
+for(i in 1:length(unique(ppc_plotdat$Species_Pair))){
+  
+  ## grab species pair name 
+  n = unique(ppc_plotdat$Species_Pair)[i]
+  
+  ## subset for a single species 
+  dat = ppc_plotdat[ppc_plotdat$Species_Pair == n,]
+  
+  # grab today's date
+  day<-str_sub(Sys.Date(),-2)
+  month<-str_sub(Sys.Date(),-5,-4)
+  year<-str_sub(Sys.Date(),-10,-7)
+  date = paste(year,month,day, sep = "")
+  
+  ## Create titles based on values
+  val = ppc_values[ppc_values$Species_Pair == n,]
+  sub.bpv = paste("Bayesian P-value =", round(val$BPV.sub, 3),
+                  "& C-hat =", round(val$Chat.sub, 3))
+  dom.bpv = paste("Bayesian P-value =", round(val$BPV.dom, 3),
+                  "& C-hat =",round(val$Chat.dom, 3))
+  
+  ## Subordinate plot
+  plot=
+    ggplot(dat, aes( y = sub.sim, x = sub.real))+
+    geom_point(aes(color = sub.label))+
+    geom_abline(intercept = 0, slope = 1, color = "black", size = 2)+
+    theme_classic()+
+    scale_color_manual(values = c("red", "blue"))+
+    labs(title = sub.bpv, subtitle = str_split(n, "~")[[1]][1]  , 
+         y = "Fit Statistic Simulated Data", x = "Fit Statistic Real Data")+
+    theme(legend.position = "None")
+  
+  ## make a saving path
+  path = paste("figures/", unique(dat$guild_pair), "/", n, "/Subordinate_PPC_scatter_plot_", date, ".png", sep = "")
+  
+  # save it! 
+  ggsave(path, plot, width = 7.5, height = 7, units = "in")
+  
+  
+  ## Dominant plot
+  plot = 
+    ggplot(dat, aes( y = dom.sim, x = dom.real))+
+    geom_point(aes(color = dom.label))+
+    geom_abline(intercept = 0, slope = 1, color = "black", size = 2)+
+    theme_classic()+
+    scale_color_manual(values = c("red", "blue"))+
+    labs(title = dom.bpv, subtitle = str_split(n, "~")[[1]][2], 
+         y = "Fit Statistic Simulated Data", x = "Fit Statistic Real Data")+
+    theme(legend.position = "None")
+  
+  ## make a saving path
+  path = paste("figures/", unique(dat$guild_pair), "/", n, "/Dominant_PPC_scatter_plot_", date, ".png", sep = "")
+  
+  # save it! 
+  ggsave(path, plot, width = 7.5, height = 7, units = "in")
+  
+  
+}
+rm(path, day,month,year,date, plot, n, sub.bpv, dom.bpv, val, dat)
+
+# add guild_pair to the values
+add = select(preform, Species_Pair, guild_pair)
+ppc_values = merge(ppc_values, add, by = "Species_Pair")
+
+## Loop thru each species pair in the values DF to make bar graphs for BPV and Chat values
+for(i in 1:length(unique(ppc_values$Species_Pair))){
+  
+  ## grab species pair name 
+  n = unique(ppc_values$Species_Pair)[i]
+  
+  ## subset for a single species 
+  dat = ppc_values[ppc_values$Species_Pair == n,]
+  
+  ## slightly transform the data to plot better 
+  plot_dat = data.frame("BPV" = c(dat$BPV.dom, dat$BPV.sub),
+                        "Chat" = c(dat$Chat.dom, dat$Chat.sub),
+                        "position" = c("Dominant", "Subordinate"),
+                        "species" = str_split(n, "~")[[1]])
+  
+  # # Define labels and positions for text
+  # text_data <- data.frame(
+  #   label = c("liberal","liberal", "conservative", "conservative", "perfect fit"),
+  #   y = c(0.85, 0.15, 0.75, 0.25, 0.5)  # Adjust these values based on your needs
+  # )
+  
+  # Define labels and positions for text
+  text_data <- data.frame(
+    label = c("Too high","Too low", "perfect fit"),
+    y = c(0.85, 0.15, 0.5)  # Adjust these values based on your needs
+  )
+  
+  ## BPV plot
+  bpv =
+  ggplot(plot_dat, aes(x = species, y = BPV, fill = position))+
+    geom_col(color = "black", position = "dodge", color = 'black')+
+    geom_hline(yintercept = 0.5)+
+    # geom_hline(yintercept = 0.75, linetype = "dashed", color = "gray32", alpha = 0.5)+
+    # geom_hline(yintercept = 0.25, linetype = "dashed", color = "gray32", alpha = 0.5)+
+    geom_hline(yintercept = 0.85, linetype = "dashed", color = "red")+
+    geom_hline(yintercept = 0.15, linetype = "dashed", color = "red")+
+    geom_text(data = text_data, aes(x = Inf, y = y, label = label), hjust = 1.2, vjust = -1, size = 5, inherit.aes = F)+
+    theme_test()+
+    labs(y = "Bayesian P-Value", x = NULL, fill = NULL)+
+    coord_cartesian(ylim = c(0,1))+
+    scale_fill_manual(values = c("tan3","wheat3"))+
+    theme(axis.text.x = element_text(size = 16),
+          axis.text.y = element_text(size = 16),
+          axis.text = element_text(color = "black"),
+          text = element_text(family = "Helvetica"))
+
+  # grab today's date
+  day<-str_sub(Sys.Date(),-2)
+  month<-str_sub(Sys.Date(),-5,-4)
+  year<-str_sub(Sys.Date(),-10,-7)
+  date = paste(year,month,day, sep = "")
+  
+  ## make a saving path
+  path = paste("figures/", paste(dat$guild_pair, dat$Species_Pair, sep = "/"), "/", "Bayes_P-value_bar_plot_", date, ".png", sep = "")
+  
+  # save it! 
+  ggsave(path, bpv, width = 7.5, height = 7, units = "in")
+  
+  # # Define labels and positions for text
+  # text_data <- data.frame(
+  #   label = c("liberal", "conservative", "perfect fit"),
+  #   y = c(1.3, 1.1, 1)  # Adjust these values based on your needs
+  # )
+  
+  # Define labels and positions for text
+  text_data <- data.frame(
+    label = c("Too high", "perfect fit"),
+    y = c(1.1, 1)  # Adjust these values based on your needs
+  )
+  
+  ##Chat plot
+  chat = 
+    ggplot(plot_dat, aes(x = species, y = Chat, fill = position))+
+    geom_col(color = "black", position = "dodge", color = 'black')+
+    geom_hline(yintercept = 1)+
+    geom_hline(yintercept = 1.1, linetype = "dashed", color = "red", alpha = 0.5)+
+    # geom_hline(yintercept = 1.3, linetype = "dashed", color = "red")+
+    geom_text(data = text_data, aes(x = Inf, y = y, label = label), hjust = 1.2, vjust = -1, size = 5, inherit.aes = F)+
+    theme_test()+
+    labs(y = "Magnitude of Over-Dispersion (C-hat)", x = NULL, fill = NULL)+ 
+    coord_cartesian(ylim = c(0.9,1.35))+
+    scale_fill_manual(values = c("tan3","wheat3"))+
+    theme(axis.text.x = element_text(size = 16),
+          axis.text.y = element_text(size = 16),
+          axis.text = element_text(color = "black"),
+          text = element_text(family = "Helvetica"))
+
+  # grab today's date
+  day<-str_sub(Sys.Date(),-2)
+  month<-str_sub(Sys.Date(),-5,-4)
+  year<-str_sub(Sys.Date(),-10,-7)
+  date = paste(year,month,day, sep = "")
+  
+  ## make a saving path
+  path = paste("figures/", paste(dat$guild_pair, dat$Species_Pair, sep = "/"), "/", "C-hat_overdispersion_bar_plot_", date, ".png", sep = "")
+  
+  # save it! 
+  ggsave(path, chat, width = 7.5, height = 7, units = "in")
+  
+}
+rm(bpv, chat, i, path, day,month,year,date,plot_dat, 
+   n, dat,add, text_data)
+
+############# Coefficient meta-regression & visualization ######
 
 ## working with coeff
 head(coeff)
@@ -1906,42 +2059,183 @@ table(preform$preference) # these SHOULD be the same, good!
 ##
 ###
 #### First examine the summary stats and distributions of the overall dataset 
-###
+### BUT, only really interested in the subordinate species (i.e where SIV lives)
 ##
 #
 
 ## quickly examine the range and distribution of variables
-summary(coeff$mean[coeff$var == "FLII"]);hist(coeff$mean[coeff$var == "FLII"]) # a few highly positive outliers
+summary(coeff$mean[coeff$var == "FLII" &
+                     grepl("SUB", coeff$species)])
+hist(coeff$mean[coeff$var == "FLII" &
+                  grepl("SUB", coeff$species)]) # a few highly positive outliers 
+
 # who are the positive FLII outliers?
-coeff[coeff$mean > 4 & coeff$var == "FLII",] # a pheasant that likes good forest... 
-
-## NO MORE HUNTING! 
-# # hunting
-# summary(coeff$mean[coeff$var == "Hunting"]);hist(coeff$mean[coeff$var == "Hunting"]) # a few major negative outliers
-# # who are the negative hunting outliers?
-# unique(coeff$species[coeff$mean < -5 & coeff$var == "Hunting"]) # subordinate leopards do poorly w/ hunting! not surprising. Also Hose's civet too. 
-# # who likes hunted areas?
-# sort(unique(coeff$species[coeff$mean > 0.2 & coeff$var == "Hunting"])) # subordinate leopards do poorly w/ hunting! not surprising. Also Hose's civet too. 
-# # plenty of commonly hunted species here! 
-
+coeff[coeff$mean > 4 & coeff$var == "FLII" & grepl("SUB", coeff$species),] # a pheasant that likes good forest... 
 
 # the others
-summary(coeff$mean[coeff$var == "HFP"]);hist(coeff$mean[coeff$var == "HFP"]) # no major outliers, much larger spread than elev
-summary(coeff$mean[coeff$var == "Elevation"]);hist(coeff$mean[coeff$var == "Elevation"]) # no major outliers 
-summary(coeff$mean[coeff$var == "Active_cams"]);hist(coeff$mean[coeff$var == "Active_cams"]) # only positive, narrow range. 
+summary(coeff$mean[coeff$var == "HFP" & grepl("SUB", coeff$species)])
+hist(coeff$mean[coeff$var == "HFP" & grepl("SUB", coeff$species)]) # no major outliers, much larger spread than elev
+
+summary(coeff$mean[coeff$var == "Elevation" & grepl("SUB", coeff$species)])
+hist(coeff$mean[coeff$var == "Elevation" & grepl("SUB", coeff$species)]) # no major outliers 
+
+summary(coeff$mean[coeff$var == "Active_cams" & grepl("SUB", coeff$species)])
+hist(coeff$mean[coeff$var == "Active_cams" & grepl("SUB", coeff$species)]) # only positive, narrow range. 
 
 # check intercepts
-summary(coeff$mean[coeff$var == "Abundance_intercept"]);hist(coeff$mean[coeff$var == "Abundance_intercept"]) # negative bias, large range
-summary(coeff$mean[coeff$var == "Detection_intercept"]);hist(coeff$mean[coeff$var == "Detection_intercept"]) # only negative, large range. 
+summary(coeff$mean[coeff$var == "Abundance_intercept" & grepl("SUB", coeff$species)])
+hist(coeff$mean[coeff$var == "Abundance_intercept" & grepl("SUB", coeff$species)]) # negative bias, large range
+
+summary(coeff$mean[coeff$var == "Detection_intercept" & grepl("SUB", coeff$species)])
+hist(coeff$mean[coeff$var == "Detection_intercept" & grepl("SUB", coeff$species)]) # only negative, large range. 
 
 # examine species interaction
-summary(coeff$mean[coeff$var == "Species_Interaction"]);hist(coeff$mean[coeff$var == "Species_Interaction"]) # very large range with a few negative outliers (we know this already)
+summary(coeff$mean[coeff$var == "Species_Interaction" & grepl("SUB", coeff$species)])
+hist(coeff$mean[coeff$var == "Species_Interaction" & grepl("SUB", coeff$species)]) # very large range with a few big negative outliers (we know this already)
+
 # subset for supported per direction
 summary(coeff$mean[coeff$var == "Species_Interaction" & coeff$support == "Supported" & coeff$direction == "top-down"]) # small range
 hist(coeff$mean[coeff$var == "Species_Interaction"& coeff$support == "Supported"& coeff$direction == "top-down"]) # all negative, looks good! 
 # bottom-up now
 summary(coeff$mean[coeff$var == "Species_Interaction" & coeff$support == "Supported" & coeff$direction == "bottom-up"]) # small range
 hist(coeff$mean[coeff$var == "Species_Interaction"& coeff$support == "Supported"& coeff$direction == "bottom-up"]) # all positive, looks good! 
+
+
+#
+##
+###
+#### Rather than apply fancy statistics that complicate the story, 
+#### Just try to visualize the data (via ridgelines/histograms) to see if there are any clear trends. 
+###
+##
+#
+
+### first grab the relevant subset of data 
+dat = coeff[coeff$preference == "preferred"  &  # only preferred prey
+              grepl("SUB", coeff$species) &     # only subordinate species 
+              coeff$var %in% c("Elevation", "HFP", "FLII", "Species_Interaction"), ] # only relevant vars 
+
+# create a new column for top-down vs bottom-up vs unsupported
+dat$dir_support = dat$support
+dat$dir_support[grepl("Unsupport", dat$dir_support)] = "unsupported" # standardize levels 
+dat$dir_support[dat$dir_support == "Supported" & dat$direction == "top-down"] = "top-down"
+dat$dir_support[dat$dir_support == "Supported" & dat$direction == "bottom-up"] = "bottom-up"
+table(dat$dir_support) # divide each by 4 for total number of mods 
+
+## also remove parameters that did not properly converge (i.e Rhat > 1.2)
+summary(dat$Rhat) # there are some big values! Dont want to include them, but we want to know how many we removed. 
+## create a new column to track which params converged and which didnt 
+dat$convergence = "yes"
+dat$convergence[dat$Rhat > 1.2] = "no"
+table(dat$convergence) # obvi vast majority are yes, but not when no on the figure. 
+table(dat$var);table(dat$var[dat$convergence == "yes"]) # full, then reduced. 
+
+## rename vars so they are all acronyms and ordered for the graph
+# res$var[res$var == "Hunting"] = "A) HUNT"
+dat$var[dat$var == "HFP"] = "A) Human footprint"
+dat$var[dat$var == "FLII"] = "B) Forest integrity"
+dat$var[dat$var == "Elevation"] = "C) Elevation"
+dat$var[dat$var == "Species_Interaction"] = "D) Species interaction"
+
+## set the factor order, putting SIV at the bottom
+dat$var = factor(dat$var, levels = c( "D) Species interaction",
+                                      "C) Elevation",
+                                      "B) Forest integrity",
+                                      "A) Human footprint"))
+dat$dir_support = factor(dat$dir_support, levels = c("top-down", "bottom-up","unsupported"))
+
+
+### We will run a ridge line plot, 
+## so need to make sure each grouping will have at least 3 observations, 
+# but we know top-down will only have two
+
+## first take note of which need subsetting. 
+small_dat = ddply(dat, .(dir_support, var), summarize,
+                  num_levls = length((mean)))
+## then remove all that dont need subsetting
+small_dat = small_dat[small_dat$num_levls <= 2,]
+
+## merge small_dat and ridge_dat based on common columns dom_sp and neg_vs_pos2 to ensure no repeats are added
+ridge_points <- merge(dat[dat$dir_support %in% small_dat$dir_support,], small_dat, by = c("dir_support", "var"))
+
+## verify we have the proper number of records 
+nrow(ridge_points) == sum(small_dat$num_levls) ## MUST BE TRUE 
+## thin ridge_points to relevant info 
+ridge_points = select(ridge_points, mean, var, dir_support)
+rm(small_dat)
+
+
+## make the plot
+p=
+  ggplot(dat[dat$convergence == "yes",], 
+         aes(x = mean, y = var, fill = dir_support))+#, height = stat(density))) +
+  # geom_density_ridges(stat = "density", scale=1, alpha = .8) +
+  geom_density_ridges(scale=1, alpha = .8, jittered_points = TRUE, point_alpha=.5) +
+  geom_point(data = ridge_points, aes(x = mean, y = var, color = dir_support), 
+             size = 5, shape = "circle", alpha = .8, 
+             position = position_nudge(y = .08), inherit.aes = F)+
+  geom_vline(aes(xintercept = 0), color = "black") +
+  theme_test() +
+  scale_fill_manual(values = new_colors) +
+  labs(x = "Mean Effect Size", y = NULL, fill = NULL, color = NULL)+
+  theme(axis.text.x = element_text(size = 22),
+        axis.text.y = element_text(size = 22),
+        axis.title.x = element_text(size = 22),
+        axis.text = element_text(color = "black"),
+        legend.title = element_text(size = 22, family = "Helvetica"),
+        legend.text = element_text(size = 22, family = "Helvetica"),
+        text = element_text(family = "Helvetica"))
+# ggsave(paste("explore/All_covariates_ridgeline_non_scaled_",date, ".png", sep = ""),
+#        p, width = 13, height = 10, units = "in")
+
+## lets also just try the basic histogram, to match the SIV style above
+
+## Frequency plot version
+plot_list = list()
+
+order = c("A) Human footprint", "B) Forest integrity", 
+          "C) Elevation", "D) Species interaction")
+# grab min and max vals 
+min_val = min(dat$mean[dat$convergence == "yes"]) 
+max_val = max(dat$mean[dat$convergence == "yes"])
+
+for(i in 1:length(order)){
+  
+  # subset the data
+  d = dat[dat$var == order[i], ]
+  
+  # make the plot 
+  p = ggplot(d[d$convergence == "yes", ], aes(x = mean, fill = dir_support))+
+    geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1, alpha = 1)+#, position = "dodge")+
+    # theme_minimal()+
+    # theme_test()+
+    theme_classic()+
+    geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+    scale_fill_manual(values = new_colors) +
+    coord_cartesian(xlim = c(min_val, max_val))+
+    # scale_y_continuous(breaks = seq(0, max(table(d$support_simple)), by = 2)) + 
+    labs(x = "Mean effect size", y = NULL, fill = NULL, color = NULL, title = order[i])+
+    theme(axis.text.x = element_text(size = 16),
+          axis.text.y = element_text(size = 16),
+          axis.text = element_text(color = "black"),
+          text = element_text(family = "Helvetica"))
+  
+  # save it! 
+  plot_list[[i]] = p
+  
+}
+rm(d,p,i, min_val, max_val)
+
+## arrange them vertically 
+p = plot_grid(plotlist = plot_list, align = "v", 
+              ncol = 1, nrow = length(plot_list)) 
+p
+# and save it! 
+# ggsave(paste("explore/All_covariates_histogram_",date, ".png", sep = ""),
+#                p, width = 8, height = 10, units = "in")
+
+
+
 
 #
 ##
@@ -1996,10 +2290,197 @@ hist(coeff$mean[coeff$var == "Species_Interaction"& coeff$support == "Supported"
   rm(data, weighted_data)
 }
 
-#### The goal is to produce a forest plot with 5 points per variable
-### 1) top-down, 2) bottom-up, 3), predator, 4) prey, 5) non-supported results
-## But graph will be subsetted to preferred prey species, 
-# and 1-4 will only include supported results. 
+#### The goal is to produce a forest plot with 3 points per variable for preferred prey models:
+### 1) supported top-down, 2) supported bottom-up, 3) non-supported result.
+## Only the subodinate species will be examined, because that is where SIV is. 
+
+
+### first grab the relevant subset of data 
+dat = coeff[coeff$preference == "preferred"  & 
+              grepl("SUB", coeff$species) & 
+              coeff$var %in% c("Elevation", "HFP", "FLII", "Species_Interaction"), ]
+# create a new column for top-down vs bottom-up vs unsupported
+dat$dir_support = dat$support
+dat$dir_support[grepl("Unsupport", dat$dir_support)] = "unsupported" # standardize levels 
+# dat$dir_support[dat$dir_support == "Supported" & dat$direction == "top-down"] = "top-down"
+# dat$dir_support[dat$dir_support == "Supported" & dat$direction == "bottom-up"] = "bottom-up"
+table(dat$dir_support) # divide each by 4 for total number of mods 
+
+## also remove parameters that did not properly converge (i.e Rhat > 1.2)
+summary(dat$Rhat) # there are some big values! Dont want to include them, but we want to know how many we removed. 
+## create a new column to track which params converged and which didnt 
+dat$convergence = "yes"
+dat$convergence[dat$Rhat > 1.2] = "no"
+table(dat$convergence) # obvi vast majority are yes, but not when no on the figure. 
+table(dat$var);table(dat$var[dat$convergence == "yes"]) # full, then reduced. 
+
+### Run several lmer mods to generate R2 for each direction. 
+## iterate per direction and swap per variable, 
+# then calculate contributions per variable w/in the direction.  
+
+#### Start by iterating per direction, and generating an R2 per mod 
+res = list() # store results here
+
+# repeat per dir_support 
+for(i in 1:length(unique(dat$dir_support))){
+  
+  ## subset data per dir_support
+  sub_dat = dat[dat$dir_support == unique(dat$dir_support)[i], ]
+  
+  ## run the lmer w/ all vars
+  mod = lmer(mean ~ var-1 + (1 | sub_sp), weights = 1/sd, REML = FALSE, 
+             data = sub_dat[sub_dat$convergence == "yes", ])
+  
+  ## save the model estimates
+  es = as.data.frame(summary(mod)$coefficients)
+  
+  ## clean up the df
+  es$var = rownames(es)
+  es$var = gsub("var", "", es$var)
+  names(es) = c("estimate", "SE", "t value", "var")
+  
+  ## add relevant cols 
+  es$dir_support = unique(dat$dir_support)[i]
+  es$full_r2 = r.squaredGLMM(mod)[1] # add the marginal R2 from the full mod per dir_support
+  es$reduced_r2 = as.numeric(NA)     # marginal R2 from reduced model per var 
+  es$contribution = as.numeric(NA)   # to be filled in below 
+  
+  ## iterate for each var
+  for(v in 1:length(unique(sub_dat$var))){
+    
+    ## EITHER
+    # remove one level of the variable (remove one of interest)
+    # dub_sub = sub_dat[sub_dat$var != unique(sub_dat$var)[v], ]
+    ## OR
+    # change all variable names (except for the one of interest) to dummy to examine effect of key var 
+    dub_sub = sub_dat
+    dub_sub$var[sub_dat$var != unique(sub_dat$var)[v]] = "dummy"
+    
+    ## run the lmer w/ changed var
+    sub_mod = lmer(mean ~ var-1 + (1 | sub_sp), weights = 1/sd, REML = FALSE, 
+                   data = dub_sub[dub_sub$convergence == "yes", ])
+    
+    ## calculate reduced R2 in the ES data frame
+    es$reduced_r2[es$var == unique(sub_dat$var)[v]] = r.squaredGLMM(sub_mod)[1]
+    
+    ## calculate difference in R2 
+    es$contribution[es$var == unique(sub_dat$var)[v]] = 
+      ## R2 from the model w/ all vars per dir_support
+      es$full_r2[es$var == unique(sub_dat$var)[v]] -  # minus
+      ## R2 from the model w/ one var in same dir_support
+      es$reduced_r2[es$var == unique(sub_dat$var)[v]]
+    
+  } # end per var 
+  
+  ## save the finished dataframe in a list 
+  res[[i]] = es
+  names(res)[i] = unique(dat$dir_support)[i]
+  
+} #end per dir_support 
+## 8 warning about a singluar fit.... 
+#clean up 
+rm(i, v, es, sub_mod, dub_sub, sub_dat, mod, weights)
+
+## combine list into a df
+es_final = do.call(rbind, res)
+rownames(es_final) = NULL
+rm(res)
+
+## Normalize contributions to sum up to 100%
+# but do this per direction! 
+
+# and create a new col for cumulative percents (and thier label positions) for plotting
+es_final$percent_cumulative = as.numeric(NA)
+es_final$labelpos = as.numeric(NA)
+
+for(i in 1:length(unique(es_final$dir_support))){
+  
+  ## generate the percentage that is contributed per dir_support
+  es_final$percent_contribute[es_final$dir_support == unique(es_final$dir_support)[i]] = 
+    # by taking the contribution calculated above
+    (es_final$contribution[es_final$dir_support == unique(es_final$dir_support)[i]] / 
+       # and dividing by the sum contributions per direction *100
+       sum(es_final$contribution[es_final$dir_support == unique(es_final$dir_support)[i]])) * 100
+  
+  ## and get the cumulative percentage per dir_support
+  es_final$percent_cumulative[es_final$dir_support == unique(es_final$dir_support)[i]] = 
+    cumsum(es_final$percent_contribute[es_final$dir_support == unique(es_final$dir_support)[i]])
+  
+  # Calculate position of labels
+  es_final$labelpos = 0.5 * (es_final$percent_cumulative[es_final$dir_support == unique(es_final$dir_support)[i]] - 
+                               es_final$percent_contribute[es_final$dir_support == unique(es_final$dir_support)[i]]) + 
+    0.5*es_final$percent_cumulative[es_final$dir_support == unique(es_final$dir_support)[i]]
+  
+}
+rm(i)
+
+## inspect
+es_final # looks good! 
+
+## prep the data for plotting 
+
+## make an upper and lower CI
+es_final$upper = es_final$estimate + es_final$SE
+es_final$lower = es_final$estimate - es_final$SE
+
+## rename vars so they are all acronyms and ordered for the graph
+# res$var[res$var == "Hunting"] = "A) HUNT"
+es_final$var[es_final$var == "HFP"] = "A) Human footprint"
+es_final$var[es_final$var == "FLII"] = "B) Forest integrity"
+es_final$var[es_final$var == "Elevation"] = "C) Elevation"
+es_final$var[es_final$var == "Species_Interaction"] = "D) Species interaction"
+
+## set the factor order, putting SIV at the bottom
+es_final$var = factor(es_final$var, levels = c( "D) Species interaction",
+                                                "C) Elevation",
+                                                "B) Forest integrity",
+                                                "A) Human footprint"))
+es_final$dir_support = factor(es_final$dir_support, levels = c("unsupported", "bottom-up", "top-down"))
+
+
+## Make the ggplot
+p =
+  ggplot(es_final, aes(x = var, y = estimate, ymin=lower, ymax=upper))+
+  geom_pointrange(aes(color = dir_support), size = 1,
+                  position= position_dodge(width=.7))+
+  geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.6)+
+  coord_flip() +  # flip coordinates (puts labels on y axis)
+  labs(y = "Weighted effect size", x = NULL) +
+  scale_color_manual(values = c("top-down" = "darkorange4","bottom-up" = "springgreen4", "unsupported" = "gray30"))+
+  scale_shape_manual(values = c("prey" = 17, "predator" = 15, "unsupported" = 16))+
+  theme_bw()+
+  theme(axis.text.x = element_text(size = 22),
+        axis.text.y = element_text(size = 22),
+        axis.title.x = element_text(size = 22),
+        axis.text = element_text(color = "black"),
+        legend.title = element_text(size = 22, family = "Helvetica"),
+        legend.text = element_text(size = 22, family = "Helvetica"),
+        text = element_text(family = "Helvetica"))
+## Save this
+# ggsave(paste("explore/Wieghted_coefficents_regression_supported_preferred_mods_sub_sp_only_", date, ".png", sep = ""),
+#        p, width = 12, height = 9, units = "in")
+
+## reverse factor order for nicer labels 
+es_final$var = factor(es_final$var, levels = c( "A) Human footprint",
+                                                "B) Forest integrity",
+                                                "C) Elevation",
+                                                "D) Species interaction"))
+
+## now make donut plots to add to the above graph in ppt 
+p = 
+  ggplot(es_final, aes(x = "", y = percent_contribute, fill = var)) +
+  geom_bar(width = 1, stat = "identity") +
+  coord_polar(theta = "y") +
+  theme_void() +
+  facet_wrap(~dir_support, ncol = 1)+
+  scale_fill_manual(values = c("#33a02c", "#b2df8a", "#1f78b4", "#a6cee3"))+
+  theme(legend.text = element_text(family = "Helvetica", size = 22),
+        strip.text = element_text(family = "Helvetica", size = 22,
+                                  color =  c("darkorange4","springgreen4", "gray30"))) 
+# Save this
+# ggsave(paste("explore/Donut_plot_variable_contribution_meta_regression_preferred_mods_sub_sp_only_", date, ".png", sep = ""),
+#        p, width = 6, height = 11, units = "in")
+
 
 #
 ##
@@ -2008,286 +2489,453 @@ hist(coeff$mean[coeff$var == "Species_Interaction"& coeff$support == "Supported"
 ###
 ##
 #
-{
-  ### For the first test, we will work with a subset of data --> preferred and supported top-down models  
-  dat = coeff[coeff$direction == "top-down" & 
-                coeff$support == "Supported" &
-                coeff$preference == "preferred",]
-  # how many mods is this?
-  length(unique(dat$Species_Pair)) # only 2... but this checks out
-  
-  ## we are interested in how the SIV compares to other variables,
-  ## and since SIV only applies to subordinate species,
-  ## we will only meta-analyze coefficents from sub-species
-  
-  # susbet for subordinate coefficents
-  dat = dat[grepl("SUB", dat$species),]
-  # only want relevant vars
-  dat = dat[dat$var %in% c("FLII","HFP","Elevation",#"Hunting",
-                           "Species_Interaction"),]
-  ## which species RE should be used?
-  sort(table(dat$sub_sp));sort(table(dat$species)) # they are the same! go w/ species 
-  
-  # set variable as a factor
-  dat$var = as.factor(dat$var)
-  
-  # run a regression weighted by the standard deviation of the effect size with a random effect per species 
-  td_sub = lmer(mean ~ var-1 + (1 |species),weights = 1/sd,REML=FALSE, data=dat) 
-  
-  # extract coefficents into a DF
-  td_sub = as.data.frame(summary(td_sub)$coefficients)
-  
-  # clean up the DF 
-  td_sub$var = rownames(td_sub)
-  td_sub$var = gsub("var", "", td_sub$var)
-  names(td_sub)[1:2] = c("estimate", "SE")
-  
-  ## Assign direction and position 
-  td_sub$direction = "top-down"
-  td_sub$sp_position = "subordinate"
-  
+# {
+##### COME HERE, THIS SECTION NEEDS BIG CHANGES!
 
-  #### Repeat for the dominant species here
-  ###
-  ##
-  #
-  dat = coeff[coeff$direction == "top-down" & 
-                coeff$support == "Supported" &
-                coeff$preference == "preferred",]
-  
-  # susbet for dom coefficents
-  dat = dat[grepl("DOM", dat$species),]
-  # only want relevant vars
-  dat = dat[dat$var %in% c("FLII","HFP","Elevation",#"Hunting",
-                           "Species_Interaction"),] #SIV wont show up, but can leave here anyway 
- 
-  # run a regression weighted by the standard deviation of the effect size with a random effect per species 
-  td_dom = lmer(mean ~ var-1 + (1 |species),weights = 1/sd,REML=FALSE, data=dat) ## boundary (singular) fit: see help('isSingular')
-  ## NOT GOOD! probably not enough levels here.. 
-  
-  # extract coefficents into a DF
-  td_dom = as.data.frame(summary(td_dom)$coefficients)
-  
-  # clean up the DF 
-  td_dom$var = rownames(td_dom)
-  td_dom$var = gsub("var", "", td_dom$var)
-  names(td_dom)[1:2] = c("estimate", "SE")
-  
-  ## Assign direction and position 
-  td_dom$direction = "top-down"
-  td_dom$sp_position = "dominant"
-  
-  ## combine both td results
-  td = rbind(td_dom, td_sub)
-  rm(td_dom, td_sub)
-  
-  #
-  ##
-  ###
-  #### Repeat for bottom-up
-  ###
-  ##
-  #
-  
-  ### Work with a subset of data --> preferred and supported bottom-up models  
-  dat = coeff[coeff$direction == "bottom-up" & 
-                coeff$support == "Supported" &
-                coeff$preference == "preferred",]
-  # how many mods is this?
-  length(unique(dat$Species_Pair)) # only 17... but this checks out
-  
-  ## we are interested in how the SIV compares to other variables,
-  ## and since SIV only applies to subordinate species,
-  ## we will only meta-analyze coefficents from sub-species
-  
-  # susbet for subordinate coefficents
-  dat = dat[grepl("SUB", dat$species),]
-  # only want relevant vars
-  dat = dat[dat$var %in% c("FLII","HFP","Elevation",#"Hunting",
-                           "Species_Interaction"),]
-  # make em a factor
-  dat$var = as.factor(dat$var)
-  
-  # run a regression weighted by the standard deviation of the effect size with a random effect per species 
-  bu_sub = lmer(mean ~ var-1 + (1 |species),weights = 1/sd,REML=FALSE, data=dat) 
-  
-  # extract coefficents into a DF
-  bu_sub = as.data.frame(summary(bu_sub)$coefficients)
-  
-  # clean up the DF 
-  bu_sub$var = rownames(bu_sub)
-  bu_sub$var = gsub("var", "", bu_sub$var)
-  names(bu_sub)[1:2] = c("estimate", "SE")
-  
-  ## Assign direction and position 
-  bu_sub$direction = "bottom-up"
-  bu_sub$sp_position = "subordinate"
-  
-  
-  #### Repeat for the dominant species here
-  ###
-  ##
-  #
-  dat = coeff[coeff$direction == "bottom-up" & 
-                coeff$support == "Supported" &
-                coeff$preference == "preferred",]
-  
-  # susbet for dom coefficents
-  dat = dat[grepl("DOM", dat$species),]
-  # only want relevant vars
-  dat = dat[dat$var %in% c("FLII","HFP","Elevation",#"Hunting",
-                           "Species_Interaction"),] #SIV wont show up, but can leave here anyway 
-  
-  # run a regression weighted by the standard deviation of the effect size with a random effect per species 
-  bu_dom = lmer(mean ~ var-1 + (1 |species),weights = 1/sd,REML=FALSE, data=dat) 
-  
-  # extract coefficents into a DF
-  bu_dom = as.data.frame(summary(bu_dom)$coefficients)
-  
-  # clean up the DF 
-  bu_dom$var = rownames(bu_dom)
-  bu_dom$var = gsub("var", "", bu_dom$var)
-  names(bu_dom)[1:2] = c("estimate", "SE")
-  
-  ## Assign direction and position 
-  bu_dom$direction = "bottom-up"
-  bu_dom$sp_position = "dominant"
-  
-  ## combine both td results
-  bu = rbind(bu_dom, bu_sub)
-  rm(bu_dom, bu_sub)
-  
-  
-  #
-  ##
-  ###
-  #### Repeat for unsupported results 
-  ###
-  ##
-  #
+#   ### For the first test, we will work with a subset of data --> preferred and supported top-down models  
+#   dat = coeff[coeff$direction == "top-down"  & 
+#                 coeff$support == "Supported" &
+#                 coeff$preference == "preferred",]
+#   # how many mods is this?
+#   length(unique(dat$Species_Pair)) # only 2... but this checks out
+#   
+#   ## we are interested in how the SIV compares to other variables,
+#   ## and since SIV only applies to subordinate species,
+#   ## we will only meta-analyze coefficents from sub-species
+#   
+#   # susbet for subordinate coefficents
+#   dat = dat[grepl("SUB", dat$species),]
+#   # only want relevant vars
+#   dat = dat[dat$var %in% c("FLII","HFP","Elevation",#"Hunting",
+#                            "Species_Interaction"),]
+#   
+#   # Create an empty dataframe to store R-squared values
+#   r2_td <- data.frame("R2" = numeric(length(unique(dat$var))),
+#                       "var" = unique(dat$var),
+#                       "direction" = "top-down",
+#                       "sp_position" = "subordinate")
+# 
+#   # and a list to store DFs
+#   res = list()
+# 
+#   # Fit separate models for each level of 'var'
+#   for (i in seq_along(unique(dat$var))) {
+#     
+#     # # Subset the data for the relevant variable
+#     # subset_data <- subset(dat, var == unique(dat$var)[i])
+#     # 
+#     # # Fit the model for the current level
+#     # mod = lmer(mean ~ 1 + (1 | species), weights = 1/sd, REML = FALSE, data = subset_data)
+#     # 
+#     # # Calculate R-squared for the current model
+#     # r2_td$R2[r2_td$var == unique(dat$var)[i]] <- r.squaredGLMM(mod)[2] # only want the marginal effect, not conditonal
+#     # 
+#     # # extract coefficents into a DF
+#     # mod = as.data.frame(summary(mod)$coefficients)
+#     # 
+#     # # clean up the DF
+#     # mod$var = unique(dat$var)[i]
+#     # mod$var = gsub("var", "", mod$var)
+#     # names(mod)[1:2] = c("estimate", "SE")
+#     # mod = mod[,names(mod) != "Pr(>|t|)"]
+#     # 
+#     # ## save in the list
+#     # res[[i]] = mod
+# 
+#     # Subset the data for the relevant variable
+#     subset_data <- subset(dat, var == unique(dat$var)[i])
+# 
+#     # Fit the model for the current level
+#     mod <- lm(mean ~ 1, weights = 1/sd, data = subset_data) # cant include RE here b/c not enough levels, too few observations.
+# 
+#     # Calculate R-squared for the current model
+#     a = summary(mod)
+#     r2_td$R2[r2_td$var == unique(dat$var)[i]] <- a$r.squared
+# 
+#     # extract coefficents into a DF
+#     mod = as.data.frame(summary(mod)$coefficients)
+# 
+#     # clean up the DF
+#     mod$var = unique(dat$var)[i]
+#     mod$var = gsub("var", "", mod$var)
+#     names(mod)[1:2] = c("estimate", "SE")
+#     mod = mod[,names(mod) != "Pr(>|t|)"]
+# 
+# 
+#     ## save in the list
+#     res[[i]] = mod
+#   }
+#   rm(i, subset_data)
+# 
+#   ## combine res into one df.
+#   td_sub = do.call(rbind, res)
+#   rm(res)
+# 
+#   ## inspect r2
+#   r2_td
+# 
+#   # # clean up the DF 
+#   names(td_sub)[1:2] = c("estimate", "SE")
+#   
+#   ## Assign direction and position 
+#   td_sub$direction = "top-down"
+#   td_sub$sp_position = "subordinate"
+#   
+# 
+#   #### Repeat for the dominant species here
+#   ###
+#   ##
+#   #
+#   dat = coeff[coeff$direction == "top-down" & 
+#                 coeff$support == "Supported" &
+#                 coeff$preference == "preferred",]
+#   
+#   # susbet for dom coefficents
+#   dat = dat[grepl("DOM", dat$species),]
+#   # only want relevant vars
+#   dat = dat[dat$var %in% c("FLII","HFP","Elevation",#"Hunting",
+#                            "Species_Interaction"),] #SIV wont show up, but can leave here anyway 
+#  
+#   # Create an empty dataframe to store R-squared values
+#   r2_td2 <- data.frame("R2" = numeric(length(unique(dat$var))),
+#                       "var" = unique(dat$var),
+#                       "direction" = "top-down",
+#                       "sp_position" = "dominant")
+#   
+#   # and a list to store DFs
+#   res = list()
+#   
+#   # Fit separate models for each level of 'var'
+#   for (i in seq_along(unique(dat$var))) {
+#     
+#     # Subset the data for the relevant variable
+#     subset_data <- subset(dat, var == unique(dat$var)[i])
+#     
+#     # Fit the model for the current level
+#     mod <- lm(mean ~ 1, weights = 1/sd, data = subset_data) # cant include RE here b/c not enough levels, too few observations.
+#     
+#     # Calculate R-squared for the current model
+#     a = summary(mod)
+#     r2_td2$R2[r2_td2$var == unique(dat$var)[i]] <- a$r.squared
+#     
+#     # extract coefficents into a DF
+#     mod = as.data.frame(summary(mod)$coefficients)
+#     
+#     # clean up the DF
+#     mod$var = unique(dat$var)[i]
+#     mod$var = gsub("var", "", mod$var)
+#     names(mod)[1:2] = c("estimate", "SE")
+#     mod = mod[,names(mod) != "Pr(>|t|)"]
+#     
+#     
+#     ## save in the list
+#     res[[i]] = mod
+#   }
+#   rm(i, subset_data)
+#   
+#   ## combine res into one df.
+#   td_dom = do.call(rbind, res)
+#   rm(res)
+#   
+#   ## inspect r2
+#   r2_td2
+#   
+#   # # clean up the DF 
+#   names(td_dom)[1:2] = c("estimate", "SE")
+#   
+#   ## Assign direction and position 
+#   td_dom$direction = "top-down"
+#   td_dom$sp_position = "dominant"
+#   
+#    
+#   ## combine both td results
+#   td = rbind(td_dom, td_sub)
+#   r2_td = rbind(r2_td, r2_td2)
+#   rm(td_dom, td_sub, r2_td2)
+#   
+#   
+#   #
+#   ##
+#   ###
+#   #### Repeat for bottom-up
+#   ###
+#   ##
+#   #
+#   
+#   ### Work with a subset of data --> preferred and supported bottom-up models  
+#   dat = coeff[coeff$direction == "bottom-up" & 
+#                 coeff$support == "Supported" &
+#                 coeff$preference == "preferred",]
+#   # how many mods is this?
+#   length(unique(dat$Species_Pair)) # only 17... but this checks out
+#   
+#   ## we are interested in how the SIV compares to other variables,
+#   ## and since SIV only applies to subordinate species,
+#   ## we will only meta-analyze coefficents from sub-species
+#   
+#   # susbet for subordinate coefficents
+#   dat = dat[grepl("SUB", dat$species),]
+#   # only want relevant vars
+#   dat = dat[dat$var %in% c("FLII","HFP","Elevation",#"Hunting",
+#                            "Species_Interaction"),]
+#   
+#   # Create an empty dataframe to store R-squared values
+#   r2_bu <- data.frame("R2" = numeric(length(unique(dat$var))),
+#                       "var" = unique(dat$var),
+#                       "direction" = "bottom-up",
+#                       "sp_position" = "subordinate")
+#   
+#   # and a list to store DFs
+#   res = list()
+#   
+#   # Fit separate models for each level of 'var'
+#   for (i in seq_along(unique(dat$var))) {
+#     
+#     # Subset the data for the relevant variable
+#     subset_data <- subset(dat, var == unique(dat$var)[i])
+#     
+#     #### COME HERE --> dont have species included in RE for SIV 
+#     
+#     # Fit the model for the current level
+#     mod = lmer(mean ~ 1 + (1 | species), weights = 1/sd, REML = FALSE, data = subset_data)
+#     
+#     # Calculate R-squared for the current model
+#     r2_bu$R2[r2_bu$var == unique(dat$var)[i]] <- r.squaredGLMM(mod)[2] # only want the conditional effect
+#     
+#     # extract coefficents into a DF
+#     mod = as.data.frame(summary(mod)$coefficients)
+#     
+#     # clean up the DF
+#     mod$var = unique(dat$var)[i]
+#     mod$var = gsub("var", "", mod$var)
+#     names(mod)[1:2] = c("estimate", "SE")
+#     mod = mod[,names(mod) != "Pr(>|t|)"]
+#     
+#     ## save in the list
+#     res[[i]] = mod
+#   }
+#   rm(i, subset_data, mod)
+#   
+#   ## combine res into one df.
+#   bu_sub = do.call(rbind, res)
+#   rm(res)
+#   
+#   ## inspect r2
+#   r2_bu
+#   
+#   # clean up the DF 
+#   names(bu_sub)[1:2] = c("estimate", "SE")
+#   
+#   ## Assign direction and position 
+#   bu_sub$direction = "bottom-up"
+#   bu_sub$sp_position = "subordinate"
+#   
+#   
+#   #### Repeat for the dominant species here
+#   ###
+#   ##
+#   #
+#   dat = coeff[coeff$direction == "bottom-up" & 
+#                 coeff$support == "Supported" &
+#                 coeff$preference == "preferred",]
+#   
+#   # susbet for dom coefficents
+#   dat = dat[grepl("DOM", dat$species),]
+#   # only want relevant vars
+#   dat = dat[dat$var %in% c("FLII","HFP","Elevation",#"Hunting",
+#                            "Species_Interaction"),] #SIV wont show up, but can leave here anyway 
+#   
+#   # Create an empty dataframe to store R-squared values
+#   r2_bu2 <- data.frame("R2" = numeric(length(unique(dat$var))),
+#                       "var" = unique(dat$var),
+#                       "direction" = "bottom-up",
+#                       "sp_position" = "dominant")
+#   
+#   # and a list to store DFs
+#   res = list()
+#   
+#   # Fit separate models for each level of 'var'
+#   for (i in seq_along(unique(dat$var))) {
+#     
+#     # Subset the data for the relevant variable
+#     subset_data <- subset(dat, var == unique(dat$var)[i])
+#     
+#     # Fit the model for the current level
+#     mod = lmer(mean ~ 1 + (1 | species), weights = 1/sd, REML = FALSE, data = subset_data)
+#     
+#     # Calculate R-squared for the current model
+#     r2_bu2$R2[r2_bu2$var == unique(dat$var)[i]] <- r.squaredGLMM(mod)[2] # only want the marginal effect, not conditonal
+#     
+#     # extract coefficents into a DF
+#     mod = as.data.frame(summary(mod)$coefficients)
+#     
+#     # clean up the DF
+#     mod$var = unique(dat$var)[i]
+#     mod$var = gsub("var", "", mod$var)
+#     names(mod)[1:2] = c("estimate", "SE")
+#     mod = mod[,names(mod) != "Pr(>|t|)"]
+#     
+#     ## save in the list
+#     res[[i]] = mod
+#   }
+#   rm(i, subset_data, mod)
+#   
+#   ## combine res into one df.
+#   bu_dom = do.call(rbind, res)
+#   rm(res)
+#   
+#   ## inspect r2
+#   r2_bu2
+#   
+#   # clean up the DF 
+#   names(bu_dom)[1:2] = c("estimate", "SE")
+#   
+#   ## Assign direction and position 
+#   bu_dom$direction = "bottom-up"
+#   bu_dom$sp_position = "dominant"
+#   
+#   ## combine both results
+#   bu = rbind(bu_dom, bu_sub)
+#   r2_bu = rbind(r2_bu, r2_bu2)
+#   rm(bu_dom, bu_sub, r2_bu2)
+#   
+#   #
+#   ##
+#   ###
+#   #### Repeat for unsupported results 
+#   ###
+#   ##
+#   #
+# 
+#   ### Work with a subset of data --> preferred and NON-supported models  
+#   dat = coeff[coeff$support != "Supported" &
+#                 coeff$preference == "preferred",]
+#   # how many mods is this?
+#   length(unique(dat$Species_Pair)) # 47
+#  
+#   #  # susbet for subordinate coefficents
+#   # dat = dat[grepl("SUB", dat$species),] # DONT SUBSET, just look at general effect. 
+#   
+#   # only want relevant vars
+#   dat = dat[dat$var %in% c("FLII","HFP","Elevation",#"Hunting",
+#                            "Species_Interaction"),]
+#   
+#   ### Do this one a little bit differently so we can examine R2 for each variable in 
+#   ## the unsupproted results to see if they are more explanitory than SIV. 
+#   
+#   # Create an empty vector to store R-squared values
+#   r_squared_values <- data.frame("R2" = numeric(length(unique(dat$var))),
+#                                  "var" = unique(dat$var), 
+#                                  "direction" = "unsupported",
+#                                  "sp_position" = "unsupported")
+#   
+#   # and a list to store DFs 
+#   res = list()
+#   
+#   # Fit separate models for each level of 'var'
+#   for (i in seq_along(unique(dat$var))) {
+#     
+#     # Subset the data for the relevatn variable 
+#     subset_data <- subset(dat, var == unique(dat$var)[i])
+#     
+#     # Fit the model for the current level
+#     unsup_sub <- lmer(mean ~ 1 + (1 | species), weights = 1/sd, REML = FALSE, data = subset_data)
+#     
+#     # Calculate R-squared for the current model
+#     r_squared_values$R2[r_squared_values$var == unique(dat$var)[i]] <- r.squaredGLMM(unsup_sub)[2] # only want the marginal effect, not conditonal
+#     
+#     # extract coefficents into a DF
+#     unsup_sub = as.data.frame(summary(unsup_sub)$coefficients)
+#     
+#     # clean up the DF 
+#     unsup_sub$var = unique(dat$var)[i]
+#     names(unsup_sub)[1:2] = c("estimate", "SE")
+#     
+#     ## Assign direction and position 
+#     unsup_sub$direction = "unsupported"
+#     unsup_sub$sp_position = "unsupported"
+#     
+#     ## save in the list 
+#     res[[i]] = unsup_sub
+#   }
+#   rm(i, subset_data)
+#   
+#   ## combine res into one df. 
+#   unsup_sub = do.call(rbind, res)
+#   rm(res)
+#   
+#   ## inspect r2
+#   r_squared_values ### Other variables clearly have more explanitory power than SIV 
+#   # include these in the MS, results section! 
+#   
+#   
+#   ## combine all together to plot them 
+#   res = rbind(td, bu, unsup_sub)
+#   r2_res = rbind(r2_bu, r2_td, r_squared_values)
+#   ## merge these two 
+#   res = merge(res, r2_res, by = c("var", "direction", "sp_position"))
+#   
+#   
+#   ## keep it clean! 
+#   rm(td, bu, unsup_sub, r2_bu, r2_td, r_squared_values, weights)
+# 
+# }
+### Clean up the data a bit for plotting
 
-  ### Work with a subset of data --> preferred and NON-supported models  
-  dat = coeff[coeff$support != "Supported" &
-                coeff$preference == "preferred",]
-  # how many mods is this?
-  length(unique(dat$Species_Pair)) # 47
- 
-  #  # susbet for subordinate coefficents
-  # dat = dat[grepl("SUB", dat$species),] # DONT SUBSET, just look at general effect. 
-  
-  # only want relevant vars
-  dat = dat[dat$var %in% c("FLII","HFP","Elevation",#"Hunting",
-                           "Species_Interaction"),]
-  
-  ### Do this one a little bit differently so we can examine R2 for each variable in 
-  ## the unsupproted results to see if they are more explanitory than SIV. 
-  
-  # Create an empty vector to store R-squared values
-  r_squared_values <- data.frame("R2" = numeric(length(unique(dat$var))),
-                                 "var" = unique(dat$var))
-  
-  # and a list to store DFs 
-  res = list()
-  
-  # Fit separate models for each level of 'var'
-  for (i in seq_along(unique(dat$var))) {
-    
-    # Subset the data for the relevatn variable 
-    subset_data <- subset(dat, var == unique(dat$var)[i])
-    
-    # Fit the model for the current level
-    unsup_sub <- lmer(mean ~ 1 + (1 | species), weights = 1/sd, REML = FALSE, data = subset_data)
-    
-    # Calculate R-squared for the current model
-    r_squared_values$R2[r_squared_values$var == unique(dat$var)[i]] <- r.squaredGLMM(unsup_sub)[2] # only want the marginal effect, not conditonal
-    
-    # extract coefficents into a DF
-    unsup_sub = as.data.frame(summary(unsup_sub)$coefficients)
-    
-    # clean up the DF 
-    unsup_sub$var = rownames(unsup_sub)
-    unsup_sub$var = gsub("var", "", unsup_sub$var)
-    names(unsup_sub)[1:2] = c("estimate", "SE")
-    
-    ## Assign direction and position 
-    unsup_sub$direction = "unsupported"
-    unsup_sub$sp_position = "unsupported"
-    
-    ## save in the list 
-    res[[i]] = unsup_sub
-  }
-  rm(i, subset_data)
-  
-  ## combine res into one df. 
-  unsup_sub = do.call(rbind, res)
-  rm(res)
-  
-  ## inspect r2
-  r_squared_values ### Other variables clearly have more explanitory power than SIV 
-  # include these in the MS, results section! 
-  
-  
-  ## combine all three together to plot them 
-  res = rbind(td, bu, unsup_sub)
-  
-  rm(td, bu, unsup_sub)
-  
-  ### Clean up the data a bit for plotting 
-  
-  # ## DUE TO WEIRD VARIABLE THING, multiply hunting var by -1 to make it a neg effect
-  # res$estimate[res$var == "Hunting"] =   res$estimate[res$var == "Hunting"] * -1
-  
-  ## make an upper and lower CI
-  res$upper = res$estimate + res$SE
-  res$lower = res$estimate - res$SE
-  
-  ## rename vars so they are all acronyms and ordered for the graph 
-  # res$var[res$var == "Hunting"] = "A) HUNT"
-  res$var[res$var == "HFP"] = "A) HFP"
-  res$var[res$var == "FLII"] = "B) FLII"
-  res$var[res$var == "Elevation"] = "C) ELV"
-  res$var[res$var == "Species_Interaction"] = "D) SIV"
-  
-  ## make position more informative
-  res$sp_position[res$direction == "top-down" & res$sp_position == "dominant"] = "predator"
-  res$sp_position[res$direction == "top-down" & res$sp_position == "subordinate"] = "prey"
-  res$sp_position[res$direction == "bottom-up" & res$sp_position == "dominant"] = "prey"
-  res$sp_position[res$direction == "bottom-up" & res$sp_position == "subordinate"] = "predator"
-  
-  
-  ## set the factor order, putting SIV at the bottom
-  res$var = factor(res$var, levels = c( "D) SIV","C) ELV","B) FLII","A) HFP"))
-  res$direction = factor(res$direction, levels = c("top-down", "bottom-up", "unsupported"))
-  res$sp_position = factor(res$sp_position, levels = c("predator", "prey","unsupported"))
-  
-  
-  ## try the ggplot 
-  p =
-    ggplot(res, aes(x = var, y = estimate, ymin=lower, ymax=upper))+
-    geom_pointrange(aes(shape = sp_position, color = direction), size = 1,
-                    position= position_dodge(width=.7))+
-    geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.6)+
-    coord_flip() +  # flip coordinates (puts labels on y axis)
-    labs(y = "regression effect size", x = NULL) +
-    scale_color_manual(values = c("top-down" = "darkorange4","bottom-up" = "springgreen4", "unsupported" = "gray30"))+
-    scale_shape_manual(values = c("prey" = 17, "predator" = 15, "unsupported" = 16))+
-    theme_bw()+
-    theme(axis.text.x = element_text(size = 22),
-          axis.text.y = element_text(size = 22),
-          axis.title.x = element_text(size = 22),
-          axis.text = element_text(color = "black"),
-          text = element_text(family = "Helvetica"))
-  ## Save this
-  # ggsave(paste("explore/Overall_wieghted_coefficents_regression_supported_preferred_prey_mods_forest_plot_", date, ".png", sep = ""),
-  #        p, width = 7, height = 7, units = "in")
+# 
+#   ## make an upper and lower CI
+#   res$upper = res$estimate + res$SE
+#   res$lower = res$estimate - res$SE
+# 
+#   ## rename vars so they are all acronyms and ordered for the graph
+#   # res$var[res$var == "Hunting"] = "A) HUNT"
+#   res$var[res$var == "HFP"] = "A) HFP"
+#   res$var[res$var == "FLII"] = "B) FLII"
+#   res$var[res$var == "Elevation"] = "C) ELV"
+#   res$var[res$var == "Species_Interaction"] = "D) SIV"
+# 
+#   ## make position more informative
+#   # res$sp_position[res$direction == "top-down" & res$sp_position == "dominant"] = "predator"
+#   res$sp_position[res$direction == "top-down" & res$sp_position == "subordinate"] = "prey"
+#   # res$sp_position[res$direction == "bottom-up" & res$sp_position == "dominant"] = "prey"
+#   res$sp_position[res$direction == "bottom-up" & res$sp_position == "subordinate"] = "predator"
+# 
+# 
+#   ## set the factor order, putting SIV at the bottom
+#   res$var = factor(res$var, levels = c( "D) SIV","C) ELV","B) FLII","A) HFP"))
+#   res$direction = factor(res$direction, levels = c("top-down", "bottom-up", "unsupported"))
+#   res$sp_position = factor(res$sp_position, levels = c("predator", "prey","unsupported"))
+# 
+# 
+#   ## try the ggplot
+#   p =
+#     ggplot(res, aes(x = var, y = estimate, ymin=lower, ymax=upper))+
+#     geom_pointrange(aes(shape = sp_position, color = direction), size = 1,
+#                     position= position_dodge(width=.7))+
+#     geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.6)+
+#     geom_text(aes(label = round(R2, 3), color = direction, y = estimate, vjust = ifelse(estimate >= 0, 4, -4)), #vjust = 3,
+#               size = 4, color = "black", position = position_dodge(width = .7)) +
+#     coord_flip() +  # flip coordinates (puts labels on y axis)
+#     labs(y = "regression effect size", x = NULL) +
+#     scale_color_manual(values = c("top-down" = "darkorange4","bottom-up" = "springgreen4", "unsupported" = "gray30"))+
+#     scale_shape_manual(values = c("prey" = 17, "predator" = 15, "unsupported" = 16))+
+#     theme_bw()+
+#     theme(axis.text.x = element_text(size = 22),
+#           axis.text.y = element_text(size = 22),
+#           axis.title.x = element_text(size = 22),
+#           axis.text = element_text(color = "black"),
+#           text = element_text(family = "Helvetica"))
+#   ## Save this
+#   # ggsave(paste("explore/Overall_wieghted_coefficents_regression_supported_preferred_prey_mods_forest_plot_w_r2_", date, ".png", sep = ""),
+#   #        p, width = 7, height = 7, units = "in")
 
-  ## save the second version w/ inverse hunting. 
-  # ggsave(paste("explore/Overall_wieghted_coefficents_regression_supported_preferred_prey_mods_forest_plot_inverse_hunting_", date, ".png", sep = ""),
-  #        p, width = 7, height = 7, units = "in")
+## Also save the dataframe
+# write.csv(res, paste("explore/meta-regression_results_r2_", date, ".csv", sep = ""), row.names = F)
 
-  ## clean up time! 
-  rm(p, weights)
-}
+
+## clean up time!
+rm(p)
+
 
 #
 ##
@@ -2499,7 +3147,7 @@ hist(coeff$mean[coeff$var == "Species_Interaction"& coeff$support == "Supported"
   # ## Save this, it looks good! 
   # ggsave(paste("explore/Overall_weighted_coefficents_mathematical_preferred_prey_and_supported_mods_forest_plot_", date, ".png", sep = ""),
   #        p, width = 7, height = 7, units = "in")
-
+  
   
   ## compare some values from res and sum, as they seem very close
   
@@ -2585,302 +3233,6 @@ ggplot(og_meta, aes(x = hunting_accessibility_3km, y = human_footprint_3km))+
 rm(hunt_sum, res, sum, p, a)
 
 
-############# Visualize prediction plots ########
-
-## Goal is to visualze the co-abundance relationship between every pairwise interaction
-## With so much data now, we will not use est_abund b/c it makes the graphs too messy. 
-
-## Inspect data
-head(est_abund) #estimated abundance per sampling unit --> no longer using 
-str(est_abund) # already numeric
-
-head(pred_abund) #Predicted change in subordinate abundance as a function of dominant species abundance --> this is what we want! 
-str(pred_abund) # already numeric
-
-## set colors 
-three_colors = c("unsupported" = "gray32",
-                 "top-down" = "darkorange4",
-                 "bottom-up" = "springgreen4")
-
-
-## repeat for each species pair 
-for(i in 1:length(unique(pred_abund$Species_Pair))){
-  
-  # save one pair name
-  n = unique(pred_abund$Species_Pair)[i]
-  
-  ## subset est and pred
-  est = est_abund[est_abund$Species_Pair == n,]
-  pred = pred_abund[pred_abund$Species_Pair == n,]
-  
-  ## grab the relevant guild pair for saving later
-  gp = preform$guild_pair[preform$Species_Pair == n]
-  
-  ## and the date while were at it
-  day<-str_sub(Sys.Date(),-2)
-  month<-str_sub(Sys.Date(),-5,-4)
-  year<-str_sub(Sys.Date(),-10,-7)
-  date = paste(year,month,day, sep = "")
-  
-  ## split species apart for nicer names 
-  n_split = str_split(n, "~")[[1]]
-  n_split = gsub("SUB-", "", n_split)
-  n_split = gsub("DOM-", "", n_split)
-  
-  
-  ## make a nice title 
-  title = paste("Dominant species:", n_split[2], 
-                "affects subordinate species:", n_split[1])
-  
-  ## make plots according to support level color 
-  if(preform$support_liberal[preform$Species_Pair == n] == "Supported"){
-    
-    ## make the top-down plot 
-    if(preform$direction[preform$Species_Pair == n] == "top-down"){
-      
-      p = 
-        ggplot(pred, aes(y = Predicted.N, x = var))+
-        geom_line(color = "darkorange4", linewidth = 2)+
-        geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.1, color = "black", linetype = "dashed")+
-        labs(y = paste0(n_split[1], " Abundance"), 
-             x = paste0(n_split[2], " Abundance"),
-             title = title, color = NULL)+ 
-        theme_test()+
-        theme(axis.text.x = element_text(size = 22),
-              axis.text.y = element_text(size = 22),
-              axis.text = element_text(color = "black"),
-              text = element_text(family = "Helvetica"))
-      
-    } # end top-down
-    
-    # make the bottom-up plot
-    if(preform$direction[preform$Species_Pair == n] == "bottom-up"){
-      
-      
-      p = 
-        ggplot(pred, aes(y = Predicted.N, x = var))+
-        geom_line(color = "springgreen4", linewidth = 2)+
-        geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.1, color = "black", linetype = "dashed")+
-        labs(y = paste0(n_split[1], " Abundance"), 
-             x = paste0(n_split[2], " Abundance"),
-             title = title, color = NULL)+ 
-        theme_test()+
-        theme(axis.text.x = element_text(size = 22),
-              axis.text.y = element_text(size = 22),
-              axis.text = element_text(color = "black"),
-              text = element_text(family = "Helvetica"))
-      
-    } # end bottom-up
-    
-  }else{
-    
-    ## make the unsupported plot 
-    p = 
-      ggplot(pred, aes(y = Predicted.N, x = var))+
-      geom_line(color = "black", linewidth = 2, linetype = "dashed")+
-      geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.1, color = "black")+
-      labs(y = paste0(n_split[1], " Abundance"), 
-           x = paste0(n_split[2], " Abundance"),
-           title = title, color = NULL)+ 
-      guides(color = "none") + # way too many landscapes to list them now. 
-      theme_test()+
-      theme(axis.text.x = element_text(size = 22),
-            axis.text.y = element_text(size = 22),
-            axis.text = element_text(color = "black"),
-            text = element_text(family = "Helvetica"))
-    
-  }
-  
-  ## construct the saving path
-  path = paste("figures/", paste(gp, n, sep = "/"), "/Prediction_plot_", n, "_", date, ".png", sep = "")
-  
-  ## save the dang thang 
-  ggsave(path, p, width = 5, height = 4, units = "in")
-  
-}
-rm(path, p,i, title, n, n_split, gp, est, pred, day, month, year, date, 
-   three_colors)
-
-
-
-
-
-############# Visualize PPC plots ########
-
-## Will generate two plots, 2 w/ the scatter (one for dom and one for sub) and 1 w/ the bars 
-
-## scatter first 
-# add guild_pair to the data
-add = select(preform, Species_Pair, guild_pair)
-ppc_plotdat = merge(ppc_plotdat, add, by = "Species_Pair")
-
-## loop thru each species pair to make the scatter plots per species and save them directly. 
-for(i in 1:length(unique(ppc_plotdat$Species_Pair))){
-  
-  ## grab species pair name 
-  n = unique(ppc_plotdat$Species_Pair)[i]
-  
-  ## subset for a single species 
-  dat = ppc_plotdat[ppc_plotdat$Species_Pair == n,]
-  
-  # grab today's date
-  day<-str_sub(Sys.Date(),-2)
-  month<-str_sub(Sys.Date(),-5,-4)
-  year<-str_sub(Sys.Date(),-10,-7)
-  date = paste(year,month,day, sep = "")
-  
-  ## Create titles based on values
-  val = ppc_values[ppc_values$Species_Pair == n,]
-  sub.bpv = paste("Bayesian P-value =", round(val$BPV.sub, 3),
-                  "& C-hat =", round(val$Chat.sub, 3))
-  dom.bpv = paste("Bayesian P-value =", round(val$BPV.dom, 3),
-                  "& C-hat =",round(val$Chat.dom, 3))
-  
-  ## Subordinate plot
-  plot=
-    ggplot(dat, aes( y = sub.sim, x = sub.real))+
-    geom_point(aes(color = sub.label))+
-    geom_abline(intercept = 0, slope = 1, color = "black", size = 2)+
-    theme_classic()+
-    scale_color_manual(values = c("red", "blue"))+
-    labs(title = sub.bpv, subtitle = str_split(n, "~")[[1]][1]  , 
-         y = "Fit Statistic Simulated Data", x = "Fit Statistic Real Data")+
-    theme(legend.position = "None")
-  
-  ## make a saving path
-  path = paste("figures/", unique(dat$guild_pair), "/", n, "/Subordinate_PPC_scatter_plot_", date, ".png", sep = "")
-  
-  # save it! 
-  ggsave(path, plot, width = 7.5, height = 7, units = "in")
-  
-  
-  ## Dominant plot
-  plot = 
-    ggplot(dat, aes( y = dom.sim, x = dom.real))+
-    geom_point(aes(color = dom.label))+
-    geom_abline(intercept = 0, slope = 1, color = "black", size = 2)+
-    theme_classic()+
-    scale_color_manual(values = c("red", "blue"))+
-    labs(title = dom.bpv, subtitle = str_split(n, "~")[[1]][2], 
-         y = "Fit Statistic Simulated Data", x = "Fit Statistic Real Data")+
-    theme(legend.position = "None")
-  
-  ## make a saving path
-  path = paste("figures/", unique(dat$guild_pair), "/", n, "/Dominant_PPC_scatter_plot_", date, ".png", sep = "")
-  
-  # save it! 
-  ggsave(path, plot, width = 7.5, height = 7, units = "in")
-  
-  
-}
-rm(path, day,month,year,date, plot, n, sub.bpv, dom.bpv, val, dat)
-
-# add guild_pair to the values
-add = select(preform, Species_Pair, guild_pair)
-ppc_values = merge(ppc_values, add, by = "Species_Pair")
-
-## Loop thru each species pair in the values DF to make bar graphs for BPV and Chat values
-for(i in 1:length(unique(ppc_values$Species_Pair))){
-  
-  ## grab species pair name 
-  n = unique(ppc_values$Species_Pair)[i]
-  
-  ## subset for a single species 
-  dat = ppc_values[ppc_values$Species_Pair == n,]
-  
-  ## slightly transform the data to plot better 
-  plot_dat = data.frame("BPV" = c(dat$BPV.dom, dat$BPV.sub),
-                        "Chat" = c(dat$Chat.dom, dat$Chat.sub),
-                        "position" = c("Dominant", "Subordinate"),
-                        "species" = str_split(n, "~")[[1]])
-  
-  # # Define labels and positions for text
-  # text_data <- data.frame(
-  #   label = c("liberal","liberal", "conservative", "conservative", "perfect fit"),
-  #   y = c(0.85, 0.15, 0.75, 0.25, 0.5)  # Adjust these values based on your needs
-  # )
-  
-  # Define labels and positions for text
-  text_data <- data.frame(
-    label = c("Too high","Too low", "perfect fit"),
-    y = c(0.85, 0.15, 0.5)  # Adjust these values based on your needs
-  )
-  
-  ## BPV plot
-  bpv =
-  ggplot(plot_dat, aes(x = species, y = BPV, fill = position))+
-    geom_col(color = "black", position = "dodge", color = 'black')+
-    geom_hline(yintercept = 0.5)+
-    # geom_hline(yintercept = 0.75, linetype = "dashed", color = "gray32", alpha = 0.5)+
-    # geom_hline(yintercept = 0.25, linetype = "dashed", color = "gray32", alpha = 0.5)+
-    geom_hline(yintercept = 0.85, linetype = "dashed", color = "red")+
-    geom_hline(yintercept = 0.15, linetype = "dashed", color = "red")+
-    geom_text(data = text_data, aes(x = Inf, y = y, label = label), hjust = 1.2, vjust = -1, size = 5, inherit.aes = F)+
-    theme_test()+
-    labs(y = "Bayesian P-Value", x = NULL, fill = NULL)+
-    coord_cartesian(ylim = c(0,1))+
-    scale_fill_manual(values = c("tan3","wheat3"))+
-    theme(axis.text.x = element_text(size = 16),
-          axis.text.y = element_text(size = 16),
-          axis.text = element_text(color = "black"),
-          text = element_text(family = "Helvetica"))
-
-  # grab today's date
-  day<-str_sub(Sys.Date(),-2)
-  month<-str_sub(Sys.Date(),-5,-4)
-  year<-str_sub(Sys.Date(),-10,-7)
-  date = paste(year,month,day, sep = "")
-  
-  ## make a saving path
-  path = paste("figures/", paste(dat$guild_pair, dat$Species_Pair, sep = "/"), "/", "Bayes_P-value_bar_plot_", date, ".png", sep = "")
-  
-  # save it! 
-  ggsave(path, bpv, width = 7.5, height = 7, units = "in")
-  
-  # # Define labels and positions for text
-  # text_data <- data.frame(
-  #   label = c("liberal", "conservative", "perfect fit"),
-  #   y = c(1.3, 1.1, 1)  # Adjust these values based on your needs
-  # )
-  
-  # Define labels and positions for text
-  text_data <- data.frame(
-    label = c("Too high", "perfect fit"),
-    y = c(1.1, 1)  # Adjust these values based on your needs
-  )
-  
-  ##Chat plot
-  chat = 
-    ggplot(plot_dat, aes(x = species, y = Chat, fill = position))+
-    geom_col(color = "black", position = "dodge", color = 'black')+
-    geom_hline(yintercept = 1)+
-    geom_hline(yintercept = 1.1, linetype = "dashed", color = "red", alpha = 0.5)+
-    # geom_hline(yintercept = 1.3, linetype = "dashed", color = "red")+
-    geom_text(data = text_data, aes(x = Inf, y = y, label = label), hjust = 1.2, vjust = -1, size = 5, inherit.aes = F)+
-    theme_test()+
-    labs(y = "Magnitude of Over-Dispersion (C-hat)", x = NULL, fill = NULL)+ 
-    coord_cartesian(ylim = c(0.9,1.35))+
-    scale_fill_manual(values = c("tan3","wheat3"))+
-    theme(axis.text.x = element_text(size = 16),
-          axis.text.y = element_text(size = 16),
-          axis.text = element_text(color = "black"),
-          text = element_text(family = "Helvetica"))
-
-  # grab today's date
-  day<-str_sub(Sys.Date(),-2)
-  month<-str_sub(Sys.Date(),-5,-4)
-  year<-str_sub(Sys.Date(),-10,-7)
-  date = paste(year,month,day, sep = "")
-  
-  ## make a saving path
-  path = paste("figures/", paste(dat$guild_pair, dat$Species_Pair, sep = "/"), "/", "C-hat_overdispersion_bar_plot_", date, ".png", sep = "")
-  
-  # save it! 
-  ggsave(path, chat, width = 7.5, height = 7, units = "in")
-  
-}
-rm(bpv, chat, i, path, day,month,year,date,plot_dat, 
-   n, dat,add, text_data)
 
 
 ######## Examine & Visualize hunting variable tests ######

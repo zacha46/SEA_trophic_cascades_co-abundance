@@ -5,7 +5,7 @@
 ## Import dataframes, not complete models b/c theyre too heavy
 
 # Zachary Amir, Z.Amir@uq.edu.au
-# Last updated on Feb 19th, 2024
+# Last updated on Feb 23rd, 2024
 
 ## start fresh
 rm(list = ls())
@@ -828,7 +828,7 @@ ggplot(plot_dat[plot_dat$preference == "preferred",], aes(x = Interaction_Estima
 
 
 
-############# Save key datasets to include in supplementary figures #######
+########## Save key datasets to include in supplementary figures #######
 
 ## Will need informaiton about all species, split between preferred and the community
 head(guilds) # needs a preferred vs community column
@@ -843,9 +843,9 @@ pref_guilds = distinct(rbind(a,b,c,d,e))
 rm(a,b,c,d,e)
 length(unique(pref_guilds$scientificNameStd)) #21 species 
 ## save this! 
-write.csv(pref_guilds, paste("results/summarized_results/preferred_prey_traits_", 
-                             length(unique(pref_guilds$scientificNameStd)),
-                             "_species_", date, ".csv", sep = ""))
+# write.csv(pref_guilds, paste("results/summarized_results/preferred_prey_traits_", 
+#                              length(unique(pref_guilds$scientificNameStd)),
+#                              "_species_", date, ".csv", sep = ""))
 
 ## save the information about model preformance! 
 head(preform) # definitely can remove some columns here 
@@ -857,7 +857,7 @@ b = pref_save[pref_save$preference == "community", ]
 pref_save = rbind(a,b)
 
 ## save it! 
-write.csv(pref_guilds, paste("results/summarized_results/model_performance_and_SIVs_",date, ".csv", sep = ""))
+# write.csv(pref_guilds, paste("results/summarized_results/model_performance_and_SIVs_",date, ".csv", sep = ""))
 
 
 
@@ -2353,249 +2353,7 @@ p =
 
 
 
-######## Examine & Visualize hunting variable tests ######
-
-### Due to counter-intuitve positive trend in the hunting variable from the forest plots,
-### We ran 2 tests with the hunting variable on 13 models 
-## 1) Remove hunting variable completly
-## 2) Use the log10 transformation of the hunting variable 
-# All tests were run with HALF_LONG settings to ensure valid comparisons. 
-
-## The goal is to compare the SIV between these different tests to examine
-## if hunting drives species interations
-### OR 
-## If we see a positve result with the negative log10 version b/c values are negative 
-
-
-## First import relevant coefficent files 
-files = list.files("results/Hunting_test_Dec_2023/coefficent_dataframes/")
-
-# store results here
-coeff.res = list()
-
-# loop thru each file to import into list
-for(i in 1:length(files)){
-  
-  # import 
-  d = read.csv(paste("results/Hunting_test_Dec_2023/coefficent_dataframes/", files[i], sep = ""))
-  
-  ## if there are pesky row.names, remove em!
-  d$X = NULL
-  
-  ## create a new column for the test 
-  if(grepl("NO_HUNT", files[i])){
-    d$test = "NO_HUNT"
-  }
-  if(grepl("LOG_HUNT", files[i])){
-    d$test = "LOG_HUNT"
-  }
-  
-  # save it in the list 
-  coeff.res[[i]] = d
-  
-  if(ncol(d) != 11){
-    print(paste("The file", files[i], "with the index value of", i, 
-                "has the wrong number of columns and wont combine well. INVESTIGTE!"))
-  }
-}
-rm(d,i, files)
-
-## bind together and inspect
-hunt_coeff = do.call(rbind, coeff.res)
-
-## quick inspection
-head(hunt_coeff)
-str(hunt_coeff)
-sort(unique(hunt_coeff$Species_Pair)) # 13 pairs
-rm(coeff.res)
-
-## split apart species pair into sub vs dom species
-hunt_coeff <- within(hunt_coeff, {
-  sub_sp <- sapply(strsplit(Species_Pair, "~"), function(x) x[1])
-  dom_sp <- sapply(strsplit(Species_Pair, "~"), function(x) x[2])
-})
-hunt_coeff$dom_sp = gsub("DOM-", "", hunt_coeff$dom_sp)
-hunt_coeff$sub_sp = gsub("SUB-", "", hunt_coeff$sub_sp)
-
-## grab the matching results from OG tests
-d = coeff[coeff$Species_Pair %in% hunt_coeff$Species_Pair, ]
-
-# and assign a test name for easy binding and differentiation
-d$test = "NORM_HUNT"
-
-# combine them 
-hunt_coeff = rbind(hunt_coeff, d)
-rm(d)
-
-## check if all mods finished
-sort(table(hunt_coeff$Species_Pair[hunt_coeff$var == "Species_Interaction"])) # a few mods missing 
-sort(table(hunt_coeff$test[hunt_coeff$var == "Species_Interaction"])) 
-# ideally ^these^ are equal... in time they will be 
-
-## split apart position into dominant or subordinate
-hunt_coeff$position[grepl("SUB", hunt_coeff$species)] = "subordinate"
-hunt_coeff$position[grepl("DOM", hunt_coeff$species)] = "dominant"
-table(hunt_coeff$position) # good
-
-
-#
-##
-###
-#### Visualize difference between log vs norm hunting 
-###
-##
-#
-
-## just pull out the hunting variable first
-d = hunt_coeff[hunt_coeff$var == "Hunting",]
-table(d$position) # should be equal 
-
-## remove mod w/out final results
-d= d[d$Species_Pair !=  "SUB-Neofelis_genus~DOM-Arctictis_binturong", ]
-
-dodge_width = 1
-
-## make the plot
-p = 
-ggplot(d, aes(x = test, y = mean, fill = position))+
-  geom_bar(stat = "identity", position = position_dodge(width = dodge_width), color = "black", width = dodge_width) +
-  geom_errorbar(aes(ymin = mean-sd, ymax = mean+sd), position = position_dodge(width = dodge_width), width = 0, color = "black") +
-  # geom_col()+
-  facet_wrap(~Species_Pair)+
-  coord_cartesian(ylim = c(-1,1.5))+
-  labs(y = "Hunting variable effect size", x = NULL)+
-  scale_fill_manual(values = c("tan3","wheat3"))+
-  theme(axis.text.y = element_text(size = 22),
-        axis.title.x = element_text(size = 22),
-        axis.text = element_text(color = "black"),
-        text = element_text(family = "Helvetica"))
-## Looks like log vs norm makes no difference! 
-# save it! 
-# ggsave(paste("explore/Norm_vs_log_hunting_12_mods_HALF_LONG_", date, ".png", sep = ""), p,
-#        height = 8, width = 12, units = "in")
-rm(d, p)
-
-
-#
-##
-###
-#### Visualize difference in SIV between log, norm, and no hunting 
-###
-##
-#
-
-d = hunt_coeff[hunt_coeff$var == "Species_Interaction",]
-table(d$test) # should be equal, but mods are still running. 
-
-
-dodge_width = 1
-
-## make the plot
-p =
-  ggplot(d, aes(x = test, y = mean, fill = test))+
-  geom_bar(stat = "identity", position = position_dodge(width = dodge_width), 
-           color = "black", width = dodge_width) +
-  geom_errorbar(aes(ymin = mean-sd, ymax = mean+sd), 
-                position = position_dodge(width = dodge_width), 
-                width = 0, color = "black") +
-  facet_wrap(~Species_Pair)+
-  labs(y = "SIV", x = NULL)+
-  theme(axis.text.y = element_text(size = 22),
-        axis.title.x = element_text(size = 22),
-        axis.text = element_text(color = "black"),
-        text = element_text(family = "Helvetica"))
-## looks like two models preformed differnetly, inspect further... 
-
-# but save it first! 
-# ggsave(paste("explore/Norm_vs_log_vs_no_hunting_13_mods_SIV_HALF_LONG_", date, ".png", sep = ""), p,
-#        height = 8, width = 12, units = "in")
-rm(p,dodge_width)
-
-## inspect two weird results 
-d[d$Species_Pair %in% c("SUB-Panthera_tigris~DOM-Arctictis_binturong"),]
-## No hunting mod failed hard --> bad Rhat and non-significant CI. 
-## Log and normal hunting are essentially the same. 
-
-d[d$Species_Pair %in% c("SUB-Panthera_pardus~DOM-Arctictis_binturong" ),]
-## Well normal mod failed also --> I sent the wrong models to the HPC :( 
-## All parameters Rhat > 1.3, so all fail. But logged hutning is closest. 
-## both logged and norm are the same direction, but logged is larger effect size.
-
-rm(d)
-
-#
-##
-###
-#### Compare PPC between different tests
-###
-##
-#
-
-## first need to import the PPC files 
-files = list.files("results/Hunting_test_Dec_2023/PPC_dataframes/")
-## dont want plot data 
-files = files[!grepl("plotdata", files)]
-
-## split apart tests 
-no = files[grepl("NO_HUNT", files)]
-log = files[grepl("LOG_HUNT", files)]
-# combine and clean
-files = c(no, log)
-rm(no, log)
-
-## save em here
-hunt_ppc = list()
-
-# loop thru each file to import into list
-for(i in 1:length(files)){
-  
-  # import 
-  d = read.csv(paste("results/Hunting_test_Dec_2023/PPC_dataframes/", files[i], sep = ""))
-  
-  ## if there are pesky row.names, remove em!
-  d$X = NULL
-  
-  ## create a new column for the test 
-  if(grepl("NO_HUNT", files[i])){
-    d$test = "NO_HUNT"
-  }
-  if(grepl("LOG_HUNT", files[i])){
-    d$test = "LOG_HUNT"
-  }
-  
-  # save it in the list 
-  hunt_ppc[[i]] = d
-  
-}
-rm(d,i, files)
-
-## turn list into df
-hunt_ppc = do.call(rbind, hunt_ppc)
-
-## inspect
-unique(hunt_ppc$Species_Pair) # 13 mods here, good 
-head(hunt_ppc)
-
-## add the normal results 
-norm_ppc = ppc_values[ppc_values$Species_Pair %in% hunt_ppc$Species_Pair, ]
-norm_ppc$test = "NORM_HUNT"
-
-## combine
-ppc = rbind(norm_ppc, hunt_ppc)
-rm(norm_ppc, hunt_ppc)
-
-
-### Establish degree of support 
-
-preform$parameter_valid[preform$Rhat >= 0.99 & preform$Rhat <= 1.2] = "Yes"
-preform$OD_valid[preform$Chat.dom >= 0.98 & preform$Chat.dom <= 1.1 &
-                   preform$Chat.sub >= 0.98 & preform$Chat.sub <= 1.1] = "Yes"
-preform$BPV_valid_liberal[preform$BPV.dom >= 0.15 & preform$BPV.dom <= 0.85 &
-                            preform$BPV.sub >= 0.15 & preform$BPV.sub <= 0.85] = "Yes"
-
-
-
-######## Summary statistics to describe overall dataset ######
+############# Summary statistics to describe overall dataset ######
 
 ## how many detections did we get for our large carnivores?
 og_captures$Species = gsub(" ", "_", og_captures$Species)
@@ -2661,6 +2419,7 @@ length(unique(og_resamp_meta$cell_id_3km)) / l # 9.8x more rows in the matrix!
 
 ## verify guild pairs per direction
 unique(preform$guild_pair[preform$direction == "bottom-up"])
+
 
 
 ############# Visualize conceptual study map to send to Jon ###### 
@@ -3136,186 +2895,245 @@ ggplot(df, aes(x = x, y = y)) +
 ## keep it clean!
 rm(df, concept_col, model, p)
 
-############# Visualize pairwise interaction comparison from opposing directions ######
+######## Examine & Visualize hunting variable tests ######
+
+### Due to counter-intuitve positive trend in the hunting variable from the forest plots,
+### We ran 2 tests with the hunting variable on 13 models 
+## 1) Remove hunting variable completly
+## 2) Use the log10 transformation of the hunting variable 
+# All tests were run with HALF_LONG settings to ensure valid comparisons. 
+
+## The goal is to compare the SIV between these different tests to examine
+## if hunting drives species interations
+### OR 
+## If we see a positve result with the negative log10 version b/c values are negative 
+
+
+## First import relevant coefficent files 
+files = list.files("results/Hunting_test_Dec_2023/coefficent_dataframes/")
+
+# store results here
+coeff.res = list()
+
+# loop thru each file to import into list
+for(i in 1:length(files)){
+  
+  # import 
+  d = read.csv(paste("results/Hunting_test_Dec_2023/coefficent_dataframes/", files[i], sep = ""))
+  
+  ## if there are pesky row.names, remove em!
+  d$X = NULL
+  
+  ## create a new column for the test 
+  if(grepl("NO_HUNT", files[i])){
+    d$test = "NO_HUNT"
+  }
+  if(grepl("LOG_HUNT", files[i])){
+    d$test = "LOG_HUNT"
+  }
+  
+  # save it in the list 
+  coeff.res[[i]] = d
+  
+  if(ncol(d) != 11){
+    print(paste("The file", files[i], "with the index value of", i, 
+                "has the wrong number of columns and wont combine well. INVESTIGTE!"))
+  }
+}
+rm(d,i, files)
+
+## bind together and inspect
+hunt_coeff = do.call(rbind, coeff.res)
+
+## quick inspection
+head(hunt_coeff)
+str(hunt_coeff)
+sort(unique(hunt_coeff$Species_Pair)) # 13 pairs
+rm(coeff.res)
+
+## split apart species pair into sub vs dom species
+hunt_coeff <- within(hunt_coeff, {
+  sub_sp <- sapply(strsplit(Species_Pair, "~"), function(x) x[1])
+  dom_sp <- sapply(strsplit(Species_Pair, "~"), function(x) x[2])
+})
+hunt_coeff$dom_sp = gsub("DOM-", "", hunt_coeff$dom_sp)
+hunt_coeff$sub_sp = gsub("SUB-", "", hunt_coeff$sub_sp)
+
+## grab the matching results from OG tests
+d = coeff[coeff$Species_Pair %in% hunt_coeff$Species_Pair, ]
+
+# and assign a test name for easy binding and differentiation
+d$test = "NORM_HUNT"
+
+# combine them 
+hunt_coeff = rbind(hunt_coeff, d)
+rm(d)
+
+## check if all mods finished
+sort(table(hunt_coeff$Species_Pair[hunt_coeff$var == "Species_Interaction"])) # a few mods missing 
+sort(table(hunt_coeff$test[hunt_coeff$var == "Species_Interaction"])) 
+# ideally ^these^ are equal... in time they will be 
+
+## split apart position into dominant or subordinate
+hunt_coeff$position[grepl("SUB", hunt_coeff$species)] = "subordinate"
+hunt_coeff$position[grepl("DOM", hunt_coeff$species)] = "dominant"
+table(hunt_coeff$position) # good
+
 
 #
 ##
-### THESE ARE NOT USED ANY MORE, FULLY HASHED OUT FOR NOW
+###
+#### Visualize difference between log vs norm hunting 
+###
 ##
 #
 
-# ### The goal here is to assess both directions of a species pair, e.g.:
-# ## SUB-Tapirus_indicus~DOM-Panthera_tigris vs SUB-Panthera_tigris~DOM-Tapirus_indicus
-# # To determine the overall direciton of the relationship. 
-# 
-# preform[preform$Species_Pair == "SUB-Tapirus_indicus~DOM-Panthera_tigris", 
-#         c("Interaction_Estimate","lower","upper", "Significance")] # clear positive effect of tigers on taps 
-# 
-# preform[preform$Species_Pair == "SUB-Panthera_tigris~DOM-Tapirus_indicus", 
-#         c("Interaction_Estimate","lower","upper", "Significance")] # unclear negative effect of taps on tigers. 
-# 
-# ## We would move in favor of the larger and more significant response --> 
-# ## tigers possibly bottom-up limited by taps, but both could be sharing responses to unmeasured covarites.  
-# 
-# ## what is the difference in the interaction?
-# preform$Interaction_Estimate[preform$Species_Pair == "SUB-Tapirus_indicus~DOM-Panthera_tigris"] -
-#   preform$Interaction_Estimate[preform$Species_Pair == "SUB-Panthera_tigris~DOM-Tapirus_indicus"] 
-# # Again, this is a larger positive difference in interactions, suggesting a positive (bottom-up relaitonship)
-# # but make sure to calculate difference when large carnivores are dominant FIRST! (maybe?)
-# 
-# 
-# ## Make a plot comparing both interactions (i.e. when large carnivores are dominant AND subordinate)
-# ## to determine direction of relationship for each species pairs 
-# plots = list() #store plots here
-# 
-# 
-# for(i in 1:length(unique(coeff$Species_Pair))){
-#   
-#   ## grab the name of the species pair 
-#   n = unique(coeff$Species_Pair)[i]
-#   
-#   ##subset coeff for it 
-#   a = coeff[coeff$Species_Pair == n, ]
-#   
-#   # and for the the complementary species pair data.
-#   b = subset(coeff, sub_sp == unique(a$dom_sp) & dom_sp == unique(a$sub_sp))
-#   
-#   ## then combine
-#   dat = rbind(a[a$var == "Species_Interaction",],
-#               b[b$var == "Species_Interaction",])
-#   
-#   ## bypass models that are missing their complement 
-#   if(nrow(dat)<2){
-#     next
-#   }
-#   
-#   ## add a col for which position by looking for all dominant large carnivores
-#   dat$dom_position = ifelse(dat$dom_sp %in% c("Canis_lupus_familiaris","Panthera_tigris",
-#                                               "Panthera_pardus","Neofelis_genus",
-#                                               "Cuon_alpinus"),
-#                             "Large_carnivore", "Prey")
-#   
-#   ## set the dom_pos as a factor 
-#   # dat$dom_position = factor(dat$dom_position, levels = c( "Large_carnivore", "Prey"))
-#   
-#   # Add a column for significance marker
-#   dat$marker <- ifelse(dat$sig == "Significant", "*", "")
-#   
-#   ## if there is a large carnivore pairwise comparison,
-#   if(length(unique(dat$dom_position)) == 1){
-#     
-#     # Calculate the difference in effect sizes just by 1-2
-#     dat$diff = dat$mean[1] - dat$mean[2]
-#     
-#     # and change dom_guild to the large carnivore species names
-#     dat$dom_position = dat$dom_sp
-#     
-#     # but if its not two large carnivores, 
-#   }else{
-#     
-#     # Calculate the difference in effect sizes following a standard order
-#     dat$diff = dat$mean[dat$dom_position == "Large_carnivore"] - dat$mean[dat$dom_position == "Prey"]
-#     
-#   }
-#   
-#   ## combine both species pairs for the ID
-#   id = paste(dat$Species_Pair[1], dat$Species_Pair[2], sep = " & ")
-#   
-#   ## combine dom and sub species for a title 
-#   title = paste(dat$dom_sp[1], dat$sub_sp[1], sep = " & ")
-#   
-#   ## set bar dodge width 
-#   dodge_width = 0.8
-#   
-#   # Assign colors based on unique dominant positions
-#   colors <- c("Prey" = "mediumslateblue", "Large_carnivore" = "mediumseagreen", 
-#               "Cuon_alpinus" = "red1", "Panthera_pardus" = "purple1", 
-#               "Canis_lupus_familiaris" = "grey", "Panthera_tigris" = "orange1", 
-#               "Neofelis_genus" = "blue1")
-#   colors <- colors[unique(dat$dom_position)]
-#   
-#   ## make the plot
-#   p =
-#     ggplot(dat, aes(x = var, y = mean, fill = dom_position)) +
-#     geom_bar(stat = "identity", position = position_dodge(width = dodge_width), color = "black", width = dodge_width) +
-#     geom_errorbar(aes(ymin = lower, ymax = upper), position = position_dodge(width = dodge_width), width = 0, color = "black") +
-#     geom_text(aes(y = mean+.2*sign(mean), label = marker), position = position_dodge(width = dodge_width), size = 8) +
-#     geom_text(aes(y = .04, label = round(Rhat, 2)), position = position_dodge(width = dodge_width), size = 3,  hjust = -.3) +
-#     geom_text(aes(y = max(upper), x = 1, label = paste("Difference =", round(unique(diff),2))), size = 4, vjust = 1, hjust = 1) +  
-#     geom_hline(yintercept = 0)+
-#     scale_fill_manual(values = colors) +  # Assign dynamically generated color scale
-#     labs(x = "Species Interaction Estimate", y = "Mean Effect Size", fill = "Dominant Guild", title = title) +
-#     theme_test()+
-#     theme(
-#       axis.text.y = element_text(size = 12), # Increase y-axis tick label font size
-#       axis.text.x = element_blank() 
-#     )
-#   
-#   ## save it
-#   plots[[i]] = p
-#   names(plots)[i] = id
-#   
-# }
-# rm(p,i,dodge_width, a,b, title, n, id, dat, colors)
-# 
-# names(plots)
-# plots[[387]] # "" in title means there was no complementary model 
-# 
-# ## remove plots w/ NA
-# plots = plots[names(plots) != ""]
-# ## need to remove redundant plots tho 
-# 
-# ## Chat GPT to the rescue?
-# # Function to sort and concatenate species pairs in canonical form
-# getCanonicalForm <- function(label) {
-#   sorted_pairs <- sort(strsplit(label, " & ")[[1]])
-#   return(paste(sorted_pairs, collapse = " & "))
-# }
-# 
-# # Get the canonical forms of the plot labels
-# canonical_labels <- sapply(names(plots), getCanonicalForm)
-# 
-# # Identify duplicate plots based on canonical labels
-# duplicate_indices <- duplicated(canonical_labels)
-# 
-# # Remove duplicate plots
-# plots <- plots[!duplicate_indices]
-# 
-# names(plots) # seems better! 
-# plots$`SUB-Canis_lupus_familiaris~DOM-Presbytis_rubicunda & SUB-Presbytis_rubicunda~DOM-Canis_lupus_familiaris` # good + interesting result
-# plots$`SUB-Neofelis_genus~DOM-Cuon_alpinus & SUB-Cuon_alpinus~DOM-Neofelis_genus` # its working! 
-# 
-# ## keep it clean
-# rm(getCanonicalForm, canonical_labels, duplicate_indices)
-# 
-# 
-# ## save each of these graphs! 
-# for(i in 1:length(plots)){
-#   
-#   # select one plot 
-#   p = plots[[i]]
-#   
-#   # Isolate the relevant species pair
-#   id = str_split(names(plots)[i], " & ")[[1]][1]
-#   id = paste((str_split(id, "~")[[1]]), collapse=" & ")
-#   id = gsub("SUB-", "", id)
-#   id = gsub("DOM-", "", id)
-#   
-#   # grab today's date
-#   day<-str_sub(Sys.Date(),-2)
-#   month<-str_sub(Sys.Date(),-5,-4)
-#   year<-str_sub(Sys.Date(),-10,-7)
-#   date = paste(year,month,day, sep = "")
-#   
-#   # construct a saving path 
-#   path = paste("figures/Double pairwise species interaction comparison/", id, "_", date, ".png", sep = "")
-#   
-#   # save it! 
-#   ggsave(path, p, width = 6, height = 5, units = "in")
-#   
-#   
-# }
-# rm(p, path, day, month, year, date, id, i)
+## just pull out the hunting variable first
+d = hunt_coeff[hunt_coeff$var == "Hunting",]
+table(d$position) # should be equal 
+
+## remove mod w/out final results
+d= d[d$Species_Pair !=  "SUB-Neofelis_genus~DOM-Arctictis_binturong", ]
+
+dodge_width = 1
+
+## make the plot
+p = 
+  ggplot(d, aes(x = test, y = mean, fill = position))+
+  geom_bar(stat = "identity", position = position_dodge(width = dodge_width), color = "black", width = dodge_width) +
+  geom_errorbar(aes(ymin = mean-sd, ymax = mean+sd), position = position_dodge(width = dodge_width), width = 0, color = "black") +
+  # geom_col()+
+  facet_wrap(~Species_Pair)+
+  coord_cartesian(ylim = c(-1,1.5))+
+  labs(y = "Hunting variable effect size", x = NULL)+
+  scale_fill_manual(values = c("tan3","wheat3"))+
+  theme(axis.text.y = element_text(size = 22),
+        axis.title.x = element_text(size = 22),
+        axis.text = element_text(color = "black"),
+        text = element_text(family = "Helvetica"))
+## Looks like log vs norm makes no difference! 
+# save it! 
+# ggsave(paste("explore/Norm_vs_log_hunting_12_mods_HALF_LONG_", date, ".png", sep = ""), p,
+#        height = 8, width = 12, units = "in")
+rm(d, p)
+
+
+#
+##
+###
+#### Visualize difference in SIV between log, norm, and no hunting 
+###
+##
+#
+
+d = hunt_coeff[hunt_coeff$var == "Species_Interaction",]
+table(d$test) # should be equal, but mods are still running. 
+
+
+dodge_width = 1
+
+## make the plot
+p =
+  ggplot(d, aes(x = test, y = mean, fill = test))+
+  geom_bar(stat = "identity", position = position_dodge(width = dodge_width), 
+           color = "black", width = dodge_width) +
+  geom_errorbar(aes(ymin = mean-sd, ymax = mean+sd), 
+                position = position_dodge(width = dodge_width), 
+                width = 0, color = "black") +
+  facet_wrap(~Species_Pair)+
+  labs(y = "SIV", x = NULL)+
+  theme(axis.text.y = element_text(size = 22),
+        axis.title.x = element_text(size = 22),
+        axis.text = element_text(color = "black"),
+        text = element_text(family = "Helvetica"))
+## looks like two models preformed differnetly, inspect further... 
+
+# but save it first! 
+# ggsave(paste("explore/Norm_vs_log_vs_no_hunting_13_mods_SIV_HALF_LONG_", date, ".png", sep = ""), p,
+#        height = 8, width = 12, units = "in")
+rm(p,dodge_width)
+
+## inspect two weird results 
+d[d$Species_Pair %in% c("SUB-Panthera_tigris~DOM-Arctictis_binturong"),]
+## No hunting mod failed hard --> bad Rhat and non-significant CI. 
+## Log and normal hunting are essentially the same. 
+
+d[d$Species_Pair %in% c("SUB-Panthera_pardus~DOM-Arctictis_binturong" ),]
+## Well normal mod failed also --> I sent the wrong models to the HPC :( 
+## All parameters Rhat > 1.3, so all fail. But logged hutning is closest. 
+## both logged and norm are the same direction, but logged is larger effect size.
+
+rm(d)
+
+#
+##
+###
+#### Compare PPC between different tests
+###
+##
+#
+
+## first need to import the PPC files 
+files = list.files("results/Hunting_test_Dec_2023/PPC_dataframes/")
+## dont want plot data 
+files = files[!grepl("plotdata", files)]
+
+## split apart tests 
+no = files[grepl("NO_HUNT", files)]
+log = files[grepl("LOG_HUNT", files)]
+# combine and clean
+files = c(no, log)
+rm(no, log)
+
+## save em here
+hunt_ppc = list()
+
+# loop thru each file to import into list
+for(i in 1:length(files)){
+  
+  # import 
+  d = read.csv(paste("results/Hunting_test_Dec_2023/PPC_dataframes/", files[i], sep = ""))
+  
+  ## if there are pesky row.names, remove em!
+  d$X = NULL
+  
+  ## create a new column for the test 
+  if(grepl("NO_HUNT", files[i])){
+    d$test = "NO_HUNT"
+  }
+  if(grepl("LOG_HUNT", files[i])){
+    d$test = "LOG_HUNT"
+  }
+  
+  # save it in the list 
+  hunt_ppc[[i]] = d
+  
+}
+rm(d,i, files)
+
+## turn list into df
+hunt_ppc = do.call(rbind, hunt_ppc)
+
+## inspect
+unique(hunt_ppc$Species_Pair) # 13 mods here, good 
+head(hunt_ppc)
+
+## add the normal results 
+norm_ppc = ppc_values[ppc_values$Species_Pair %in% hunt_ppc$Species_Pair, ]
+norm_ppc$test = "NORM_HUNT"
+
+## combine
+ppc = rbind(norm_ppc, hunt_ppc)
+rm(norm_ppc, hunt_ppc)
+
+
+### Establish degree of support 
+
+preform$parameter_valid[preform$Rhat >= 0.99 & preform$Rhat <= 1.2] = "Yes"
+preform$OD_valid[preform$Chat.dom >= 0.98 & preform$Chat.dom <= 1.1 &
+                   preform$Chat.sub >= 0.98 & preform$Chat.sub <= 1.1] = "Yes"
+preform$BPV_valid_liberal[preform$BPV.dom >= 0.15 & preform$BPV.dom <= 0.85 &
+                            preform$BPV.sub >= 0.15 & preform$BPV.sub <= 0.85] = "Yes"
 
 
 

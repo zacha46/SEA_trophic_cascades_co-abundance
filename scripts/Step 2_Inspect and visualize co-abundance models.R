@@ -828,6 +828,40 @@ ggplot(plot_dat[plot_dat$preference == "preferred",], aes(x = Interaction_Estima
 
 
 
+############# Save key datasets to include in supplementary figures #######
+
+## Will need informaiton about all species, split between preferred and the community
+head(guilds) # needs a preferred vs community column
+
+## or just grab yes's and no's
+a = guilds[guilds$tiger_pref == "Yes",]
+b = guilds[guilds$leopard_pref == "Yes",]
+c = guilds[guilds$dhole_pref == "Yes",]
+d = guilds[guilds$CL_pref == "Yes",]
+e = guilds[guilds$TrophicGuild == "Large_Carnivore", ] # dont forget these guys!
+pref_guilds = distinct(rbind(a,b,c,d,e))
+rm(a,b,c,d,e)
+length(unique(pref_guilds$scientificNameStd)) #21 species 
+## save this! 
+write.csv(pref_guilds, paste("results/summarized_results/preferred_prey_traits_", 
+                             length(unique(pref_guilds$scientificNameStd)),
+                             "_species_", date, ".csv", sep = ""))
+
+## save the information about model preformance! 
+head(preform) # definitely can remove some columns here 
+pref_save = preform[, -which(names(preform) %in% 
+                               c("mod_completion", "BPV_valid_conserv", "OD_valid_conserv", "support_conserv"))]
+# and order it by preference
+a = pref_save[pref_save$preference == "preferred", ]
+b = pref_save[pref_save$preference == "community", ]
+pref_save = rbind(a,b)
+
+## save it! 
+write.csv(pref_guilds, paste("results/summarized_results/model_performance_and_SIVs_",date, ".csv", sep = ""))
+
+
+
+
 ############# Visualize unsupported & preferred SIVs using frequency plots ######
 
 #
@@ -2231,21 +2265,28 @@ es_final$var = factor(es_final$var, levels = c( "D) Species interaction",
                                                 "A) Human footprint"))
 es_final$mod_type = factor(es_final$mod_type, levels = c("predator", "prey","unsupported","bottom-up","top-down"))
 
+## manually specify which shape is which 
+es_final$shapes[es_final$mod_type %in% c("unsupported","bottom-up","top-down")] = "15"
+es_final$shapes[es_final$mod_type %in% c("predator")] = "21"
+es_final$shapes[es_final$mod_type %in% c("prey")] = "17"
+
+
+
 ## Make the ggplot
-p =
+# p =
   ggplot(es_final, aes(x = var, y = estimate, ymin=lower, ymax=upper))+
-  geom_pointrange(aes(color = mod_type), size = 1,
+  geom_pointrange(aes(color = mod_type, shape = shapes), size = 2, lwd = 2, # fatten = 1, 
                   position= position_dodge(width=.7))+
-  geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.6)+
-  coord_flip() +  # flip coordinates (puts labels on y axis)
-  labs(y = "Weighted effect size", x = NULL) +
   scale_color_manual(values = c("top-down" =  "darkorange4",
                                 "bottom-up" = "springgreen4",
                                 "unsupported" = "gray30",
-                                "predator" = "purple4", # "skyblue1", 
-                                "prey" = "purple1"#  "slateblue1"
-                                ))+
-  theme_bw()+
+                                "predator" = "dodgerblue2",#  "purple4", # "skyblue1", 
+                                "prey" = "deepskyblue1"  # "purple1"#  "slateblue1"
+  ))+
+  geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.6)+
+  coord_flip() +  # flip coordinates (puts labels on y axis)
+  labs(y = "Weighted effect size", x = NULL) +
+    theme_bw()+
   theme(axis.text.x = element_text(size = 22),
         axis.text.y = element_text(size = 22),
         axis.title.x = element_text(size = 22),
@@ -2263,16 +2304,16 @@ es_final$mod_type = factor(es_final$mod_type, levels = c("prey","predator", "top
 ## Make the ggplot for the label 
 p =
   ggplot(es_final, aes(x = var, y = estimate, ymin=lower, ymax=upper))+
-  geom_pointrange(aes(color = mod_type), size = 1,
-                  position= position_dodge(width=.7))+
+  geom_point(aes(color = mod_type, shape = shapes), size = 6,
+             position= position_dodge(width=.7))+
   geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.6)+
   coord_flip() +  # flip coordinates (puts labels on y axis)
   labs(y = "Weighted effect size", x = NULL) +
   scale_color_manual(values = c("top-down" =  "darkorange4",
                                 "bottom-up" = "springgreen4",
                                 "unsupported" = "gray30",
-                                "predator" = "purple4", # "skyblue1", 
-                                "prey" = "purple1"#  "slateblue1"
+                                "predator" = "dodgerblue2", # "skyblue1",
+                                "prey" = "deepskyblue1"#  "slateblue1"
   ))+
   theme_bw()+
   theme(axis.text.x = element_text(size = 22),
@@ -2281,9 +2322,11 @@ p =
         axis.text = element_text(color = "black"),
         legend.title = element_text(size = 22, family = "Helvetica"),
         legend.text = element_text(size = 22, family = "Helvetica"),
-        text = element_text(family = "Helvetica"))
+        text = element_text(family = "Helvetica"))+
+  guides(color = guide_legend(override.aes = list(shape = c(17, 15, 16, 16, 16))))
+
 ## Save this
-# ggsave(paste("explore/STEAL THIS LABEL", date, ".png", sep = ""),
+# ggsave(paste("explore/STEAL THIS LABEL_", date, ".png", sep = ""),
 #        p, width = 12, height = 9, units = "in")
 
 

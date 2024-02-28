@@ -2,7 +2,7 @@
 #### it just takes too long on a regular comp,
 ### when I know it'll work on the HPC 
 
-## Last edited August 31st, 2023
+## Last edited February 28th, 2024
 # Z.amir@uq.edu.au
 
 library(tidyverse)
@@ -23,17 +23,17 @@ meta = read.csv(paste("data/ZDA_UMF/",
                       sep = ""))
 
 # ### Local testing
-# species = readRDS(paste("data/send_to_HPC/", 
-#                         list.files("data/send_to_HPC/")[grepl("species_vector", list.files("data/send_to_HPC/"))],
+# species = readRDS(paste("data_GitHub/",
+#                         list.files("data_GitHub/")[grepl("species_vector", list.files("data_GitHub/"))],
 #                         sep = ""))
-# group_sp = readRDS(paste("data/send_to_HPC/", 
-#                          list.files("data/send_to_HPC/")[grepl("group_living", list.files("data/send_to_HPC/"))],
+# group_sp = readRDS(paste("data_GitHub/",
+#                          list.files("data_GitHub/")[grepl("group_living", list.files("data_GitHub/"))],
 #                          sep = ""))
-# caps = read.csv(paste("data/send_to_HPC/", 
-#                      list.files("data/send_to_HPC/")[grepl("clean_captures", list.files("data/send_to_HPC/"))],
+# caps = read.csv(paste("data_GitHub/",
+#                      list.files("data_GitHub/")[grepl("clean_captures", list.files("data_GitHub/"))],
 #                      sep = ""))
-# meta = read.csv(paste("data/send_to_HPC/", 
-#                      list.files("data/send_to_HPC/")[grepl("clean_metadata", list.files("data/send_to_HPC/"))],
+# meta = read.csv(paste("data_GitHub/",
+#                      list.files("data_GitHub/")[grepl("clean_metadata", list.files("data_GitHub/"))],
 #                      sep = ""))
 
 ### Assign key variables a value

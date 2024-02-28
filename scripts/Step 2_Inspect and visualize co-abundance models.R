@@ -5,7 +5,7 @@
 ## Import dataframes, not complete models b/c theyre too heavy
 
 # Zachary Amir, Z.Amir@uq.edu.au
-# Last updated on Feb 23rd, 2024
+# Last updated on Feb 28th, 2024
 
 ## start fresh
 rm(list = ls())
@@ -32,19 +32,19 @@ library(lme4)         # For meta-regressions of model coefficents
 setwd("/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_trophic_cascades_co-abundance")
 
 ## Import clean cam trap data here for referencing
-og_resamp_captures = read.csv("data/send_to_HPC/clean_captures_to_make_UMFs_20230821.csv")
-og_resamp_meta = read.csv("data/send_to_HPC/clean_metadata_to_make_UMFs_20230821.csv")
+og_resamp_captures = read.csv("data_GitHub/clean_captures_to_make_UMFs_20240228.csv")
+og_resamp_meta = read.csv("data_GitHub/clean_metadata_to_make_UMFs_20240228.csv")
 
 ## should also import NON-resampled data for referencing too! 
-og_captures = read.csv("/Users/zachary_amir/Dropbox/CT capture histories database/Asian ECL raw CT data/Step4_output_pre-resampling/Clean_independent_captures_20230610.csv")
-og_meta = read.csv("/Users/zachary_amir/Dropbox/CT capture histories database/Asian ECL raw CT data/Step4_output_pre-resampling/Clean_independent_metadata_20230610.csv")
+# og_captures = read.csv("/Users/zachary_amir/Dropbox/CT capture histories database/Asian ECL raw CT data/Step4_output_pre-resampling/Clean_independent_captures_20230610.csv")
+# og_meta = read.csv("/Users/zachary_amir/Dropbox/CT capture histories database/Asian ECL raw CT data/Step4_output_pre-resampling/Clean_independent_metadata_20230610.csv")
 
 
 ######## Import co-abundance coefficent dataframes ######
 
 ## first, I will import the bundled data to generate a vector of relevant species pairs 
 # but since I split the bundled data into multiple files, I must import them all. 
-files = list.files("data/send_to_HPC/")
+files = list.files("data_GitHub_CoA_bundles/")
 files = files[grepl("Bundled", files)]
 files = files[!grepl("MISSING", files)] # avoid reading in repeated data 
 
@@ -53,7 +53,7 @@ res = list()
 for(i in 1:length(files)){
   
   # import
-  b = readRDS(paste("data/send_to_HPC/", files[i], sep = ""))
+  b = readRDS(paste("data_GitHub_CoA_bundles/", files[i], sep = ""))
   
   # and save
   res[[i]] = b
@@ -73,7 +73,7 @@ all_combos = names(bdata)
 ### Import coefficient dataframes
 
 # list all files
-files = list.files("results/HALF_LONG_final_Jan_2024/coefficent_dataframes/")
+files = list.files("results_final/coefficent_dataframes/")
 files = files[!grepl("OLD", files)] # remove any old data 
 
 ## Have a few long and all middle files in this directory, subset for one
@@ -88,9 +88,8 @@ coeff.res = list()
 # loop thru each file to import into list
 for(i in 1:length(files)){
   
-  d = read.csv(paste("results/HALF_LONG_final_Jan_2024/coefficent_dataframes/", files[i], sep = ""))
-  # d = read.csv(paste("results/HALF_LONG_testing_Oct_2023/coefficent_dataframes/", files[i], sep = ""))
-  
+  # import 
+  d = read.csv(paste("results_final/coefficent_dataframes/", files[i], sep = ""))
 
   ## if there are pesky row.names, remove em!
   d$X = NULL
@@ -177,10 +176,21 @@ table(preform$mod_completion) # 260 completed!
 
 ######## Import co-abundance PPC dataframes ######
 
+### Not working with PPC plot data anymore because it is not used and takes up a lot of space
+## but the co-abundance HPC code still generates it, so I am leaving the code hashed out in the script for now. 
+# plot_files = list.files("results_final/PPC_dataframes/")
+# plot_files = plot_files[grepl("plotdata", plot_files)]
+# for(i in 1:length(plot_files)){
+#   file.remove(paste("results_final/PPC_dataframes/", plot_files[i], sep = ""))
+# }
+# rm(i, plot_files)
+
+
+
 ## Make sure all_combos is loaded in your environment here! 
 
 # list all files
-files = list.files("results/HALF_LONG_final_Jan_2024/PPC_dataframes/")
+files = list.files("results_final/PPC_dataframes/")
 files = files[!grepl("OLD", files)] # remove any old data 
 
 ## Subset files for one setting, especially if multiple are in the mix. 
@@ -195,9 +205,7 @@ ppc_res = list()
 for(i in 1:length(files)){
   
   ## read the file 
-  d = read.csv(paste("results/HALF_LONG_final_Jan_2024/PPC_dataframes/", files[i], sep = ""))
-  # d = read.csv(paste("results/HALF_LONG_testing_Oct_2023/PPC_dataframes/", files[i], sep = ""))
-  
+  d = read.csv(paste("results_final/PPC_dataframes/", files[i], sep = ""))
   
   ## save plotdata vs values in nested list. 
   if(grepl("plotdata", files[i])){
@@ -213,12 +221,13 @@ for(i in 1:length(files)){
 }
 rm(d,i, files)
 
-## bind together and inspect
-ppc_plotdat = do.call(rbind, ppc_res$plotdata)
-head(ppc_plotdat) 
-ppc_plotdat$X = NULL # damn row names 
-str(ppc_plotdat) # looks good! 
+# ## bind together and inspect
+# ppc_plotdat = do.call(rbind, ppc_res$plotdata)
+# head(ppc_plotdat) 
+# ppc_plotdat$X = NULL # damn row names 
+# str(ppc_plotdat) # looks good! 
 
+## bind together and inspect
 ppc_values = do.call(rbind, ppc_res$values)
 head(ppc_values) 
 ppc_values$X = NULL # damn row names 
@@ -243,10 +252,8 @@ ppc_values[ppc_values$Interaction_Estimate < -3, ] # 1) SUB-Cuon_alpinus~DOM-Tap
 ppc_values[ppc_values$Interaction_Estimate > 3, ] # none!
 
 # remove list now that were all stored in dfs. 
-rm(ppc_res)
+rm(ppc_res, ppc_plotdat)
 
-### Inspect which species pairs are present/missing, 20240219
-setdiff(all_combos, ppc_plotdat$Species_Pair) # were all here! 
 
 ######## Import co-abundance prediction dataframes ######
 
@@ -255,93 +262,93 @@ setdiff(all_combos, ppc_plotdat$Species_Pair) # were all here!
 ### We will only want to generate very specific plots anyway, no need for all. 
 
 ## Make sure all_combos is loaded here! 
-
-# list all files
-files = list.files("results/MIDDLE_testing_Jul_2023/prediction_dataframes/")
-files = files[!grepl("OLD", files)] # remove any old data 
-
-## Subset files for one setting, especially if multiple are in the mix. 
-files = files[grepl("MIDDLE", files)]
-# files = files[grepl("SHORT", files)]
-
-### Noticed a typo that included generated results for species that dont spatially overlap
-## and these have been removed from bdata, but not worth re-running models b/c they take long.
-# so thin files to match relevant combos and exclude pointless mods via loop
-### This will be irrelevant w/ updated models and testing. 
-
-# create a new files vector to save good files
-matched_files_est <- vector("character", length(all_combos))
-matched_files_pred <- vector("character", length(all_combos))
-
-for(i in 1:length(all_combos)){
-  # if there are any TRUE matches for all_combos in files w/ estimated abundance
-  if(any(grepl(all_combos[i], files[grepl("estimated", files)]))){
-    ## save that file name in the new vector
-    matched_files_est[i] = files[grepl("estimated", files)][grepl(all_combos[i], files[grepl("estimated", files)])]
-  }
-  # Repeat this process also for predicted abundance
-  if(any(grepl(all_combos[i], files[grepl("predicted", files)]))){
-    ## save that file name in the new vector
-    matched_files_pred[i] = files[grepl("predicted", files)][grepl(all_combos[i], files[grepl("predicted", files)])]
-  }
-}
-rm(i)
-
-## remove matched_files w/ blank names (likely b/c mod never left HPC)
-matched_files_est = matched_files_est[matched_files_est != ""]
-matched_files_pred = matched_files_pred[matched_files_pred != ""]
-
-## update files w/ the good ones (for consistent naming)
-files = c(matched_files_est, matched_files_pred)
-rm(matched_files_est, matched_files_pred)
-
-# store results here
-predict_res = list()
-
-# loop thru each file to import into list
-for(i in 1:length(files)){
-  
-  ## read the file 
-  d = read.csv(paste("results/MIDDLE_testing_Jul_2023/prediction_dataframes/", files[i], sep = ""))
-  
-  ## save estimated vs predicted abundance in nested list. 
-  if(grepl("estimated", files[i])){
-    
-    predict_res$estimated[[i]] = d
-    
-  }else{
-    
-    predict_res$predicted[[i]] = d
-    
-  } # end estimated vs predicted condition
-  
-}
-rm(d,i, files)
-
-## bind together and inspect
-est_abund = do.call(rbind, predict_res$estimated)
-head(est_abund) 
-est_abund$X = NULL # damn row names 
-str(est_abund) # looks good! 
-
-pred_abund = do.call(rbind, predict_res$predicted)
-head(pred_abund) 
-pred_abund$X = NULL # damn row names 
-str(pred_abund) # looks good! 
-
-## Remove list now that data is good to go
-rm(predict_res)
-
-
-### Inspect which species pairs are present/missing, 20230724
-setdiff(all_combos, pred_abund$Species_Pair) #14 missing models based off name spelling differences from old to new bundled data
-## this wont matter anyway, dont worry about them. 
+# 
+# # list all files
+# files = list.files("results/MIDDLE_testing_Jul_2023/prediction_dataframes/")
+# files = files[!grepl("OLD", files)] # remove any old data 
+# 
+# ## Subset files for one setting, especially if multiple are in the mix. 
+# files = files[grepl("MIDDLE", files)]
+# # files = files[grepl("SHORT", files)]
+# 
+# ### Noticed a typo that included generated results for species that dont spatially overlap
+# ## and these have been removed from bdata, but not worth re-running models b/c they take long.
+# # so thin files to match relevant combos and exclude pointless mods via loop
+# ### This will be irrelevant w/ updated models and testing. 
+# 
+# # create a new files vector to save good files
+# matched_files_est <- vector("character", length(all_combos))
+# matched_files_pred <- vector("character", length(all_combos))
+# 
+# for(i in 1:length(all_combos)){
+#   # if there are any TRUE matches for all_combos in files w/ estimated abundance
+#   if(any(grepl(all_combos[i], files[grepl("estimated", files)]))){
+#     ## save that file name in the new vector
+#     matched_files_est[i] = files[grepl("estimated", files)][grepl(all_combos[i], files[grepl("estimated", files)])]
+#   }
+#   # Repeat this process also for predicted abundance
+#   if(any(grepl(all_combos[i], files[grepl("predicted", files)]))){
+#     ## save that file name in the new vector
+#     matched_files_pred[i] = files[grepl("predicted", files)][grepl(all_combos[i], files[grepl("predicted", files)])]
+#   }
+# }
+# rm(i)
+# 
+# ## remove matched_files w/ blank names (likely b/c mod never left HPC)
+# matched_files_est = matched_files_est[matched_files_est != ""]
+# matched_files_pred = matched_files_pred[matched_files_pred != ""]
+# 
+# ## update files w/ the good ones (for consistent naming)
+# files = c(matched_files_est, matched_files_pred)
+# rm(matched_files_est, matched_files_pred)
+# 
+# # store results here
+# predict_res = list()
+# 
+# # loop thru each file to import into list
+# for(i in 1:length(files)){
+#   
+#   ## read the file 
+#   d = read.csv(paste("results/MIDDLE_testing_Jul_2023/prediction_dataframes/", files[i], sep = ""))
+#   
+#   ## save estimated vs predicted abundance in nested list. 
+#   if(grepl("estimated", files[i])){
+#     
+#     predict_res$estimated[[i]] = d
+#     
+#   }else{
+#     
+#     predict_res$predicted[[i]] = d
+#     
+#   } # end estimated vs predicted condition
+#   
+# }
+# rm(d,i, files)
+# 
+# ## bind together and inspect
+# est_abund = do.call(rbind, predict_res$estimated)
+# head(est_abund) 
+# est_abund$X = NULL # damn row names 
+# str(est_abund) # looks good! 
+# 
+# pred_abund = do.call(rbind, predict_res$predicted)
+# head(pred_abund) 
+# pred_abund$X = NULL # damn row names 
+# str(pred_abund) # looks good! 
+# 
+# ## Remove list now that data is good to go
+# rm(predict_res)
+# 
+# 
+# ### Inspect which species pairs are present/missing, 20230724
+# setdiff(all_combos, pred_abund$Species_Pair) #14 missing models based off name spelling differences from old to new bundled data
+# ## this wont matter anyway, dont worry about them. 
 
 
 ######## Import guild data and dietary preferences of large carnivores #####
 
 #load guild data
-guilds = read.csv(("data/species_traits/clean_44_species_trait_data_20230821.csv"))
+guilds = read.csv(("data_GitHub/clean_44_species_trait_data_20240228.csv"))
 head(guilds)
 str(guilds)
 ## looks good, dietary preferences are ready to go! 
@@ -842,10 +849,18 @@ e = guilds[guilds$TrophicGuild == "Large_Carnivore", ] # dont forget these guys!
 pref_guilds = distinct(rbind(a,b,c,d,e))
 rm(a,b,c,d,e)
 length(unique(pref_guilds$scientificNameStd)) #21 species 
+## order them by trophic guild, large carnivores first 
+unique(pref_guilds$TrophicGuild)
+pref_guilds$TrophicGuild = factor(pref_guilds$TrophicGuild, 
+                                  levels = c("Large_Carnivore", "Large_Herbivore", 
+                                             "Small_Herbivore","Large_Omnivore",
+                                             "Small_Omnivore" ))
+pref_guilds = pref_guilds[order(pref_guilds$TrophicGuild), ]
+
 ## save this! 
-# write.csv(pref_guilds, paste("results/summarized_results/preferred_prey_traits_", 
-#                              length(unique(pref_guilds$scientificNameStd)),
-#                              "_species_", date, ".csv", sep = ""))
+write.csv(pref_guilds, paste("results/summarized_results/preferred_prey_traits_",
+                             length(unique(pref_guilds$scientificNameStd)),
+                             "_species_", date, ".csv", sep = ""), row.names = F)
 
 ## save the information about model preformance! 
 head(preform) # definitely can remove some columns here 
@@ -857,8 +872,9 @@ b = pref_save[pref_save$preference == "community", ]
 pref_save = rbind(a,b)
 
 ## save it! 
-# write.csv(pref_guilds, paste("results/summarized_results/model_performance_and_SIVs_",date, ".csv", sep = ""))
+# write.csv(pref_save, paste("results/summarized_results/model_performance_and_SIVs_",date, ".csv", sep = ""), row.names = F)
 
+rm(a,b,pref_save, pref_guilds)
 
 
 
@@ -1890,75 +1906,77 @@ rm(path, p,i, title, n, n_split, gp, est, pred, day, month, year, date,
 
 ############# Visualize PPC plots ########
 
-## Will generate two plots, 2 w/ the scatter (one for dom and one for sub) and 1 w/ the bars 
-## and will save in species-pair directory in the loop. 
-
-## scatter first 
-# add guild_pair to the data
-add = select(preform, Species_Pair, guild_pair)
-ppc_plotdat = merge(ppc_plotdat, add, by = "Species_Pair") # this is a long merge b/c plotdat has soooo much data. 
-
-## loop thru each species pair to make the scatter plots per species and save them directly. 
-for(i in 1:length(unique(ppc_plotdat$Species_Pair))){
-  
-  ## grab species pair name 
-  n = unique(ppc_plotdat$Species_Pair)[i]
-  
-  ## subset for a single species 
-  dat = ppc_plotdat[ppc_plotdat$Species_Pair == n,]
-  
-  # grab today's date
-  day<-str_sub(Sys.Date(),-2)
-  month<-str_sub(Sys.Date(),-5,-4)
-  year<-str_sub(Sys.Date(),-10,-7)
-  date = paste(year,month,day, sep = "")
-  
-  ## Create titles based on values
-  val = ppc_values[ppc_values$Species_Pair == n,]
-  sub.bpv = paste("Bayesian P-value =", round(val$BPV.sub, 3),
-                  "& C-hat =", round(val$Chat.sub, 3))
-  dom.bpv = paste("Bayesian P-value =", round(val$BPV.dom, 3),
-                  "& C-hat =",round(val$Chat.dom, 3))
-  
-  ## Subordinate plot
-  plot=
-    ggplot(dat, aes( y = sub.sim, x = sub.real))+
-    geom_point(aes(color = sub.label))+
-    geom_abline(intercept = 0, slope = 1, color = "black", size = 2)+
-    theme_classic()+
-    scale_color_manual(values = c("red", "blue"))+
-    labs(title = sub.bpv, subtitle = str_split(n, "~")[[1]][1]  , 
-         y = "Fit Statistic Simulated Data", x = "Fit Statistic Real Data")+
-    theme(legend.position = "None")
-  
-  ## make a saving path
-  path = paste("figures/", unique(dat$guild_pair), "/", n, "/Subordinate_PPC_scatter_plot_", date, ".png", sep = "")
-  
-  # save it! 
-  ggsave(path, plot, width = 7.5, height = 7, units = "in")
-  
-  
-  ## Dominant plot
-  plot = 
-    ggplot(dat, aes( y = dom.sim, x = dom.real))+
-    geom_point(aes(color = dom.label))+
-    geom_abline(intercept = 0, slope = 1, color = "black", size = 2)+
-    theme_classic()+
-    scale_color_manual(values = c("red", "blue"))+
-    labs(title = dom.bpv, subtitle = str_split(n, "~")[[1]][2], 
-         y = "Fit Statistic Simulated Data", x = "Fit Statistic Real Data")+
-    theme(legend.position = "None")
-  
-  ## make a saving path
-  path = paste("figures/", unique(dat$guild_pair), "/", n, "/Dominant_PPC_scatter_plot_", date, ".png", sep = "")
-  
-  # save it! 
-  ggsave(path, plot, width = 7.5, height = 7, units = "in")
-  
-  
+#### No longer generating scatter plots because they are not used and they take up too much space, 
+### But leaving the code here and #hashed# out for now. 
+{
+  # ## scatter first 
+  # # add guild_pair to the data
+  # add = select(preform, Species_Pair, guild_pair)
+  # ppc_plotdat = merge(ppc_plotdat, add, by = "Species_Pair") # this is a long merge b/c plotdat has soooo much data. 
+  # 
+  # ## loop thru each species pair to make the scatter plots per species and save them directly. 
+  # for(i in 1:length(unique(ppc_plotdat$Species_Pair))){
+  #   
+  #   ## grab species pair name 
+  #   n = unique(ppc_plotdat$Species_Pair)[i]
+  #   
+  #   ## subset for a single species 
+  #   dat = ppc_plotdat[ppc_plotdat$Species_Pair == n,]
+  #   
+  #   # grab today's date
+  #   day<-str_sub(Sys.Date(),-2)
+  #   month<-str_sub(Sys.Date(),-5,-4)
+  #   year<-str_sub(Sys.Date(),-10,-7)
+  #   date = paste(year,month,day, sep = "")
+  #   
+  #   ## Create titles based on values
+  #   val = ppc_values[ppc_values$Species_Pair == n,]
+  #   sub.bpv = paste("Bayesian P-value =", round(val$BPV.sub, 3),
+  #                   "& C-hat =", round(val$Chat.sub, 3))
+  #   dom.bpv = paste("Bayesian P-value =", round(val$BPV.dom, 3),
+  #                   "& C-hat =",round(val$Chat.dom, 3))
+  #   
+  #   ## Subordinate plot
+  #   plot=
+  #     ggplot(dat, aes( y = sub.sim, x = sub.real))+
+  #     geom_point(aes(color = sub.label))+
+  #     geom_abline(intercept = 0, slope = 1, color = "black", size = 2)+
+  #     theme_classic()+
+  #     scale_color_manual(values = c("red", "blue"))+
+  #     labs(title = sub.bpv, subtitle = str_split(n, "~")[[1]][1]  , 
+  #          y = "Fit Statistic Simulated Data", x = "Fit Statistic Real Data")+
+  #     theme(legend.position = "None")
+  #   
+  #   ## make a saving path
+  #   path = paste("figures/", unique(dat$guild_pair), "/", n, "/Subordinate_PPC_scatter_plot_", date, ".png", sep = "")
+  #   
+  #   # save it! 
+  #   ggsave(path, plot, width = 7.5, height = 7, units = "in")
+  #   
+  #   
+  #   ## Dominant plot
+  #   plot = 
+  #     ggplot(dat, aes( y = dom.sim, x = dom.real))+
+  #     geom_point(aes(color = dom.label))+
+  #     geom_abline(intercept = 0, slope = 1, color = "black", size = 2)+
+  #     theme_classic()+
+  #     scale_color_manual(values = c("red", "blue"))+
+  #     labs(title = dom.bpv, subtitle = str_split(n, "~")[[1]][2], 
+  #          y = "Fit Statistic Simulated Data", x = "Fit Statistic Real Data")+
+  #     theme(legend.position = "None")
+  #   
+  #   ## make a saving path
+  #   path = paste("figures/", unique(dat$guild_pair), "/", n, "/Dominant_PPC_scatter_plot_", date, ".png", sep = "")
+  #   
+  #   # save it! 
+  #   ggsave(path, plot, width = 7.5, height = 7, units = "in")
+  #   
+  #   
+  # }
+  # rm(path, day,month,year,date, plot, n, sub.bpv, dom.bpv, val, dat)
 }
-rm(path, day,month,year,date, plot, n, sub.bpv, dom.bpv, val, dat)
 
+## Prepare PPC values to be plotted 
 # add guild_pair to the values
 add = select(preform, Species_Pair, guild_pair)
 ppc_values = merge(ppc_values, add, by = "Species_Pair")
@@ -2356,16 +2374,15 @@ p =
 ############# Summary statistics to describe overall dataset ######
 
 ## how many detections did we get for our large carnivores?
-og_captures$Species = gsub(" ", "_", og_captures$Species)
-ddply(og_captures[og_captures$Species %in% c("Panthera_pardus", "Panthera_tigris", 
+ddply(og_resamp_captures[og_resamp_captures$Species %in% c("Panthera_pardus", "Panthera_tigris", 
                                              "Cuon_alpinus", "Neofelis_nebulosa", 
                                              "Neofelis_diardi" ),], .(Species), summarize,
-      num_cap = length(Individuals))
+      num_cap = sum(independent_events))
 
 ## what about total number of detections for our species?
 sp = unique(unique(coeff$sub_sp), unique(coeff$dom_sp)) # all 44
-nrow(og_captures[og_captures$Species %in% sp, ]) #140,334
-head(og_captures[og_captures$Species == "Muntiacus_genus" ,]) ## missing combined species! 
+# nrow(og_captures[og_captures$Species %in% sp, ]) #140,334
+# head(og_captures[og_captures$Species == "Muntiacus_genus" ,]) ## missing combined species! 
 nrow(og_resamp_captures[og_resamp_captures$Species %in% sp,]) # 131,481 rows, but some rows have multiple detections
 sum(og_resamp_captures$independent_events[og_resamp_captures$Species %in% sp]) # 173,428!
 rm(sp)
@@ -2383,13 +2400,8 @@ sd(eff$dur) # sd = 30.16
 
 rm(eff)
 
-## wait, why do these number differ?!
-summary(og_meta$effort)
-summary(og_resamp_meta$Cell_Effort)
-summary(og_resamp_meta$Avg_effort) # this is probably the most faithful data to include based on what was analyzed
-
 ## how many surveys before removal?
-length(unique(og_meta$survey_id)) #361
+# length(unique(og_meta$survey_id)) #361
 
 ## how many surveys after removal 
 length(unique(og_resamp_meta$survey_id)) #284

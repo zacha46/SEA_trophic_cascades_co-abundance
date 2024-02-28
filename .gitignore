@@ -54,17 +54,22 @@ figures/*~
 results/*~
 explore/*~
 
-# Ignore data files
-data/
-*.csv
-*.txt
-
 # and OE files from HPC
 scripts/
 *.err
 *.out
 
+# and old scripts
+scripts/OLD/*~
+scripts/SLURM_code/OLD/*~
+scripts/HPC_code/OLD/*~
+
 # Ignore figures
 figures/
 *.png
 *.pdf
+
+#DS_Store must be ignored
+.DS_Store
+.DS_Store?
+**/.DS_Store

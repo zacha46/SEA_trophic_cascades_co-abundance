@@ -1,7 +1,7 @@
 ---
 title: "Step 1_Prepare data for bundling"
 author: "Zachary Amir"
-date: "2024-01-03"
+date: "2024-02-28"
 output: html_document
 ---
 
@@ -11,9 +11,9 @@ This code will generate count histories and associated covariates and bundle the
 
 Although it will not run effectively here, the code that runs on the HPC is included here (or maybe move to different script?)
 
-This code works off the spatially re-sampled captures and covariates that are generated in the 4-step cam trap data standardization pipeline. See "Dropbox/CT capture histories database/R scripts CT data cleaning" for more info.
+This code works off the spatially re-sampled captures and covariates that are generated in the 4-step cam trap data standardization pipeline. To learn more about this camera trap history data standardization pipeline, please contact Zachary Amir (z.amir@uq.edu.au) or Matthew Luskin (m.luskin@uq.edu.au) to request access to the following GitHub repository: https://github.com/EcologicalCascadesLab/AsianCaptureHistories 
 
-```{r setup, include=FALSE}
+```{r setup, include=FALSE, echo=FALSE}
 
 ## start fresh
 rm(list = ls())
@@ -28,7 +28,9 @@ library(traitdata)
 
 ```{r import and inspect data, include=FALSE}
 
-#### Resampled captures and metadata are saved per survey in a folder in the cap hist DB
+#### Resampled captures and metadata are saved per survey in a folder in the cap hist DB on DropBox
+### This raw data is not available for public usage, but a derived version will be hosted on DropBox. 
+##
 
 ### captures first 
 
@@ -128,7 +130,7 @@ rownames(meta) = NULL
 
 ## ensure all cell_ids match!
 setdiff(meta$cell_id_3km, caps$cell_id_3km)
-setdiff(caps$cell_id_3km, meta$cell_id_3km) # good to go! 
+setdiff(caps$cell_id_3km, meta$cell_id_3km) # full match, good to go! 
 
 ## format classes
 caps$Date = as.Date(caps$Date, format = "%Y-%m-%d")
@@ -151,7 +153,7 @@ caps = caps[caps$survey_id %in% meta$survey_id,]
 
 ## summarize info about surveys
 surv_summary = ddply(caps, .(survey_id), summarize,
-                     num_SU = length(unique(cell_id_3km)), # total number of sampling units
+                     num_SU = length(unique(cell_id_3km)), # total number of sampling units (SUs)
                      max_cam = max(num_cams_active_at_date), # maximum number of cams active in a single sampling unit
                      dur = difftime(max(Date), min(Date), units= "days")) # duration of the survey 
 ## calculate trap nights 
@@ -353,7 +355,7 @@ mam = mam[!is.na(mam$scientificNameStd),]
 
 
 ## import Sam Lee's cleaned avonet dataframe
-bird = read.csv(here::here("data/species_traits/bird_guild_information_20221102.csv"))
+bird = read.csv(here::here("data_GitHub/bird_guild_information_20221102.csv"))
 
 # replace space with underscore for bird species names
 bird$Species = gsub(" ", "_", bird$Species)
@@ -756,8 +758,6 @@ rm(t, s, s2, res)
 
 ```
 
-In the past, particularly the Eco & Evo co-abundance publication, I assigned "natural absences" as landscapes where the species was not found in either the Anthropocene or the Holocene by assigning NA values for landscapes based on 4 broad distributions: Borneo, Sumatra, and North/South Mainland (based on the Isthmus of Kra). However, I am not doing this anymore because we are interested in prey abundance with or without predators, regardless of historical distributions. Therefore, there is no longer any need to generate an "extirpation_DF" to assign landscapes as present, absent or NA because we are using data from ALL sites. However, from a purley computational stance, subsetting to sites where species are historically present/absent should expedite the analysis by removing many rows! 
-
 Generating the data bundles on a regular computer will take hours, so instead I will send the information to the High Performance Computers (HPC) to run much faster. Before sending off the data, I will determine which species need to be analyzed as groups (because of very large group sizes, e.g. dholes and macaques).
 
 ```{r save data to send to HPC for bundling, echo=FALSE}
@@ -794,8 +794,20 @@ nrow(meta[meta$cell_id_3km %in% meta$cell_id_3km[meta$cams_included_count > 7],]
 check = select(meta, Avg_FLLI_3km, Avg_human_footprint_3km, Avg_altitude_3km, Avg_hunting_accessibility_3km)
 cov.corr = cor(check[,sapply(check, is.numeric)])
 cov.corr= as.data.frame(cov.corr)
-cov.corr[abs(cov.corr) < abs(.6)] = "good" # stick w/ .6 b/c FLII and HFP are 0.5 correlated. 
+cov.corr[abs(cov.corr) < abs(.6)] = "good" # stick w/ .6
 rm(check, cov.corr)
+
+### To ensure that data remains spatially secure regarding sensetive species locations
+## remove any spatial variables and thin to only include bare minimum variables. 
+meta = select(meta, cell_id_3km, survey_id, Landscape, source, cams_included_count, year, 
+              Avg_altitude_3km, Avg_human_footprint_3km, Avg_FLLI_3km)
+
+### and do the same for caps
+caps = select(caps, cell_id_3km, survey_id, seq, Date, num_cams_active_at_date, Species, total_indiv_records, independent_events)
+# and thin to only include relevant species
+setdiff(traits$scientificNameStd, caps$Species) # all species in traits are present in caps  
+caps = caps[caps$Species %in% traits$scientificNameStd, ]
+
 
 ## grab today's date 
 day<-str_sub(Sys.Date(),-2)
@@ -804,17 +816,27 @@ year<-str_sub(Sys.Date(),-10,-7)
 date = paste(year,month,day, sep = "")
 
 # ### Save all relevant files
-# saveRDS(keep, paste("/Users/zachary_amir/Dropbox/Zach PhD/Trophic release project/SEA_trophic_cascades_co-abundance/data/send_to_HPC/species_vector_", length(keep), "_species_", date, ".RDS", sep = ""))
+# saveRDS(keep, paste("data_GitHub/species_vector_", length(keep), "_species_", date, ".RDS", sep = ""))
 # 
-# saveRDS(group_sp, paste("/Users/zachary_amir/Dropbox/Zach PhD/Trophic release project/SEA_trophic_cascades_co-abundance/data/send_to_HPC/group_living_", length(group_sp), "_species_", date, ".RDS", sep = ""))
+# saveRDS(group_sp, paste("data_GitHub/group_living_", length(group_sp), "_species_", date, ".RDS", sep = ""))
 # 
-# write.csv(caps, paste("/Users/zachary_amir/Dropbox/Zach PhD/Trophic release project/SEA_trophic_cascades_co-abundance/data/send_to_HPC/clean_captures_to_make_UMFs_", date,".csv", sep = ""), row.names = F)
+# write.csv(caps, paste("data_GitHub/clean_captures_to_make_UMFs_", date,".csv", sep = ""), row.names = F)
 # 
-# write.csv(meta, paste("/Users/zachary_amir/Dropbox/Zach PhD/Trophic release project/SEA_trophic_cascades_co-abundance/data/send_to_HPC/clean_metadata_to_make_UMFs_", date,".csv", sep = ""), row.names = F)
+# write.csv(meta, paste("data_GitHub/clean_metadata_to_make_UMFs_", date,".csv", sep = ""), row.names = F)
 # 
 # ### Also save trait data so I dont have to remake it later
-# write.csv(traits, paste("/Users/zachary_amir/Dropbox/Zach PhD/Trophic release project/SEA_trophic_cascades_co-abundance/data/species_traits/clean_", nrow(traits), "_species_trait_data_", date, ".csv", sep = ""), row.names = F)
+# write.csv(traits, paste("data_GitHub/clean_", nrow(traits), "_species_trait_data_", date, ".csv", sep = ""), row.names = F)
+
+## clean up
 rm(day, month, year, date)
+
+
+# ### If starting from fresh, you can import the same data here-
+# keep = readRDS("data_GitHub/species_vector_44_species_20240228.RDS")
+# group_sp = readRDS("data_GitHub/group_living_8_species_20240228.RDS")
+# caps = read.csv("data_GitHub/clean_captures_to_make_UMFs_20240228.csv")
+# meta = read.csv("data_GitHub/clean_metadata_to_make_UMFs_20240228.csv")
+# traits = read.csv("data_Github/clean_44_species_trait_data_20240228.csv")
 
 
 ```
@@ -825,9 +847,9 @@ The following code is set up to run on the HPC and lives as its own separate R s
 
 The separate R script is called: scripts/HPC_code/HPC_matrix_generator.R.
 
-To make that code run on the HPC, I use the SLURM script called: scripts/SLURM_code/SLURM_generate_matricies_20230615.txt
+To make that code run on the HPC, I use the SLURM script called: scripts/SLURM_code/SLURM_generate_matricies.txt
 
-To avoid any confusion, I will not include that code here (for now) because it will not run locally.
+To avoid any confusion, I will not include that code here because it will not run locally.
 
 ### Generate data bundles
 
@@ -839,14 +861,14 @@ Import matrix data that was formatted on the HPC via loop. Objects were saved as
 umfs = list()
 
 ## list all files that should be imported 
-files = list.files(here::here("data/import_UMF_from_HPC"))
+files = list.files(here::here("data_GitHub_UMFs"))
 files = files[!grepl("OLD", files)] # remove any old data 
 
 for(i in 1:length(files)){
   
   #import the file
   f = files[i]
-  path = paste("data/import_UMF_from_HPC/", f, sep = "")
+  path = paste("data_GitHub_UMFs/", f, sep = "")
   u = readRDS(here::here(path))
   
   #save it in a list 
@@ -1247,7 +1269,6 @@ for(i in 1:length(umfs)){ # repeat for each first speices
                  flii = covs$Avg_FLLI_3km,                   # Site covaraite 1
                  hfp = covs$Avg_human_footprint_3km,         # Site covaraite 2
                  elev = covs$Avg_altitude_3km,               # Site covaraite 3
-                 hunt = covs$Avg_hunting_accessibility_3km,  # Site covariate 4
                  cams = obs,                                 # Observation covaraite 1
                  narea = length(unique(covs$land.num)),      # number of levels in landscape RE
                  area = covs$land.num,                       # Landscape random effect (as.num)
@@ -1284,7 +1305,10 @@ names(bdata_list) # looks good!
 
 ### Reorganize list for efficent analysis
 
-After some prelimiary testing, I realized that all co-abundance models should NOT run on the same amount of RAM... Most complete w/ 100 GB, but some need 250 or even 500 GB to complete. Rather than letting heavy models fail for a slow burn, I will reorganize the list into 100, 250, or 500 GB lists. This process will be acheived by inspecting the OE (output or error) files extracted from the HPC when each job runs. 
+After some preliminary testing, I realized that all co-abundance models should NOT run on the same amount of RAM... Most complete w/ 100 GB, but some need 250 or even 500 GB to complete. Rather than letting heavy models fail for a slow burn, I will reorganize the list into 100, 250, or 500 GB lists. This process will be achieved by inspecting the OE (output or error) files extracted from the HPC when each job runs. 
+
+NOTE, these files are not hosted on GitHub due to storage limitations. You can complete the analysis as outlined in the materials and methods section by implementing the SLURM code called: SLURM_co-abundance_array_HALF_LONG_3Chain_100gb, 250gb, & 500GB.txt. 
+
 ```{r Use OE files to determine GB per list, echo=FALSE}
 
 ## First, examine how many OE files we have 
@@ -1430,7 +1454,10 @@ rm(inspect, jobs, sp)
 
 ### Save the final list of bundled data
 
-Now that all species pairs are established, the data is properly formatted, and everything is clean, its time to save the data! We will send it to the HPC to run on the R script called: data/HPC_code/HPC_co-abundance_model.R
+Now that all species pairs are established, the data is properly formatted, and everything is clean, its time to save the data! We will send it to the HPC to run on the R script called: data/HPC_code/HPC_co-abundance_model_final.R
+
+Alternatively, I could save the list as a single object rather than splitting it up. 
+
 
 ```{r save bundled data!, echo=FALSE}
 
@@ -1442,43 +1469,43 @@ date = paste(year,month,day, sep = "")
 rm(day,month,year)
  
 
-## Save data per preference AND GB requirements!
-# pref 100 GB
-# save = bdata_list[names(bdata_list) %in% 
-#                     jobs_final$Species_Pair[jobs_final$RAM == "100GB"] & 
-#                     names(bdata_list) %in% 
+# # Save data per preference AND GB requirements!
+# # pref 100 GB
+# save = bdata_list[names(bdata_list) %in%
+#                     jobs_final$Species_Pair[jobs_final$RAM == "100GB"] &
+#                     names(bdata_list) %in%
 #                             jobs_final$Species_Pair[jobs_final$preference == "preferred"]]
-# saveRDS(save, here::here(paste("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_preferred_100GB_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
-# pref 250 GB
-# save = bdata_list[names(bdata_list) %in% 
-#                     jobs_final$Species_Pair[jobs_final$RAM == "250GB"] & 
-#                     names(bdata_list) %in% 
+# saveRDS(save, here::here(paste("data_GitHub_CoA_bundles/Bundled_data_for_Bayes_co-abundance_mods_preferred_100GB_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
+# # pref 250 GB
+# save = bdata_list[names(bdata_list) %in%
+#                     jobs_final$Species_Pair[jobs_final$RAM == "250GB"] &
+#                     names(bdata_list) %in%
 #                             jobs_final$Species_Pair[jobs_final$preference == "preferred"]]
-# saveRDS(save, here::here(paste("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_preferred_250GB_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
-# pref 500 GB
-# save = bdata_list[names(bdata_list) %in% 
-#                     jobs_final$Species_Pair[jobs_final$RAM == "500GB"] & 
-#                     names(bdata_list) %in% 
+# saveRDS(save, here::here(paste("data_GitHub_CoA_bundles/Bundled_data_for_Bayes_co-abundance_mods_preferred_250GB_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
+# # pref 500 GB
+# save = bdata_list[names(bdata_list) %in%
+#                     jobs_final$Species_Pair[jobs_final$RAM == "500GB"] &
+#                     names(bdata_list) %in%
 #                             jobs_final$Species_Pair[jobs_final$preference == "preferred"]]
-# saveRDS(save, here::here(paste("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_preferred_500GB_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
-# NON-pref 100 GB
-# save = bdata_list[names(bdata_list) %in% 
-#                     jobs_final$Species_Pair[jobs_final$RAM == "100GB"] & 
-#                     names(bdata_list) %in% 
+# saveRDS(save, here::here(paste("data_GitHub_CoA_bundles/Bundled_data_for_Bayes_co-abundance_mods_preferred_500GB_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
+# # NON-pref 100 GB
+# save = bdata_list[names(bdata_list) %in%
+#                     jobs_final$Species_Pair[jobs_final$RAM == "100GB"] &
+#                     names(bdata_list) %in%
 #                             jobs_final$Species_Pair[jobs_final$preference == "community"]]
-# saveRDS(save, here::here(paste("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_community_100GB_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
-# NON-pref 250 GB
+# saveRDS(save, here::here(paste("data_GitHub_CoA_bundles/Bundled_data_for_Bayes_co-abundance_mods_community_100GB_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
+# # NON-pref 250 GB
 # save = bdata_list[names(bdata_list) %in%
 #                     jobs_final$Species_Pair[jobs_final$RAM == "250GB"] &
 #                     names(bdata_list) %in%
 #                             jobs_final$Species_Pair[jobs_final$preference == "community"]]
-# saveRDS(save, here::here(paste("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_community_250GB_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
-# NON-pref 500 GB
+# saveRDS(save, here::here(paste("data_GitHub_CoA_bundles/Bundled_data_for_Bayes_co-abundance_mods_community_250GB_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
+# # NON-pref 500 GB
 # save = bdata_list[names(bdata_list) %in%
 #                     jobs_final$Species_Pair[jobs_final$RAM == "500GB"] &
 #                     names(bdata_list) %in%
 #                             jobs_final$Species_Pair[jobs_final$preference == "community"]]
-# saveRDS(save, here::here(paste("data/send_to_HPC/Bundled_data_for_Bayes_co-abundance_mods_community_500GB_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
+# saveRDS(save, here::here(paste("data_GitHub_CoA_bundles/Bundled_data_for_Bayes_co-abundance_mods_community_500GB_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
 
 
 ```
@@ -1489,28 +1516,28 @@ rm(day,month,year)
 After running a meta-regression of hunting's effect on all species, we observed a counter-intuitive positive trend. Therefore, to make sure results are robust to the effect of hunting, I will save the 20 preferred models we have significant results for, and re-run them with log(hunting) and without the hunting var. Any sensitive results to hunting should then make itself clear. 
 
 ```{r generate testing bundles, echo=FALSE}
-
-## import results of completed mods and results 
-preform = read.csv("/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_trophic_cascades_co-abundance/results/summarized_results/model_performance_and_SIVs_20231215.csv")
-# inspect
-head(preform)
-
-## grab the sp pairs that are supported and preferred
-preform = preform[preform$support_liberal == "Supported" & preform$preference == "preferred",]
-
-## verify which GBs we need here
-table(jobs_final$RAM[jobs_final$Species_Pair %in% preform$Species_Pair]) # all options, lovely. 
-# majority are 250, so work with that. 
-preform = preform[preform$Species_Pair %in% jobs_final$Species_Pair[jobs_final$RAM == "250GB"],]
-
-## who are we working with?
-select(preform, Species_Pair, Significance, direction)
-# significant top-down and bottom-up results. Good! 
-
-## save em! 
-# save = bdata_list[names(bdata_list) %in% preform$Species_Pair]
-# saveRDS(save, here::here(paste("data/send_to_HPC/Bundled_data_for_HUNTING_SENSITIVITY_co-abundance_mods_250GB_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
-# rm(save)
+ 
+# ## import results of completed mods and results 
+# preform = read.csv("/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_trophic_cascades_co-abundance/results/summarized_results/model_performance_and_SIVs_20231215.csv")
+# # inspect
+# head(preform)
+# 
+# ## grab the sp pairs that are supported and preferred
+# preform = preform[preform$support_liberal == "Supported" & preform$preference == "preferred",]
+# 
+# ## verify which GBs we need here
+# table(jobs_final$RAM[jobs_final$Species_Pair %in% preform$Species_Pair]) # all options, lovely. 
+# # majority are 250, so work with that. 
+# preform = preform[preform$Species_Pair %in% jobs_final$Species_Pair[jobs_final$RAM == "250GB"],]
+# 
+# ## who are we working with?
+# select(preform, Species_Pair, Significance, direction)
+# # significant top-down and bottom-up results. Good! 
+# 
+# ## save em! 
+# # save = bdata_list[names(bdata_list) %in% preform$Species_Pair]
+# # saveRDS(save, here::here(paste("data/send_to_HPC/Bundled_data_for_HUNTING_SENSITIVITY_co-abundance_mods_250GB_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
+# # rm(save)
 
 ```
 

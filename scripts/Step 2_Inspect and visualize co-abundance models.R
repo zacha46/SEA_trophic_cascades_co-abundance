@@ -1,11 +1,11 @@
 ##### Inspect and visualize completed co-abundance models
 #### Data was prepared on R Script: Step 1_Generate co-abundance data bundles.Rmd
 #### and ran on HPC on R Script: HPC_co-abundance_model_final.R
-### Will convert this to Rmd when ready, but R script for exploring now
-## Import dataframes, not complete models b/c theyre too heavy
+### Will convert this to Rmd when finalized, but R script for exploring now
+## Import dataframes, not complete models b/c they're too heavy
 
 # Zachary Amir, Z.Amir@uq.edu.au
-# Last updated on Feb 28th, 2024
+# Last updated on 4th of July, 2024
 
 ## start fresh
 rm(list = ls())
@@ -21,7 +21,6 @@ library(lme4)         # For meta-regressions of model coefficents
 # library(metafor)     # for meta-analysis of effect sizes
 # library(ggpubr)      # for fancy histo + density plots 
 # library(fs)          # for moving files around 
-# library(ggridges)    # for ridgeline plots 
 # library(reshape2)    # for making checkerboard matrix 
 # library(leaflet)     # for creating concepts of study map
 # library(colortools)  # for nice colors in the map
@@ -29,11 +28,11 @@ library(lme4)         # For meta-regressions of model coefficents
 # library(traitdata)   # for species trait data
 
 ## set WD (should be automatic b/c RProj, but being safe anyway)
-setwd("/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_trophic_cascades_co-abundance")
+# setwd("/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_trophic_cascades_co-abundance")
 
 ## Import clean cam trap data here for referencing
 og_resamp_captures = read.csv("data_GitHub/clean_captures_to_make_UMFs_20240228.csv")
-og_resamp_meta = read.csv("data_GitHub/clean_metadata_to_make_UMFs_20240228.csv")
+og_resamp_meta = read.csv("data_GitHub/clean_metadata_to_make_UMFs_20240603.csv")
 
 ## should also import NON-resampled data for referencing too! 
 # og_captures = read.csv("/Users/zachary_amir/Dropbox/CT capture histories database/Asian ECL raw CT data/Step4_output_pre-resampling/Clean_independent_captures_20230610.csv")
@@ -2111,7 +2110,7 @@ table(preform$preference) # these are the same, good!
 ##
 ###
 #### First examine the summary stats and distributions of the overall dataset 
-### BUT, only really interested in the subordinate species (i.e where SIV lives)
+### BUT, only really interested in the subordinate species (i.e. where SIV lives)
 ##
 #
 
@@ -2158,109 +2157,241 @@ hist(coeff$mean[coeff$var == "Species_Interaction"& coeff$support == "Supported"
 #### Begin regressions! 
 
 ### first grab the relevant subset of data 
-dat = coeff[coeff$preference == "preferred"  & 
-              grepl("SUB", coeff$species) & 
+dat = coeff[coeff$preference == "preferred"  & ## only preferred models 
+              grepl("SUB", coeff$species) &    ## only interested in effect in subordinate species 
               coeff$var %in% c("Elevation", "HFP", "FLII", "Species_Interaction"), ]
-# create a new column for top-down vs bottom-up vs unsupported
-dat$dir_support = dat$support
-dat$dir_support[grepl("Unsupport", dat$dir_support)] = "unsupported" # standardize levels 
-dat$dir_support[dat$dir_support == "Supported" & dat$direction == "top-down"] = "top-down"
-dat$dir_support[dat$dir_support == "Supported" & dat$direction == "bottom-up"] = "bottom-up"
-table(dat$dir_support) # divide each by 4 for total number of mods 
 
-## lets also create a new column to denote if the subordinate species is a predator or prey 
+## Create a new column to denote if the subordinate species is a predator or prey 
 dat$pred_prey = "prey" # assume prey 
 dat$pred_prey[dat$sub_sp %in% c("Panthera_pardus","Panthera_tigris",
                                 "Cuon_alpinus", "Neofelis_genus")] = "predator"
+
+# create a new column that incorporates predator vs prey and top-down vs bottom up 
+dat$dir_support = dat$support # but basing it off levels of support
+dat$dir_support[dat$dir_support == "Supported" & dat$direction == "top-down"] = "supported_top-down"      # this is auto prey
+dat$dir_support[dat$dir_support == "Supported" & dat$direction == "bottom-up"] = "supported_bottom-up"    # this is auto predators
+dat$dir_support[grepl("Unsupport", dat$support) & dat$direction == "top-down"] = "unsupported_top-down"   # this is auto prey
+dat$dir_support[grepl("Unsupport", dat$support) & dat$direction == "bottom-up"] = "unsupported_bottom-up" # this is auto predators
+table(dat$dir_support) # divide each by 4 for total number of mods (b/c 4 covs per mod)
+
+## Combine support and pred prey as well, could be useful
+dat$support_pred_prey = paste(dat$support, dat$pred_prey, sep = "-")
+table(dat$support_pred_prey) ## this could be the move! 
+table(dat$support_pred_prey[dat$var == 'Species_Interaction'])## still has all levels present. 
 
 ## also remove parameters that did not properly converge (i.e Rhat > 1.2)
 summary(dat$Rhat) # there are some big values! Dont want to include them, but we want to know how many we removed. 
 ## create a new column to track which params converged and which didnt 
 dat$convergence = "yes"
 dat$convergence[dat$Rhat > 1.2] = "no"
-table(dat$convergence) # obvi vast majority are yes, but not when no on the figure. 
+table(dat$convergence) # obvi vast majority are yes
 table(dat$var);table(dat$var[dat$convergence == "yes"]) # full, then reduced. 
+### Update! Want to examine effect of covariates in unsupported models to see if they 
+### match our interpretations for unsupported mods (fig S1, made in ppt).
+### so will probably include SIV values that do have poorly converging parameters. 
+table(dat$convergence[dat$convergence == "yes"]);table(dat$dir_support)
 
 
-### Will run two kinds of regressions
+### Will run 3ish kinds of regressions
 ## Want to examine SIV between top-down/bottom-up/unsupported
 ## Want to examine all other variables split between predator and prey (so two regressions here)
+### BUT, I want these predator-prey models split according to levels of support! 
+### potentially supported vs unsupported, or multiple levels of unsupported... see what happens! 
+
+## loop through so we dont have to code them all out 
+support_pred_prey = unique(dat$support_pred_prey)
+# store results here
+res = list()
+# loopin' 
+for(i in 1:length(support_pred_prey)){
+  # select a pred or prey
+  p = support_pred_prey[i]
+  
+  ## make the mod
+  m = lmer(mean ~ var-1 + (1 | sub_sp), weights = 1/sd, REML = FALSE, 
+           data = dat[dat$var != "Species_Interaction" &
+                        dat$support_pred_prey == p, ])
+  ## extract values
+  m1 = as.data.frame(summary(m)$coefficients)
+  
+  ## clean up the df
+  m1$var = rownames(m1)
+  m1$var = gsub("var", "", m1$var)
+  names(m1) = c("estimate", "SE", "t value", "var")
+  rownames(m1) = NULL
+  
+  ## let us know if the model converged or not. 
+  if(is.null(summary(m)$optinfo$conv$lme4$messages)){
+    m1$warning = "none"
+  }else{
+    m1$warning = summary(m)$optinfo$conv$lme4$messages
+  }
+  
+  ## explicitly note which model this was
+  m1$support_pred_prey = p
+
+  ## and save it 
+  res[[i]] = m1
+  
+} # end per pred prey 
+rm(i,p,m,m1,weights,
+   support_pred_prey)
+## check results 
+res = do.call(rbind, res)
+str(res)
+tail(res)
+summary(res)
+unique(res$support_pred_prey[res$warning != "none"])# 3 warnings, not ideal! 
 
 #
 ##
-### run the predator regression
-m1 = lmer(mean ~ var-1 + (1 | sub_sp), weights = 1/sd, REML = FALSE, 
-          data = dat[dat$convergence == "yes" &
-                       dat$var != "Species_Interaction" &
-                       dat$pred_prey == "predator", ])
-summary(m1) # looks good, no warnings
-
-## extract the values out of here
-m1 = as.data.frame(summary(m1)$coefficients)
-
-## clean up the df
-m1$var = rownames(m1)
-m1$var = gsub("var", "", m1$var)
-names(m1) = c("estimate", "SE", "t value", "var")
-rownames(m1) = NULL
-
-## explicitly note which model this was
-m1$mod_type = "predator"
-
-# inspect
-m1 # looks good! 
-
-#
-##
-### run the prey regression
-m2 = lmer(mean ~ var-1 + (1 | sub_sp), weights = 1/sd, REML = FALSE, 
-          data = dat[dat$convergence == "yes" &
-                       dat$var != "Species_Interaction" &
-                       dat$pred_prey == "prey", ])
-summary(m2) # looks good, no warnings
-
-## extract the values out of here
-m2 = as.data.frame(summary(m2)$coefficients)
-
-## clean up the df
-m2$var = rownames(m2)
-m2$var = gsub("var", "", m2$var)
-names(m2) = c("estimate", "SE", "t value", "var")
-rownames(m2) = NULL
-
-## explicitly note which model this was
-m2$mod_type = "prey"
-
-# inspect
-m2 # looks good! 
-
-#
-##
-### run the SIV regression
-m3 = lmer(mean ~ dir_support-1 + (1 | sub_sp), weights = 1/sd, REML = FALSE, 
-          data = dat[dat$convergence == "yes" &
-                       dat$var == "Species_Interaction",])
-summary(m3) # looks good, no warnings
+###
+#### Now run the one model that examines species interactions 
+m3 = lmer(mean ~ support_pred_prey-1 + (1 | sub_sp), weights = 1/sd, REML = FALSE, 
+          data = dat[dat$var == "Species_Interaction",]) 
+# m3 = lm(mean ~ support_pred_prey-1 , weights = 1/sd, 
+#           data = dat[dat$var == "Species_Interaction",]) # compared effect sizes and they are the same. 
+summary(m3) # getting hessian error, but no change in effect size
 
 ## extract the values out of here
 m3 = as.data.frame(summary(m3)$coefficients)
 
 ## clean up the df
-m3$mod_type = rownames(m3) ## this is different from others! how we note which mod is which is based on independent var here
-m3$mod_type = gsub("dir_support", "", m3$mod_type)
+m3$support_pred_prey = rownames(m3) ## this is different from others! how we note which mod is which is based on independent var here
+m3$support_pred_prey = gsub("support_pred_prey", "", m3$support_pred_prey)
 m3$var = "SIV"
 names(m3)[1:3] = c("estimate", "SE", "t value")
 rownames(m3) = NULL
 
+## match res format
+m3$warning = "boundary (singular) fit: see help('isSingular')" 
+
 # inspect
 m3 # looks good! 
 
-## combine them! 
-es_final = rbind(m1,m2,m3)
+## combine! 
+es_final = rbind(m3, res)
 
-## check it out
-es_final # looks good! hopfully it plots well. 
-rm(m1,m2,m3, weights)
+head(es_final);tail(es_final) # will need to split support and pred-prey 
+
+es_final = separate(es_final, support_pred_prey, c("support", "pred_prey"), sep = "-", remove = F)
+head(es_final) # good! 
+
+summary(es_final$estimate) # narrow range is good! 
+summary(es_final$SE) # even smaller, great. 
+
+## unsup_1 explanation is poor model fit and unconverged SIV
+for(i in 1:length(unique(es_final$var))){
+  print(unique(es_final$var)[i])
+  print(summary(es_final$estimate[es_final$support == "Unsupported_1" & 
+                                    es_final$var == unique(es_final$var)[i]]))
+}
+## These might be all over the place, least trustworthy results. 
+## possibly dont include these in the figure
+
+## unsup_2 explaination is that covs in model are more informative than sp interaction
+for(i in 1:length(unique(es_final$var))){
+  print(unique(es_final$var)[i])
+  print(summary(es_final$estimate[es_final$support == "Unsupported_2" & 
+                                    es_final$var == unique(es_final$var)[i]]))
+}
+## elevation and HFP have bigger mean ES than SIV, tho FLII is a close tie. 
+## interesting that SIV is all negative tho... 
+sort(unique(coeff$mean[coeff$var == "Species_Interaction" & 
+                         coeff$preference == "preferred" & 
+                         coeff$support == "Unsupported_2"]))
+# 2 out of 13 results are not negative. 
+
+## Unsup_3 explanation is that unmoddeled covs are more informative than sp interaction
+for(i in 1:length(unique(es_final$var))){
+  print(unique(es_final$var)[i])
+  print(summary(es_final$estimate[es_final$support == "Unsupported_3" & 
+                                    es_final$var == unique(es_final$var)[i]]))
+}
+## SIV is alllll positive, echoing Brodie's co-abundance model and finding generally positive trends
+## that are thought to be due to unmodelled covariates. 
+### This could support spurious correlations and that we are avoiding them! 
+
+## OLD APPROACH
+# before I included more unsupported results
+{
+  # #
+  # ##
+  # ### run the predator regression
+  # m1 = lmer(mean ~ var-1 + (1 | sub_sp), weights = 1/sd, REML = FALSE, 
+  #           data = dat[dat$convergence == "yes" &
+  #                        dat$var != "Species_Interaction" &
+  #                        dat$pred_prey == "predator", ])
+  # summary(m1) # looks good, no warnings
+  # 
+  # ## extract the values out of here
+  # m1 = as.data.frame(summary(m1)$coefficients)
+  # 
+  # ## clean up the df
+  # m1$var = rownames(m1)
+  # m1$var = gsub("var", "", m1$var)
+  # names(m1) = c("estimate", "SE", "t value", "var")
+  # rownames(m1) = NULL
+  # 
+  # ## explicitly note which model this was
+  # m1$mod_type = "predator"
+  # 
+  # # inspect
+  # m1 # looks good! 
+  # 
+  # #
+  # ##
+  # ### run the prey regression
+  # m2 = lmer(mean ~ var-1 + (1 | sub_sp), weights = 1/sd, REML = FALSE, 
+  #           data = dat[dat$convergence == "yes" &
+  #                        dat$var != "Species_Interaction" &
+  #                        dat$pred_prey == "prey", ])
+  # summary(m2) # looks good, no warnings
+  # 
+  # ## extract the values out of here
+  # m2 = as.data.frame(summary(m2)$coefficients)
+  # 
+  # ## clean up the df
+  # m2$var = rownames(m2)
+  # m2$var = gsub("var", "", m2$var)
+  # names(m2) = c("estimate", "SE", "t value", "var")
+  # rownames(m2) = NULL
+  # 
+  # ## explicitly note which model this was
+  # m2$mod_type = "prey"
+  # 
+  # # inspect
+  # m2 # looks good! 
+  
+  # #
+  # ##
+  # ### run the SIV regression
+  # m3 = lmer(mean ~ dir_support-1 + (1 | sub_sp), weights = 1/sd, REML = FALSE, 
+  #           data = dat[dat$convergence == "yes" &
+  #                        dat$var == "Species_Interaction",])
+  # summary(m3) # looks good, no warnings
+  # 
+  # ## extract the values out of here
+  # m3 = as.data.frame(summary(m3)$coefficients)
+  # 
+  # ## clean up the df
+  # m3$mod_type = rownames(m3) ## this is different from others! how we note which mod is which is based on independent var here
+  # m3$mod_type = gsub("dir_support", "", m3$mod_type)
+  # m3$var = "SIV"
+  # names(m3)[1:3] = c("estimate", "SE", "t value")
+  # rownames(m3) = NULL
+  # 
+  # # inspect
+  # m3 # looks good! 
+  # 
+  # ## combine them! 
+  # es_final = rbind(m1,m2,m3)
+  # 
+  # ## check it out
+  # es_final # looks good! hopfully it plots well. 
+  # rm(m1,m2,m3, weights)
+  }
+
 
 
 ## prep the data for plotting 
@@ -2281,30 +2412,44 @@ es_final$var = factor(es_final$var, levels = c( "D) Species interaction",
                                                 "C) Elevation",
                                                 "B) Forest integrity",
                                                 "A) Human footprint"))
-es_final$mod_type = factor(es_final$mod_type, levels = c("predator", "prey","unsupported","bottom-up","top-down"))
+# es_final$mod_type = factor(es_final$mod_type, levels = c("predator", "prey","unsupported","bottom-up","top-down"))
+es_final$support = factor(es_final$support, levels = c("Unsupported_1", "Unsupported_2", "Unsupported_3", "Supported"))
+es_final$pred_prey = factor(es_final$pred_prey, levels = c("predator", "prey"))
 
 ## manually specify which shape is which 
-es_final$shapes[es_final$mod_type %in% c("unsupported","bottom-up","top-down")] = "15"
-es_final$shapes[es_final$mod_type %in% c("predator")] = "21"
-es_final$shapes[es_final$mod_type %in% c("prey")] = "17"
+# es_final$shapes[es_final$pred_prey %in% c("predator")] = "21"
+# es_final$shapes[es_final$pred_prey %in% c("prey")] = "17"
+# table(es_final$shapes)
+# es_final$shapes[es_final$mod_type %in% c("unsupported","bottom-up","top-down")] = "15"
+# es_final$shapes[es_final$mod_type %in% c("predator")] = "21"
+# es_final$shapes[es_final$mod_type %in% c("prey")] = "17"
 
+# ## manually assign colors to match previous colors 
+# es_final$colors[es_final$support == "Supported" & es_final$pred_prey == "prey"] = "darkorange4" # same as top-down 
+# es_final$colors[es_final$support == "Supported" & es_final$pred_prey == "predator"] = "springgreen4" # same as bottom-up
+# es_final$colors[es_final$support == "Unsupported_1"] = "gray87"
+# es_final$colors[es_final$support == "Unsupported_2"] = "gray55"
+# es_final$colors[es_final$support == "Unsupported_3"] = "gray32"
+# table(es_final$colors) # all good! 
 
+### Easier to assign shapes and colors in the ggplot! 
 
 ## Make the ggplot
-# p =
-  ggplot(es_final, aes(x = var, y = estimate, ymin=lower, ymax=upper))+
-  geom_pointrange(aes(color = mod_type, shape = shapes), size = 2, lwd = 2, # fatten = 1, 
+p =
+ggplot(es_final[es_final$pred_prey == "predator" #& 
+                  # es_final$support != "Unsupported_1"
+                ,], aes(x = var, y = estimate, ymin=lower, ymax=upper))+
+  geom_pointrange(aes(color = support, shape = pred_prey), size = 2, lwd = 2, # fatten = 1, 
                   position= position_dodge(width=.7))+
-  scale_color_manual(values = c("top-down" =  "darkorange4",
-                                "bottom-up" = "springgreen4",
-                                "unsupported" = "gray30",
-                                "predator" = "dodgerblue2",#  "purple4", # "skyblue1", 
-                                "prey" = "deepskyblue1"  # "purple1"#  "slateblue1"
-  ))+
+  scale_color_manual(values = c("Supported" = "dodgerblue2",
+                                "Unsupported_1" = "gray87",
+                                "Unsupported_2" = "gray55",
+                                "Unsupported_3" = "gray32"))+
+  # scale_shape_manual(values = c("predator" = 15, "prey" = 17))+
   geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.6)+
   coord_flip() +  # flip coordinates (puts labels on y axis)
   labs(y = "Weighted effect size", x = NULL) +
-    theme_bw()+
+  theme_bw()+
   theme(axis.text.x = element_text(size = 22),
         axis.text.y = element_text(size = 22),
         axis.title.x = element_text(size = 22),
@@ -2313,26 +2458,24 @@ es_final$shapes[es_final$mod_type %in% c("prey")] = "17"
         legend.text = element_text(size = 22, family = "Helvetica"),
         text = element_text(family = "Helvetica"))
 ## Save this
-# ggsave(paste("explore/Wieghted_coefficents_regression_supported_preferred_mods_sub_sp_only_", date, ".png", sep = ""),
-#        p, width = 12, height = 9, units = "in")
+# ggsave(paste("explore/Wieghted_coefficents_regression_preferred_mods_bottom-up_sub_predators_", date, ".png", sep = ""),
+#        p, width = 13, height = 9, units = "in")
 
-### Swap factor order for a nicer label b/c of coord_flip
-es_final$mod_type = factor(es_final$mod_type, levels = c("prey","predator", "top-down", "bottom-up","unsupported"))
-
-## Make the ggplot for the label 
+### Remake the plot, but for prey! 
 p =
-  ggplot(es_final, aes(x = var, y = estimate, ymin=lower, ymax=upper))+
-  geom_point(aes(color = mod_type, shape = shapes), size = 6,
-             position= position_dodge(width=.7))+
+  ggplot(es_final[es_final$pred_prey == "prey" #& 
+                  # es_final$support != "Unsupported_1"
+                  ,], aes(x = var, y = estimate, ymin=lower, ymax=upper))+
+  geom_pointrange(aes(color = support, shape = pred_prey), size = 2, lwd = 2, # fatten = 1, 
+                  position= position_dodge(width=.7))+
+  scale_color_manual(values = c("Supported" = "dodgerblue2",
+                                "Unsupported_1" = "gray87",
+                                "Unsupported_2" = "gray55",
+                                "Unsupported_3" = "gray32"))+
+  # scale_shape_manual(values = c("predator" = 15, "prey" = 17))+
   geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.6)+
   coord_flip() +  # flip coordinates (puts labels on y axis)
   labs(y = "Weighted effect size", x = NULL) +
-  scale_color_manual(values = c("top-down" =  "darkorange4",
-                                "bottom-up" = "springgreen4",
-                                "unsupported" = "gray30",
-                                "predator" = "dodgerblue2", # "skyblue1",
-                                "prey" = "deepskyblue1"#  "slateblue1"
-  ))+
   theme_bw()+
   theme(axis.text.x = element_text(size = 22),
         axis.text.y = element_text(size = 22),
@@ -2340,13 +2483,54 @@ p =
         axis.text = element_text(color = "black"),
         legend.title = element_text(size = 22, family = "Helvetica"),
         legend.text = element_text(size = 22, family = "Helvetica"),
-        text = element_text(family = "Helvetica"))+
-  guides(color = guide_legend(override.aes = list(shape = c(17, 15, 16, 16, 16))))
+        text = element_text(family = "Helvetica"))
+## Save this
+# ggsave(paste("explore/Wieghted_coefficents_regression_preferred_mods_top-down_sub_prey_", date, ".png", sep = ""),
+#        p, width = 13, height = 9, units = "in")
+
+
+### Swap factor order for a nicer label b/c of coord_flip
+# es_final$mod_type = factor(es_final$mod_type, levels = c("prey","predator", "top-down", "bottom-up","unsupported"))
+es_final$support = factor(es_final$support, levels = c("Supported","Unsupported_3","Unsupported_2", "Unsupported_1"))
+
+
+## Make the ggplot for the label 
+p =
+  ggplot(es_final[es_final$pred_prey == "prey" #& 
+                  # es_final$support != "Unsupported_1"
+                  ,], aes(x = var, y = estimate, ymin=lower, ymax=upper))+
+  geom_pointrange(aes(color = support, shape = pred_prey), size = 2, lwd = 2, # fatten = 1, 
+                  position= position_dodge(width=.7))+
+  scale_color_manual(values = c("Supported" = "dodgerblue2",
+                                "Unsupported_1" = "gray87",
+                                "Unsupported_2" = "gray55",
+                                "Unsupported_3" = "gray32"))+
+  # scale_shape_manual(values = c("predator" = 15, "prey" = 17))+
+  geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.6)+
+  coord_flip() +  # flip coordinates (puts labels on y axis)
+  labs(y = "Weighted effect size", x = NULL) +
+  theme_bw()+
+  theme(axis.text.x = element_text(size = 22),
+        axis.text.y = element_text(size = 22),
+        axis.title.x = element_text(size = 22),
+        axis.text = element_text(color = "black"),
+        legend.title = element_text(size = 22, family = "Helvetica"),
+        legend.text = element_text(size = 22, family = "Helvetica"),
+        text = element_text(family = "Helvetica"))
 
 ## Save this
 # ggsave(paste("explore/STEAL THIS LABEL_", date, ".png", sep = ""),
-#        p, width = 12, height = 9, units = "in")
+#        p, width = 13, height = 9, units = "in")
 
+## get sample sizes (i.e. number of mods) and add to ppt manually
+# bottom-up preds sub
+table(coeff$support[coeff$preference == "preferred" & 
+                      coeff$direction == "bottom-up" & 
+                      coeff$var == "Species_Interaction"])
+# top-down prey sub
+table(coeff$support[coeff$preference == "preferred" & 
+                      coeff$direction == "top-down" & 
+                      coeff$var == "Species_Interaction"])
 
  
 # ### What does the hunting variable mean? 
@@ -2368,6 +2552,180 @@ p =
 # 
 # rm(hunt_sum, res, sum, p, a)
 
+
+###### Bring back the double pairwise SIV comparison ######
+
+## This was implemented almost a year ago, but now I think were better positoned to interpret the results. 
+
+### The goal here is to assess both directions of a species pair, e.g.:
+## SUB-Tapirus_indicus~DOM-Panthera_tigris vs SUB-Panthera_tigris~DOM-Tapirus_indicus
+# To determine the overall direciton of the relationship. 
+
+preform[preform$Species_Pair == "SUB-Tapirus_indicus~DOM-Panthera_tigris", 
+        c("Interaction_Estimate","lower","upper", "Significance")] # clear positive effect of tigs on taps 
+
+preform[preform$Species_Pair == "SUB-Panthera_tigris~DOM-Tapirus_indicus", 
+        c("Interaction_Estimate","lower","upper", "Significance")] # unclear negative effect of taps on tigs. 
+
+## We would move in favor of the larger and more significant response --> 
+## tigers possibly bottom-up limited by taps, but both could be sharing responses to unmeasured covarites.  
+
+## what is the difference in the interaction?
+preform$Interaction_Estimate[preform$Species_Pair == "SUB-Tapirus_indicus~DOM-Panthera_tigris"] -
+  preform$Interaction_Estimate[preform$Species_Pair == "SUB-Panthera_tigris~DOM-Tapirus_indicus"] 
+# Again, this is a larger positive difference in interactions, suggesting a positive (bottom-up relationship)
+
+
+## Make a plot comparing both interactions (i.e. when large carnivores are dominant AND subordinate)
+## to determine direction of relationship for each species pairs 
+plots = list() #store plots here
+
+for(i in 1:length(unique(coeff$Species_Pair[coeff$preference == "preferred"]))){
+  
+  ## grab the name of the species pair 
+  n = unique(coeff$Species_Pair[coeff$preference == "preferred"])[i]
+  
+  ##subset coeff for it 
+  a = coeff[coeff$Species_Pair == n, ]
+  
+  # and for the the complementary species pair data.
+  b = subset(coeff, sub_sp == unique(a$dom_sp) & dom_sp == unique(a$sub_sp))
+  
+  ## then combine
+  dat = rbind(a[a$var == "Species_Interaction",],
+              b[b$var == "Species_Interaction",])
+  
+  ## bypass models that are missing their complement 
+  if(nrow(dat)<2){
+    next
+  }
+  
+  ## add a col for which position by looking for all dominant large carnivores
+  dat$dom_position = ifelse(dat$dom_sp %in% c("Panthera_tigris","Panthera_pardus",
+                                              "Neofelis_genus","Cuon_alpinus"),
+                            "Large_carnivore", "Prey")
+  
+  ## set the dom_pos as a factor 
+  # dat$dom_position = factor(dat$dom_position, levels = c( "Large_carnivore", "Prey"))
+  
+  # Add a column for significance marker
+  dat$marker <- ifelse(dat$sig == "Significant", "*", "")
+  
+  ## if there is a large carnivore pairwise comparison,
+  if(length(unique(dat$dom_position)) == 1){
+    
+    # Calculate the difference in effect sizes just by 1-2
+    dat$diff = dat$mean[1] - dat$mean[2]
+    
+    # and change dom_guild to the large carnivore species names
+    dat$dom_position = dat$dom_sp
+    
+    # but if its not two large carnivores, 
+  }else{
+    
+    # Calculate the difference in effect sizes following a standard order
+    dat$diff = dat$mean[dat$dom_position == "Large_carnivore"] - dat$mean[dat$dom_position == "Prey"]
+    
+  }
+  
+  ## combine both species pairs for the ID
+  id = paste(dat$Species_Pair[1], dat$Species_Pair[2], sep = " & ")
+  
+  ## combine dom and sub species for a title 
+  title = paste(dat$dom_sp[1], dat$sub_sp[1], sep = " & ")
+  
+  ## set bar dodge width 
+  dodge_width = 0.8
+  
+  # Assign colors based on unique dominant positions
+  colors <- c("Prey" = "mediumslateblue", "Large_carnivore" = "mediumseagreen", 
+              "Cuon_alpinus" = "red1", "Panthera_pardus" = "purple1",
+              "Panthera_tigris" = "orange1", "Neofelis_genus" = "blue1")
+  colors <- colors[unique(dat$dom_position)]
+  
+  ## make the plot
+  p =
+    ggplot(dat, aes(x = var, y = mean, fill = dom_position)) +
+    geom_bar(stat = "identity", position = position_dodge(width = dodge_width), 
+             color = "black", width = dodge_width) +
+    geom_errorbar(aes(ymin = lower, ymax = upper), 
+                  position = position_dodge(width = dodge_width), width = 0, color = "black") +
+    geom_text(aes(y = mean+.2*sign(mean), label = marker), 
+              position = position_dodge(width = dodge_width), size = 8) +
+    geom_text(aes(y = .04, label = support), 
+              position = position_dodge(width = dodge_width), size = 4.5,  hjust = 0.5) +
+    geom_text(aes(y = .04, label = direction), 
+              position = position_dodge(width = dodge_width), size = 4.5,  hjust = 0.5, vjust = 4) +
+    # geom_text(aes(y = max(upper), x = 1, 
+    #               label = paste("Difference =", round(unique(diff),2))), 
+    #           size = 4, vjust = 1, hjust = 1) +  
+    geom_hline(yintercept = 0)+
+    scale_fill_manual(values = colors) +  # Assign dynamically generated color scale
+    labs(x = "Species Interaction Estimate", y = "Mean Effect Size", fill = "Dominant Guild", title = title) +
+    theme_test()+
+    theme(
+      axis.text.y = element_text(size = 12), # Increase y-axis tick label font size
+      axis.text.x = element_blank() 
+    )
+  
+  ## save it
+  plots[[i]] = p
+  names(plots)[i] = id
+  
+}
+rm(p,i,dodge_width, a,b, title, n, id, dat, colors)
+
+names(plots) # 66 plots... there are repeats!  
+
+## Chat GPT to the rescue?
+# Function to sort and concatenate species pairs in canonical form
+getCanonicalForm <- function(label) {
+  sorted_pairs <- sort(strsplit(label, " & ")[[1]])
+  return(paste(sorted_pairs, collapse = " & "))
+}
+
+# Get the canonical forms of the plot labels
+canonical_labels <- sapply(names(plots), getCanonicalForm)
+
+# Identify duplicate plots based on canonical labels
+duplicate_indices <- duplicated(canonical_labels)
+
+# Remove duplicate plots
+plots <- plots[!duplicate_indices]
+
+names(plots) #33, much better!  
+
+## keep it clean
+rm(getCanonicalForm, canonical_labels, duplicate_indices)
+
+
+## save each of these graphs! 
+for(i in 1:length(plots)){
+  
+  # select one plot 
+  p = plots[[i]]
+  
+  # Isolate the relevant species pair
+  id = str_split(names(plots)[i], " & ")[[1]][1]
+  id = paste((str_split(id, "~")[[1]]), collapse=" & ")
+  id = gsub("SUB-", "", id)
+  id = gsub("DOM-", "", id)
+  
+  # grab today's date
+  day<-str_sub(Sys.Date(),-2)
+  month<-str_sub(Sys.Date(),-5,-4)
+  year<-str_sub(Sys.Date(),-10,-7)
+  date = paste(year,month,day, sep = "")
+  
+  # construct a saving path 
+  path = paste("figures/Double pairwise species interaction comparison/", id, "_", date, ".png", sep = "")
+  
+  # save it! 
+  ggsave(path, p, width = 7, height = 7, units = "in")
+  
+  
+}
+rm(p, path, day, month, year, date, id, i)
 
 
 

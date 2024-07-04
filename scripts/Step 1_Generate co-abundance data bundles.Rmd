@@ -790,17 +790,72 @@ nrow(meta[meta$cell_id_3km %in% meta$cell_id_3km[meta$cams_included_count > 7],]
 # 4% of SUs, thats fine. 
 
 
-### Also verify key covariates we are intersted in are not strongly correlated 
-check = select(meta, Avg_FLLI_3km, Avg_human_footprint_3km, Avg_altitude_3km, Avg_hunting_accessibility_3km)
-cov.corr = cor(check[,sapply(check, is.numeric)])
-cov.corr= as.data.frame(cov.corr)
-cov.corr[abs(cov.corr) < abs(.6)] = "good" # stick w/ .6
-rm(check, cov.corr)
+# ### Also verify key covariates we are intersted in are not strongly correlated 
+# check = select(meta, Avg_FLLI_3km, Avg_human_footprint_3km, Avg_altitude_3km, Avg_hunting_accessibility_3km)
+# cov.corr = cor(check[,sapply(check, is.numeric)])
+# cov.corr= as.data.frame(cov.corr)
+# cov.corr[abs(cov.corr) < abs(.6)] = "good" # stick w/ .6
+# rm(check, cov.corr)
 
 ### To ensure that data remains spatially secure regarding sensetive species locations
 ## remove any spatial variables and thin to only include bare minimum variables. 
+sort(names(meta))
 meta = select(meta, cell_id_3km, survey_id, Landscape, source, cams_included_count, year, 
-              Avg_altitude_3km, Avg_human_footprint_3km, Avg_FLLI_3km)
+              ## Environmental vars 
+              Avg_altitude_3km, Avg_ecoregion_intactness_3km, Avg_FLLI_3km, 
+              Avg_forest_cover_3km, 
+              ## Anthropogenic vars 
+              Avg_human_footprint_3km,Avg_hunting_accessibility_3km, Avg_nighttime_Lights_3km,
+              Avg_Islam_Pop_3km, Avg_Christ_Pop_3km, Avg_Budd_Pop_3km, 
+              ## degraded land cover
+              Avg_OP_percent_3km, Avg_LM_percent_3km, Avg_LO_percent_3km, 
+              Avg_RP_percent_3km,
+              ## intact land cover
+              Avg_LEF_percent_3km, Avg_LMEF_percent_3km, Avg_UMEF_percent_3km, 
+              Avg_LDF_percent_3km, Avg_LMDF_percent_3km)
+summary(meta)
+## for the sake of our examples and exploring, change all NAs to zero 
+meta[is.na(meta)] = 0
+
+### Check how much correlation between each section of variables 
+## Enviro
+check = select(meta, Avg_altitude_3km, Avg_ecoregion_intactness_3km, Avg_FLLI_3km,Avg_forest_cover_3km)
+cov.corr = cor(check[,sapply(check, is.numeric)])
+cov.corr= as.data.frame(cov.corr)
+cov.corr[abs(cov.corr) < abs(.6)] = "good" # stick w/ .6
+cov.corr
+## FLII and forest cover are correlated --> remove forest cover! 
+meta$Avg_forest_cover_3km = NULL
+
+## anthro
+check = select(meta, Avg_human_footprint_3km,Avg_hunting_accessibility_3km, Avg_nighttime_Lights_3km,
+              Avg_Islam_Pop_3km, Avg_Christ_Pop_3km, Avg_Budd_Pop_3km)
+cov.corr = cor(check[,sapply(check, is.numeric)])
+cov.corr= as.data.frame(cov.corr)
+cov.corr[abs(cov.corr) < abs(.6)] = "good" # stick w/ .6
+cov.corr
+# nightime lights strongly correlated w/ HFP --> remove! 
+# also islam and buddist are correlated, but leave that in for now... 
+meta$Avg_nighttime_Lights_3km = NULL
+
+## degraded land
+check = select(meta, Avg_OP_percent_3km, Avg_LM_percent_3km, Avg_LO_percent_3km, 
+              Avg_RP_percent_3km)
+cov.corr = cor(check[,sapply(check, is.numeric)])
+cov.corr= as.data.frame(cov.corr)
+cov.corr[abs(cov.corr) < abs(.6)] = "good" # stick w/ .6
+cov.corr 
+## all good! 
+
+## intact land
+check = select(meta, Avg_LEF_percent_3km, Avg_LMEF_percent_3km, Avg_UMEF_percent_3km, 
+              Avg_LDF_percent_3km, Avg_LMDF_percent_3km)
+cov.corr = cor(check[,sapply(check, is.numeric)])
+cov.corr= as.data.frame(cov.corr)
+cov.corr[abs(cov.corr) < abs(.6)] = "good" # stick w/ .6
+cov.corr
+## all good! 
+rm(check, cov.corr)
 
 ### and do the same for caps
 caps = select(caps, cell_id_3km, survey_id, seq, Date, num_cams_active_at_date, Species, total_indiv_records, independent_events)

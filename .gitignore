@@ -54,6 +54,12 @@ figures/*~
 results/*~
 explore/*~
 
+# Some data files still seem to want to try to sync up, so be more specific
+data/import_UMF_from_HPC/*~
+data/send_to_HPC/*~
+data/species_traits/*~
+
+
 # and OE files from HPC
 scripts/
 *.err

@@ -5,7 +5,7 @@
 ## Import dataframes, not complete models b/c they're too heavy
 
 # Zachary Amir, Z.Amir@uq.edu.au
-# Last updated on 4th of July, 2024
+# Last updated on Sep 24th, 2024 --> update to 5 km preferred only 
 
 ## start fresh
 rm(list = ls())
@@ -14,8 +14,9 @@ rm(list = ls())
 library(tidyverse)    # for lots of functions
 library(plyr)         # for ddply
 library(cowplot)      # for arranging plots 
-library(lme4)         # For meta-regressions of model coefficents
+library(lmerTest)     # For meta-regressions (w/ p-values) of model coefficents
 
+# library(lme4)         # For meta-regressions of model coefficents
 # library(ggridges)    # for ridgeline plots
 # library(MuMIn)       # for R2 values in meta-regressions 
 # library(metafor)     # for meta-analysis of effect sizes
@@ -31,8 +32,8 @@ library(lme4)         # For meta-regressions of model coefficents
 # setwd("/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_trophic_cascades_co-abundance")
 
 ## Import clean cam trap data here for referencing
-og_resamp_captures = read.csv("data_GitHub/clean_captures_to_make_UMFs_20240228.csv")
-og_resamp_meta = read.csv("data_GitHub/clean_metadata_to_make_UMFs_20240603.csv")
+og_resamp_captures = read.csv("data_GitHub/clean_captures_to_make_UMFs_5km_scale_20240913.csv")
+og_resamp_meta = read.csv("data_GitHub/clean_metadata_to_make_UMFs_5km_scale_20240913.csv")
 
 ## should also import NON-resampled data for referencing too! 
 # og_captures = read.csv("/Users/zachary_amir/Dropbox/CT capture histories database/Asian ECL raw CT data/Step4_output_pre-resampling/Clean_independent_captures_20230610.csv")
@@ -72,12 +73,15 @@ all_combos = names(bdata)
 ### Import coefficient dataframes
 
 # list all files
-files = list.files("results_final/coefficent_dataframes/")
+# files = list.files("results_final/coefficent_dataframes/")
+files = list.files("results/MIDDLE_5km_final_and_counterfactual_testing_Sep_2024/coefficent_dataframes/")
 files = files[!grepl("OLD", files)] # remove any old data 
+files = files[!grepl("counterfactual", files)] # remove any counterfactuals data 
+
 
 ## Have a few long and all middle files in this directory, subset for one
-files = files[grepl("HALF_LONG", files)]
-# files = files[grepl("MIDDLE", files)]
+# files = files[grepl("HALF_LONG", files)]
+files = files[grepl("MIDDLE", files)]
 # files = files[grepl("SHORT", files)]
 
 
@@ -88,8 +92,9 @@ coeff.res = list()
 for(i in 1:length(files)){
   
   # import 
-  d = read.csv(paste("results_final/coefficent_dataframes/", files[i], sep = ""))
-
+  # d = read.csv(paste("results_final/coefficent_dataframes/", files[i], sep = ""))
+  d = read.csv(paste("results/MIDDLE_5km_final_and_counterfactual_testing_Sep_2024/coefficent_dataframes/", files[i], sep = ""))
+  
   ## if there are pesky row.names, remove em!
   d$X = NULL
   
@@ -113,6 +118,7 @@ rm(coeff.res)
 ## how many models do we have?
 length(unique(coeff$Species_Pair)) 
 # Feb 19th, 2024 --> 260, were all here! 
+# Sep 24th, 2024 (5km) --> 66/66 preferred species pairs
 
 ## inspect effective sample size
 summary(coeff$n.eff[coeff$var == "Species_Interaction"]) # large range, but median and mean are good 
@@ -124,6 +130,7 @@ summary(coeff$Rhat[coeff$var == "Species_Interaction"])
 ## Which models failed to converge?
 sort(unique(coeff$Species_Pair[coeff$Rhat > 1.2 & coeff$var == "Species_Interaction"])) 
 # 49 @ half long
+# 13/66 @ middle 
 
 ## vis Rhat
 hist(coeff$Rhat[coeff$var == "Species_Interaction"]) # thankfully most are small, but some biggies exist! 
@@ -140,6 +147,12 @@ coeff$sub_sp = gsub("SUB-", "", coeff$sub_sp)
 
 ### Inspect which species pairs are present/missing, 20240119, HALF_LONG settings
 setdiff(all_combos, coeff$Species_Pair) # we're all here! 
+## MIDDLE 5km --> missing two!  "SUB-Macaca_fascicularis~DOM-Panthera_pardus",  (same) "SUB-Panthera_tigris~DOM-Tapirus_indicus"  
+## re-ran these^^ mods and got all results back, not sure why they failed in the first place
+
+## example code how to test
+# which(all_combos == "SUB-Macaca_arctoides~DOM-Panthera_pardus") 
+
 
 ## create a dataframe to track our model performance
 preform = data.frame("Species_Pair" = all_combos,
@@ -172,29 +185,34 @@ anyNA(preform) # Must be F
 preform$mod_completion = "uncompleted"
 preform$mod_completion[preform$Species_Pair %in% coeff$Species_Pair] = "completed"
 table(preform$mod_completion) # 260 completed! 
+## Middle @ 5km preferred --> 66 completed. 
 
 ######## Import co-abundance PPC dataframes ######
 
 ### Not working with PPC plot data anymore because it is not used and takes up a lot of space
 ## but the co-abundance HPC code still generates it, so I am leaving the code hashed out in the script for now. 
-# plot_files = list.files("results_final/PPC_dataframes/")
-# plot_files = plot_files[grepl("plotdata", plot_files)]
-# for(i in 1:length(plot_files)){
-#   file.remove(paste("results_final/PPC_dataframes/", plot_files[i], sep = ""))
+# files = list.files("results_final/PPC_dataframes/")
+# files = files[grepl("plotdata", plot_files)]
+# for(i in 1:length(files)){
+#   file.remove(paste("results/MIDDLE_5km_final_and_counterfactual_testing_Sep_2024/PPC_dataframes/", files[i], sep = ""))
 # }
-# rm(i, plot_files)
+# rm(i, files)
 
 
 
 ## Make sure all_combos is loaded in your environment here! 
 
 # list all files
-files = list.files("results_final/PPC_dataframes/")
+# files = list.files("results_final/PPC_dataframes/")
+files = list.files("results/MIDDLE_5km_final_and_counterfactual_testing_Sep_2024/PPC_dataframes/")
 files = files[!grepl("OLD", files)] # remove any old data 
+files = files[!grepl("counterfactual", files)] # remove any counterfactual testing data 
+# and dont want plottind data 
+files = files[!grepl("plotdata", files)] 
 
 ## Subset files for one setting, especially if multiple are in the mix. 
-files = files[grepl("HALF_LONG", files)]
-# files = files[grepl("MIDDLE", files)]
+# files = files[grepl("HALF_LONG", files)]
+files = files[grepl("MIDDLE", files)]
 # files = files[grepl("SHORT", files)]
 
 # store results here
@@ -204,7 +222,9 @@ ppc_res = list()
 for(i in 1:length(files)){
   
   ## read the file 
-  d = read.csv(paste("results_final/PPC_dataframes/", files[i], sep = ""))
+  # d = read.csv(paste("results_final/PPC_dataframes/", files[i], sep = ""))
+  d = read.csv(paste("results/MIDDLE_5km_final_and_counterfactual_testing_Sep_2024/PPC_dataframes/", files[i], sep = ""))
+  
   
   ## save plotdata vs values in nested list. 
   if(grepl("plotdata", files[i])){
@@ -249,9 +269,10 @@ length(coeff$n.eff[coeff$var == "Species_Interaction" &
 summary(ppc_values$Interaction_Estimate) # who are the crazy ones?
 ppc_values[ppc_values$Interaction_Estimate < -3, ] # 1) SUB-Cuon_alpinus~DOM-Tapirus_indicus
 ppc_values[ppc_values$Interaction_Estimate > 3, ] # none!
+## no crazy values in MIDDLE preferred 5km
 
 # remove list now that were all stored in dfs. 
-rm(ppc_res, ppc_plotdat)
+rm(ppc_res)#, ppc_plotdat)
 
 
 ######## Import co-abundance prediction dataframes ######
@@ -347,7 +368,7 @@ rm(ppc_res, ppc_plotdat)
 ######## Import guild data and dietary preferences of large carnivores #####
 
 #load guild data
-guilds = read.csv(("data_GitHub/clean_44_species_trait_data_20240228.csv"))
+guilds = read.csv(("data_GitHub/clean_44_species_trait_data_20240820.csv"))
 head(guilds)
 str(guilds)
 ## looks good, dietary preferences are ready to go! 
@@ -524,6 +545,7 @@ table(preform$support);anyNA(preform$support) # must be F for NA!
 # who is supported?
 preform[preform$support == "Supported" & preform$preference == "preferred", ] 
 # mostly bottom up! Only 2 top-down! 
+## 3 top-down now (middle @ 5km) b/c much better model convergence for SUB-Capricornis_genus~DOM-Cuon_alpinus
 
 
 #### Do the same thing, but with the conservative values
@@ -584,7 +606,7 @@ preform$Species_Pair[preform$Interaction_Estimate < 0 &
 
 
 ### This is a super useful dataframe, will need to share this in the supplmentary tables section
-## save it! 
+## save it!
 # grab the date
 day<-str_sub(Sys.Date(),-2)
 month<-str_sub(Sys.Date(),-5,-4)
@@ -592,7 +614,7 @@ year<-str_sub(Sys.Date(),-10,-7)
 date = paste(year,month,day, sep = "")
 rm(year,month,day)
 
-# write.csv(preform, paste("results/summarized_results/model_performance_and_SIVs_", date, ".csv", sep =""))
+# write.csv(preform, paste("results/summarized_results/model_performance_and_SIVs_MIDDLE_5km_", date, ".csv", sep =""))
 
 
 ######## Prepare plotting data to visualize all SIVs ######
@@ -1234,7 +1256,7 @@ plot_list_cons = list()
 order = c("All_large_carnivores","Panthera_tigris","Panthera_pardus", 
           "Cuon_alpinus", "Neofelis_genus")
 # grab min and max vals 
-min_val = min(plot_dat$Interaction_Estimate[plot_dat$Interaction_Estimate > -3]) # remove one outlier 
+min_val = min(plot_dat$Interaction_Estimate[plot_dat$Interaction_Estimate > -1.7]) # remove one outlier 
 max_val = max(plot_dat$Interaction_Estimate[plot_dat$Interaction_Estimate > -3])
 
 for(i in 1:length(order)){
@@ -1488,7 +1510,7 @@ p = plot_grid(plotlist = plot_list, align = "v",
               ncol = 1, nrow = length(plot_list)) #
 p
 # and save it! 
-# ggsave(paste("figures/Grouped Histograms/Histogram_SUPP_&_NONSUPP_SIVs_preferred_prey_HALF_LONG_",date, ".png", sep = ""),
+# ggsave(paste("figures/Grouped Histograms/Histogram_SUPP_&_NONSUPP_SIVs_preferred_prey_MIDDLE_5km_",date, ".png", sep = ""),
 #                p, width = 8, height = 10, units = "in")
 
 ## repeat for conservative grouping
@@ -1496,13 +1518,14 @@ p = plot_grid(plotlist = plot_list_cons, align = "v",
               ncol = 1, nrow = length(plot_list)) # 
 p
 # and save it! 
-# ggsave(paste("figures/Grouped Histograms/Histogram_SUPP_&_NONSUPP_&_CONSERVATIVE_SIVs_preferred_prey_HALF_LONG_",date, ".png", sep = ""),
+# ggsave(paste("figures/Grouped Histograms/Histogram_SUPP_&_NONSUPP_&_CONSERVATIVE_SIVs_preferred_prey_MIDDLE_5km_",date, ".png", sep = ""),
 #                p, width = 8, height = 10, units = "in")
 
 
 ## custom-make all large carnivore graph for sizing
 p = 
-  ggplot(pref_dat[pref_dat$rel_species == "All_large_carnivores" ,], aes(x = Interaction_Estimate, fill = support_simple))+
+  ggplot(pref_dat[pref_dat$rel_species == "All_large_carnivores" & # remove one unsupported outlier 
+                    pref_dat$Interaction_Estimate > -1.7,], aes(x = Interaction_Estimate, fill = support_simple))+
   geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1, alpha = 1)+#, position = "dodge")+
   theme_classic()+
   geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
@@ -1510,12 +1533,13 @@ p =
   scale_y_continuous(breaks = seq(0, max(table(pref_dat$support_simple[pref_dat$rel_species == "All_large_carnivores"])), by = 2)) + 
   labs(x = "Species Interaction Value", y = "Count", color = NULL, title = paste("all_large_carnivores preferred prey normal"))+
   guides(fill = "none") + 
+  coord_cartesian()+
   theme(axis.text.x = element_text(size = 16),
         axis.text.y = element_text(size = 16),
         axis.text = element_text(color = "black"),
         text = element_text(family = "Helvetica"))
 # ## save it! 
-# ggsave(paste("figures/Grouped Histograms/Histogram_all_large_carnivores_unsupported_and_supported_preferred_prey_", date, ".png", sep = ""), p,
+# ggsave(paste("figures/Grouped Histograms/Histogram_all_large_carnivores_unsupported_and_supported_preferred_prey_MIDDLE_5km_", date, ".png", sep = ""), p,
 #        width = 12, height = 4, units = "in")
 
 
@@ -1620,7 +1644,7 @@ names(pref_perc_table)[2] = "support_levels"
 pref_perc_table = rbind(pref_perc_table, pref_perc_table_cons)
 
 # save it for fig making 
-# write.csv(pref_perc_table, paste("results/summarized_results/percentages_for_3-level_support_histogram_preferred_prey_", date, ".csv", sep = ""), row.names = F)
+# write.csv(pref_perc_table, paste("results/summarized_results/percentages_for_3-level_support_histogram_preferred_prey_MIDDLE_5km_", date, ".csv", sep = ""), row.names = F)
 
 
 ## Clean up enviro after finishing plots! 
@@ -2166,30 +2190,31 @@ dat$pred_prey = "prey" # assume prey
 dat$pred_prey[dat$sub_sp %in% c("Panthera_pardus","Panthera_tigris",
                                 "Cuon_alpinus", "Neofelis_genus")] = "predator"
 
+### How about we fully omit unsupported_1 b/c its a bad model w/ no inferences
+## and combine unsupported2 and 3 to reduce lines on the graph
+dat = dat[! grepl("Unsupported_1", dat$support), ]
+
+
 # create a new column that incorporates predator vs prey and top-down vs bottom up 
-dat$dir_support = dat$support # but basing it off levels of support
-dat$dir_support[dat$dir_support == "Supported" & dat$direction == "top-down"] = "supported_top-down"      # this is auto prey
-dat$dir_support[dat$dir_support == "Supported" & dat$direction == "bottom-up"] = "supported_bottom-up"    # this is auto predators
-dat$dir_support[grepl("Unsupport", dat$support) & dat$direction == "top-down"] = "unsupported_top-down"   # this is auto prey
-dat$dir_support[grepl("Unsupport", dat$support) & dat$direction == "bottom-up"] = "unsupported_bottom-up" # this is auto predators
-table(dat$dir_support) # divide each by 4 for total number of mods (b/c 4 covs per mod)
+dat$support_pred_prey[dat$support == "Supported" & dat$direction == "top-down"] = "supported_top-down"      # this is auto prey
+dat$support_pred_prey[dat$support == "Supported" & dat$direction == "bottom-up"] = "supported_bottom-up"    # this is auto predators
+dat$support_pred_prey[grepl("Unsupport", dat$support) & dat$direction == "top-down"] = "unsupported_top-down"   # this is auto prey
+dat$support_pred_prey[grepl("Unsupport", dat$support) & dat$direction == "bottom-up"] = "unsupported_bottom-up" # this is auto predators
+table(dat$support_pred_prey) # divide each by 4 for total number of mods (b/c 4 covs per mod)
 
-## Combine support and pred prey as well, could be useful
-dat$support_pred_prey = paste(dat$support, dat$pred_prey, sep = "-")
-table(dat$support_pred_prey) ## this could be the move! 
-table(dat$support_pred_prey[dat$var == 'Species_Interaction'])## still has all levels present. 
 
-## also remove parameters that did not properly converge (i.e Rhat > 1.2)
+## Possibly remove parameters that did not properly converge (i.e Rhat > 1.2)?
 summary(dat$Rhat) # there are some big values! Dont want to include them, but we want to know how many we removed. 
 ## create a new column to track which params converged and which didnt 
 dat$convergence = "yes"
 dat$convergence[dat$Rhat > 1.2] = "no"
 table(dat$convergence) # obvi vast majority are yes
 table(dat$var);table(dat$var[dat$convergence == "yes"]) # full, then reduced. 
+
 ### Update! Want to examine effect of covariates in unsupported models to see if they 
 ### match our interpretations for unsupported mods (fig S1, made in ppt).
 ### so will probably include SIV values that do have poorly converging parameters. 
-table(dat$convergence[dat$convergence == "yes"]);table(dat$dir_support)
+table(dat$convergence[dat$convergence == "yes"])#;table(dat$dir_support)
 
 
 ### Will run 3ish kinds of regressions
@@ -2204,29 +2229,44 @@ support_pred_prey = unique(dat$support_pred_prey)
 res = list()
 # loopin' 
 for(i in 1:length(support_pred_prey)){
+ 
   # select a pred or prey
   p = support_pred_prey[i]
   
-  ## make the mod
-  m = lmer(mean ~ var-1 + (1 | sub_sp), weights = 1/sd, REML = FALSE, 
-           data = dat[dat$var != "Species_Interaction" &
-                        dat$support_pred_prey == p, ])
+  # ## add a condition to ensure there are multiple species that meets criteria
+  # if(length(unique(dat$sub_sp[dat$var != "Species_Interaction" &
+  #                             dat$support_pred_prey == p])) > 1){
+    
+    ## make the mod w/ the RE 
+  m = lmerTest::lmer(mean ~ var-1 + (1 | sub_sp), weights = 1/sd, #REML = FALSE, 
+                     data = dat[dat$var != "Species_Interaction" &
+                                  dat$support_pred_prey == p, ])
+  # }else{
+    
+    # ## but if there is only one species, omit the RE in the mod
+    # m = lm(mean ~ var-1 , weights = 1/sd, #REML = FALSE, 
+    #        data = dat[dat$var != "Species_Interaction" &
+    #                     dat$support_pred_prey == p, ])
+    
+    
+  # }
+  
   ## extract values
   m1 = as.data.frame(summary(m)$coefficients)
   
   ## clean up the df
   m1$var = rownames(m1)
   m1$var = gsub("var", "", m1$var)
-  names(m1) = c("estimate", "SE", "t value", "var")
+  names(m1) = c("estimate", "SE", "df", "t value", "p value", "var")
   rownames(m1) = NULL
   
-  ## let us know if the model converged or not. 
-  if(is.null(summary(m)$optinfo$conv$lme4$messages)){
+  ## let us know if the model converged or not.
+  if(is.null(m@optinfo$conv$lme4$messages)){
     m1$warning = "none"
   }else{
-    m1$warning = summary(m)$optinfo$conv$lme4$messages
+    m1$warning = m@optinfo$conv$lme4$messages
   }
-  
+
   ## explicitly note which model this was
   m1$support_pred_prey = p
 
@@ -2241,17 +2281,17 @@ res = do.call(rbind, res)
 str(res)
 tail(res)
 summary(res)
-unique(res$support_pred_prey[res$warning != "none"])# 3 warnings, not ideal! 
+unique(res$support_pred_prey[res$warning != "none"]) # When we remove REML in lmerTest, there are no more warnings! 
 
 #
 ##
 ###
 #### Now run the one model that examines species interactions 
-m3 = lmer(mean ~ support_pred_prey-1 + (1 | sub_sp), weights = 1/sd, REML = FALSE, 
+m3 = lmer(mean ~ support_pred_prey-1 + (1 | sub_sp), weights = 1/sd, #REML = FALSE, 
           data = dat[dat$var == "Species_Interaction",]) 
-# m3 = lm(mean ~ support_pred_prey-1 , weights = 1/sd, 
-#           data = dat[dat$var == "Species_Interaction",]) # compared effect sizes and they are the same. 
-summary(m3) # getting hessian error, but no change in effect size
+# m3 = lm(mean ~ support_pred_prey-1 , weights = 1/sd,
+#           data = dat[dat$var == "Species_Interaction",]) # compared effect sizes and they are the same, but no hessian error... 
+summary(m3) # getting hessian error in lmer, but no change in effect size
 
 ## extract the values out of here
 m3 = as.data.frame(summary(m3)$coefficients)
@@ -2260,7 +2300,7 @@ m3 = as.data.frame(summary(m3)$coefficients)
 m3$support_pred_prey = rownames(m3) ## this is different from others! how we note which mod is which is based on independent var here
 m3$support_pred_prey = gsub("support_pred_prey", "", m3$support_pred_prey)
 m3$var = "SIV"
-names(m3)[1:3] = c("estimate", "SE", "t value")
+names(m3)[1:5] = c("estimate", "SE", "df", "t value", "p value")
 rownames(m3) = NULL
 
 ## match res format
@@ -2272,45 +2312,37 @@ m3 # looks good!
 ## combine! 
 es_final = rbind(m3, res)
 
-head(es_final);tail(es_final) # will need to split support and pred-prey 
+head(es_final);tail(es_final) # will need to split support and direction
 
-es_final = separate(es_final, support_pred_prey, c("support", "pred_prey"), sep = "-", remove = F)
+es_final = separate(es_final, support_pred_prey, c("support", "direction"), sep = "_", remove = F)
 head(es_final) # good! 
 
 summary(es_final$estimate) # narrow range is good! 
 summary(es_final$SE) # even smaller, great. 
 
-## unsup_1 explanation is poor model fit and unconverged SIV
+### Examine results 
+## unsupported results 
 for(i in 1:length(unique(es_final$var))){
   print(unique(es_final$var)[i])
-  print(summary(es_final$estimate[es_final$support == "Unsupported_1" & 
+  print(summary(es_final$estimate[es_final$support == "unsupported" & 
                                     es_final$var == unique(es_final$var)[i]]))
 }
-## These might be all over the place, least trustworthy results. 
-## possibly dont include these in the figure
+# ## elevation and HFP have bigger mean ES than SIV, tho FLII is a close tie. 
+# ## interesting that SIV is all negative tho... 
+# sort(unique(coeff$mean[coeff$var == "Species_Interaction" & 
+#                          coeff$preference == "preferred" & 
+#                          coeff$support == "Unsupported_2"]))
+# # 2 out of 13 results are not negative. 
 
-## unsup_2 explaination is that covs in model are more informative than sp interaction
-for(i in 1:length(unique(es_final$var))){
-  print(unique(es_final$var)[i])
-  print(summary(es_final$estimate[es_final$support == "Unsupported_2" & 
-                                    es_final$var == unique(es_final$var)[i]]))
-}
-## elevation and HFP have bigger mean ES than SIV, tho FLII is a close tie. 
-## interesting that SIV is all negative tho... 
-sort(unique(coeff$mean[coeff$var == "Species_Interaction" & 
-                         coeff$preference == "preferred" & 
-                         coeff$support == "Unsupported_2"]))
-# 2 out of 13 results are not negative. 
-
-## Unsup_3 explanation is that unmoddeled covs are more informative than sp interaction
-for(i in 1:length(unique(es_final$var))){
-  print(unique(es_final$var)[i])
-  print(summary(es_final$estimate[es_final$support == "Unsupported_3" & 
-                                    es_final$var == unique(es_final$var)[i]]))
-}
-## SIV is alllll positive, echoing Brodie's co-abundance model and finding generally positive trends
-## that are thought to be due to unmodelled covariates. 
-### This could support spurious correlations and that we are avoiding them! 
+# ## Unsup_3 explanation is that unmoddeled covs are more informative than sp interaction
+# for(i in 1:length(unique(es_final$var))){
+#   print(unique(es_final$var)[i])
+#   print(summary(es_final$estimate[es_final$support == "Unsupported_3" & 
+#                                     es_final$var == unique(es_final$var)[i]]))
+# }
+# ## SIV is alllll positive, echoing Brodie's co-abundance model and finding generally positive trends
+# ## that are thought to be due to unmodelled covariates. 
+# ### This could support spurious correlations and that we are avoiding them! 
 
 ## OLD APPROACH
 # before I included more unsupported results
@@ -2412,113 +2444,77 @@ es_final$var = factor(es_final$var, levels = c( "D) Species interaction",
                                                 "C) Elevation",
                                                 "B) Forest integrity",
                                                 "A) Human footprint"))
-# es_final$mod_type = factor(es_final$mod_type, levels = c("predator", "prey","unsupported","bottom-up","top-down"))
-es_final$support = factor(es_final$support, levels = c("Unsupported_1", "Unsupported_2", "Unsupported_3", "Supported"))
-es_final$pred_prey = factor(es_final$pred_prey, levels = c("predator", "prey"))
+## set the factor order of points on the graph 
+es_final$support_pred_prey = factor(es_final$support_pred_prey, levels = c("unsupported_top-down", "supported_top-down",
+                                                                           "unsupported_bottom-up", "supported_bottom-up"))
 
-## manually specify which shape is which 
-# es_final$shapes[es_final$pred_prey %in% c("predator")] = "21"
-# es_final$shapes[es_final$pred_prey %in% c("prey")] = "17"
-# table(es_final$shapes)
-# es_final$shapes[es_final$mod_type %in% c("unsupported","bottom-up","top-down")] = "15"
-# es_final$shapes[es_final$mod_type %in% c("predator")] = "21"
-# es_final$shapes[es_final$mod_type %in% c("prey")] = "17"
+## finally, distinguish if effects are significant
+es_final$sig[es_final$var != "D) Species interaction"] = ifelse(es_final$`p value`[es_final$var != "D) Species interaction"] < 0.05, "*", "")
+table(es_final$sig) # should see 2 stars on the graph
+es_final[es_final$sig == "*",] #usup_TD FLII & unsup_BU elevation --> no sig differences in HFP 
 
-# ## manually assign colors to match previous colors 
-# es_final$colors[es_final$support == "Supported" & es_final$pred_prey == "prey"] = "darkorange4" # same as top-down 
-# es_final$colors[es_final$support == "Supported" & es_final$pred_prey == "predator"] = "springgreen4" # same as bottom-up
-# es_final$colors[es_final$support == "Unsupported_1"] = "gray87"
-# es_final$colors[es_final$support == "Unsupported_2"] = "gray55"
-# es_final$colors[es_final$support == "Unsupported_3"] = "gray32"
-# table(es_final$colors) # all good! 
 
-### Easier to assign shapes and colors in the ggplot! 
-
-## Make the ggplot
 p =
-ggplot(es_final[es_final$pred_prey == "predator" #& 
-                  # es_final$support != "Unsupported_1"
-                ,], aes(x = var, y = estimate, ymin=lower, ymax=upper))+
-  geom_pointrange(aes(color = support, shape = pred_prey), size = 2, lwd = 2, # fatten = 1, 
+  ggplot(es_final, aes(x = var, y = estimate, ymin=lower, ymax=upper))+
+  geom_pointrange(aes(color = support_pred_prey, shape = direction), size = 2, lwd = 2, #, size = mod_count), lwd = 2,
                   position= position_dodge(width=.7))+
-  scale_color_manual(values = c("Supported" = "dodgerblue2",
-                                "Unsupported_1" = "gray87",
-                                "Unsupported_2" = "gray55",
-                                "Unsupported_3" = "gray32"))+
-  # scale_shape_manual(values = c("predator" = 15, "prey" = 17))+
+  # geom_text(aes(y = estimate+.3*sign(estimate), label = sig), position = position_dodge(width = .7), size = 8) + # manually add via ppt to be more clear
+  scale_color_manual(values = c( "supported_bottom-up" = "springgreen4",
+                                 "unsupported_bottom-up" = "gray32",
+                                 "supported_top-down" = "darkorange4",
+                                 "unsupported_top-down" = "gray32"))+
+  scale_shape_manual(values = c("bottom-up" = 15, "top-down" = 18))+
   geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.6)+
   coord_flip() +  # flip coordinates (puts labels on y axis)
-  labs(y = "Weighted effect size", x = NULL) +
+  labs(y = "Weighted effect size", x = NULL)+#, title = "prey are subordinate in top-down models") +
   theme_bw()+
-  theme(axis.text.x = element_text(size = 22),
+  theme(axis.text.x = element_text(size = 22), # change these to 28 if going with model size 
         axis.text.y = element_text(size = 22),
         axis.title.x = element_text(size = 22),
         axis.text = element_text(color = "black"),
         legend.title = element_text(size = 22, family = "Helvetica"),
         legend.text = element_text(size = 22, family = "Helvetica"),
         text = element_text(family = "Helvetica"))
-## Save this
-# ggsave(paste("explore/Wieghted_coefficents_regression_preferred_mods_bottom-up_sub_predators_", date, ".png", sep = ""),
-#        p, width = 13, height = 9, units = "in")
-
-### Remake the plot, but for prey! 
-p =
-  ggplot(es_final[es_final$pred_prey == "prey" #& 
-                  # es_final$support != "Unsupported_1"
-                  ,], aes(x = var, y = estimate, ymin=lower, ymax=upper))+
-  geom_pointrange(aes(color = support, shape = pred_prey), size = 2, lwd = 2, # fatten = 1, 
-                  position= position_dodge(width=.7))+
-  scale_color_manual(values = c("Supported" = "dodgerblue2",
-                                "Unsupported_1" = "gray87",
-                                "Unsupported_2" = "gray55",
-                                "Unsupported_3" = "gray32"))+
-  # scale_shape_manual(values = c("predator" = 15, "prey" = 17))+
-  geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.6)+
-  coord_flip() +  # flip coordinates (puts labels on y axis)
-  labs(y = "Weighted effect size", x = NULL) +
-  theme_bw()+
-  theme(axis.text.x = element_text(size = 22),
-        axis.text.y = element_text(size = 22),
-        axis.title.x = element_text(size = 22),
-        axis.text = element_text(color = "black"),
-        legend.title = element_text(size = 22, family = "Helvetica"),
-        legend.text = element_text(size = 22, family = "Helvetica"),
-        text = element_text(family = "Helvetica"))
-## Save this
-# ggsave(paste("explore/Wieghted_coefficents_regression_preferred_mods_top-down_sub_prey_", date, ".png", sep = ""),
+## Save it! 
+# ggsave(paste("explore/Weighted_coefficients_regression_preferred_mods_top-down_and_bottom-up_MIDDLE_5km_", date, ".png", sep = ""),
 #        p, width = 13, height = 9, units = "in")
 
 
-### Swap factor order for a nicer label b/c of coord_flip
-# es_final$mod_type = factor(es_final$mod_type, levels = c("prey","predator", "top-down", "bottom-up","unsupported"))
-es_final$support = factor(es_final$support, levels = c("Supported","Unsupported_3","Unsupported_2", "Unsupported_1"))
+### Create a nicer label for the plot 
 
+## convert to char for easier manipulation
+es_final$support_pred_prey = as.character(es_final$support_pred_prey)
+# replace undescore with ampersand 
+es_final$support_pred_prey = gsub("_", " & ", es_final$support_pred_prey)
+table(es_final$support_pred_prey)
 
-## Make the ggplot for the label 
+### now reverse the factors b/c of coordinate flip 
+es_final$support_pred_prey = factor(es_final$support_pred_prey, levels = c("supported & bottom-up", "unsupported & bottom-up",
+                                                                           "supported & top-down","unsupported & top-down"))
+                                      
+# ## Re-make the ggplot for the label 
 p =
-  ggplot(es_final[es_final$pred_prey == "prey" #& 
-                  # es_final$support != "Unsupported_1"
-                  ,], aes(x = var, y = estimate, ymin=lower, ymax=upper))+
-  geom_pointrange(aes(color = support, shape = pred_prey), size = 2, lwd = 2, # fatten = 1, 
+ggplot(es_final, aes(x = var, y = estimate, ymin=lower, ymax=upper))+
+  geom_pointrange(aes(color = support_pred_prey, shape = direction), size = 2, lwd = 2, #, size = mod_count), lwd = 2,
                   position= position_dodge(width=.7))+
-  scale_color_manual(values = c("Supported" = "dodgerblue2",
-                                "Unsupported_1" = "gray87",
-                                "Unsupported_2" = "gray55",
-                                "Unsupported_3" = "gray32"))+
-  # scale_shape_manual(values = c("predator" = 15, "prey" = 17))+
+  # geom_text(aes(y = estimate+.3*sign(estimate), label = sig), position = position_dodge(width = .7), size = 8) + # manually add via ppt to be more clear
+  scale_color_manual(values = c( "supported & bottom-up" = "springgreen4",
+                                 "unsupported & bottom-up" = "gray32",
+                                 "supported & top-down" = "darkorange4",
+                                 "unsupported & top-down" = "gray32"))+
+  scale_shape_manual(values = c("bottom-up" = 15, "top-down" = 18))+
   geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.6)+
   coord_flip() +  # flip coordinates (puts labels on y axis)
-  labs(y = "Weighted effect size", x = NULL) +
+  labs(y = "Weighted effect size", x = NULL)+#, title = "prey are subordinate in top-down models") +
   theme_bw()+
-  theme(axis.text.x = element_text(size = 22),
+  theme(axis.text.x = element_text(size = 22), # change these to 28 if going with model size 
         axis.text.y = element_text(size = 22),
         axis.title.x = element_text(size = 22),
         axis.text = element_text(color = "black"),
         legend.title = element_text(size = 22, family = "Helvetica"),
         legend.text = element_text(size = 22, family = "Helvetica"),
         text = element_text(family = "Helvetica"))
-
-## Save this
+# ## Save this
 # ggsave(paste("explore/STEAL THIS LABEL_", date, ".png", sep = ""),
 #        p, width = 13, height = 9, units = "in")
 
@@ -2553,7 +2549,7 @@ table(coeff$support[coeff$preference == "preferred" &
 # rm(hunt_sum, res, sum, p, a)
 
 
-###### Bring back the double pairwise SIV comparison ######
+############# Bring back the double pairwise SIV comparison ######
 
 ## This was implemented almost a year ago, but now I think were better positoned to interpret the results. 
 
@@ -2726,6 +2722,439 @@ for(i in 1:length(plots)){
   
 }
 rm(p, path, day, month, year, date, id, i)
+
+
+
+############# Import counter-factual testing results #######
+
+# To better address reviewer's concerns about generating causal inferences from co-abundance models 
+# I decided to run some counter-factual tests by splitting the data based on three different conditons:
+
+# 1) Would prey abundance increase in landscapes where large carnivores remain abundant (top-down test), AND would predator abundance increase in landscapes where preferred prey remain scarce (bottom-up test). This isolates the effect of declines while being present rather than species extirpations, and is tested by selecting landscapes where predators remain common (upper 3rd quartile of site-level abundance) and prey remain scarce (bottom 1st quartile of site-level abundance). 
+# 2) What if prey abundance increases would not have happened if not for large carnivore extirpation (top-down test), AND if predator abundance decreases would not have happened if not for prey abundance extirpations (bottom-up test). This isolates the effect of species extirpations rather than declines, and is tested by only selecting landscapes where species co-occur w/ sufficient detections.
+# 3) Would we observe trophic release in prey or bottom-up bolstering in predators when controlling for landscape variation that may be driving observed trends. This is tested by implementing good and clear site-matching, but in this test, just the Thai Eastern Forest Complex (for now). 
+# 4:6) Are any of the observed variables (altitude, then FLII, then HFP) masking/mediating/confounding observed trophic release/bottom-up regulation? Select landscapes where two variabels are mean + 1 SD, then let the relevant variable vary to explore the effect of key varying covariate.  
+
+# And then compare w/ the original results! 
+
+#
+##
+###
+#### First, import counterfactual coefficent dataframes
+# files = list.files("results/MIDDLE_counterfactual_testing_Aug_2024/coefficent_dataframes/")
+files = list.files("results/MIDDLE_5km_final_and_counterfactual_testing_Sep_2024/coefficent_dataframes/")
+## split apart different tests
+# f1 = files[grepl("counterfactual1", files)]
+f2 = files[grepl("counterfactual2", files)]
+f3 = files[grepl("counterfactual3", files)]
+f4 = files[grepl("counterfactual4", files)]
+f5 = files[grepl("counterfactual5", files)]
+f6 = files[grepl("counterfactual6", files)]
+files_list = list(#"counterfactual1" = f1,
+                  "counterfactual2" = f2,
+                  "counterfactual3" = f3,
+                  "counterfactual4" = f4,
+                  "counterfactual5" = f5,
+                  "counterfactual6" = f6)
+rm(f1,f2,f3,f4,f5,f6, files)
+
+# import them all
+res = list()
+for(i in 1:length(files_list)){
+  
+  # select one list of files
+  fl = files_list[[i]]
+  
+  # temp list
+  temp = list()
+  for(l in 1:length(fl)){
+    
+    # select one file 
+    f = fl[l]
+    
+    # import it
+    # dat = read.csv(paste("results/MIDDLE_counterfactual_testing_Aug_2024/coefficent_dataframes/", f, sep = ""))
+    dat = read.csv(paste("results/MIDDLE_5km_final_and_counterfactual_testing_Sep_2024/coefficent_dataframes/", f, sep = ""))
+    
+    
+    # save it
+    temp[[l]] = dat
+    
+  }
+  
+  ## turn into a DF 
+  r = do.call(rbind, temp)
+  
+  ## Add the testing column
+  if(names(files_list)[i] == "counterfactual1"){ r$counter_factual_test = "isolate_abundance_declines" }
+  if(names(files_list)[i] == "counterfactual2"){ r$counter_factual_test = "isolate_extirpations" }
+  if(names(files_list)[i] == "counterfactual3"){ r$counter_factual_test = "site_matching" }
+  if(names(files_list)[i] == "counterfactual4"){ r$counter_factual_test = "isolate_altitude" }
+  if(names(files_list)[i] == "counterfactual5"){ r$counter_factual_test = "isolate_FLII" }
+  if(names(files_list)[i] == "counterfactual6"){ r$counter_factual_test = "isolate_HFP" }
+  
+  
+  # and save
+  res[[i]] = r
+  
+}
+rm(r,i,l,dat,temp,fl,f)
+
+## Convert to a dataframe
+coeff_cf = do.call(rbind, res)
+rm(res)
+
+## inspect
+table(coeff_cf$counter_factual_test)
+
+## make sure col names match other coefficents 
+setdiff(names(coeff), names(coeff_cf)) # need to split sub and dom species
+
+## split apart species pair into sub vs dom species
+coeff_cf <- within(coeff_cf, {
+  sub_sp <- sapply(strsplit(Species_Pair, "~"), function(x) x[1])
+  dom_sp <- sapply(strsplit(Species_Pair, "~"), function(x) x[2])
+})
+coeff_cf$dom_sp = gsub("DOM-", "", coeff_cf$dom_sp)
+coeff_cf$sub_sp = gsub("SUB-", "", coeff_cf$sub_sp)
+
+## only want the preferred pred-prey pairs 
+pref_pairs = preform$Species_Pair[preform$preference == "preferred"]
+
+## grab those pairs from the larger coeff DF 
+coeff_pref = coeff[coeff$Species_Pair %in% pref_pairs,]
+
+## add the testing column
+coeff_pref$counter_factual_test = "original_test"
+
+## and Rbind them together
+coeff_cf = rbind(coeff_cf, coeff_pref)
+# clean up
+rm(coeff_pref, pref_pairs)
+
+
+#
+##
+###
+#### First, import counterfactual coefficent dataframes
+# files = list.files("results/MIDDLE_counterfactual_testing_Aug_2024/PPC_dataframes/")
+files = list.files("results/MIDDLE_5km_final_and_counterfactual_testing_Sep_2024/PPC_dataframes/")
+files = files[grepl("BPV_and_Chat_values", files)] # dont want plotting data 
+## split apart different tests
+# f1 = files[grepl("counterfactual1", files)]
+f2 = files[grepl("counterfactual2", files)]
+f3 = files[grepl("counterfactual3", files)]
+f4 = files[grepl("counterfactual4", files)]
+f5 = files[grepl("counterfactual5", files)]
+f6 = files[grepl("counterfactual6", files)]
+files_list = list(#"counterfactual1" = f1,
+                  "counterfactual2" = f2,
+                  "counterfactual3" = f3,
+                  "counterfactual4" = f4,
+                  "counterfactual5" = f5,
+                  "counterfactual6" = f6)
+rm(f1,f2,f3,f4,f5,f6, files)
+
+# import them all
+res = list()
+for(i in 1:length(files_list)){
+  
+  # select one list of files
+  fl = files_list[[i]]
+  
+  # temp list
+  temp = list()
+  for(l in 1:length(fl)){
+    
+    # select one file 
+    f = fl[l]
+    
+    # import it
+    # dat = read.csv(paste("results/MIDDLE_counterfactual_testing_Aug_2024/PPC_dataframes/", f, sep = ""))
+    dat = read.csv(paste("results/MIDDLE_5km_final_and_counterfactual_testing_Sep_2024/PPC_dataframes/", f, sep = ""))
+    
+    
+    # save it
+    temp[[l]] = dat
+    
+  }
+  
+  ## turn into a DF 
+  r = do.call(rbind, temp)
+  
+  ## Add the testing column
+  if(names(files_list)[i] == "counterfactual1"){ r$counter_factual_test = "isolate_abundance_declines" }
+  if(names(files_list)[i] == "counterfactual2"){ r$counter_factual_test = "isolate_extirpations" }
+  if(names(files_list)[i] == "counterfactual3"){ r$counter_factual_test = "site_matching" }
+  if(names(files_list)[i] == "counterfactual4"){ r$counter_factual_test = "isolate_altitude" }
+  if(names(files_list)[i] == "counterfactual5"){ r$counter_factual_test = "isolate_FLII" }
+  if(names(files_list)[i] == "counterfactual6"){ r$counter_factual_test = "isolate_HFP" }
+  
+  # and save
+  res[[i]] = r
+  
+}
+rm(r,i,l,dat,temp,fl,f)
+
+## Convert to a dataframe
+ppc_values_cf = do.call(rbind, res)
+rm(res)
+ppc_values_cf$X = NULL # damn rownames
+
+##### Now need to determine levels of support 
+
+#### Bayes p-value
+## Add a column denoting if the BPV values converged based on a wide range to account for many mods 
+ppc_values_cf$BPV_valid = "No"
+ppc_values_cf$BPV_valid[ppc_values_cf$BPV.dom >= 0.15 & ppc_values_cf$BPV.dom <= 0.85 &
+                          ppc_values_cf$BPV.sub >= 0.15 & ppc_values_cf$BPV.sub <= 0.85] = "Yes"
+table(ppc_values_cf$BPV_valid[!is.na(ppc_values_cf$Interaction_Estimate)]) 
+# majority are valid, good! 
+
+#### Over-dispersion
+## add a column denoting if over dispersion remains with a wide range to account for many mods 
+ppc_values_cf$OD_valid = "No"
+ppc_values_cf$OD_valid[ppc_values_cf$Chat.dom >= 0.95 & ppc_values_cf$Chat.dom <= 1.3 &
+                         ppc_values_cf$Chat.sub >= 0.95 & ppc_values_cf$Chat.sub <= 1.3] = "Yes"
+table(ppc_values_cf$OD_valid[!is.na(ppc_values_cf$Interaction_Estimate)]) 
+## vast majority are good! 
+
+#### SIV parameter
+## add a column denoting if the species interaction parameter converged 
+ppc_values_cf$parameter_valid = "No"
+ppc_values_cf$parameter_valid[ppc_values_cf$Rhat >= 0.99 & ppc_values_cf$Rhat <= 1.2] = "Yes"
+table(ppc_values_cf$parameter_valid[!is.na(ppc_values_cf$Interaction_Estimate)])
+# majority are valid, good!
+
+## split apart species pair into sub vs dom species
+ppc_values_cf <- within(ppc_values_cf, {
+  sub_species <- sapply(strsplit(Species_Pair, "~"), function(x) x[1])
+  dom_species <- sapply(strsplit(Species_Pair, "~"), function(x) x[2])
+})
+ppc_values_cf$dom_species = gsub("DOM-", "", ppc_values_cf$dom_species)
+ppc_values_cf$sub_species = gsub("SUB-", "", ppc_values_cf$sub_species)
+
+## Add the direction of the relationship
+ppc_values_cf$direction[ppc_values_cf$sub_species %in% c("Panthera_tigris", "Panthera_pardus", 
+                                                         "Neofelis_genus", "Cuon_alpinus")] = "bottom-up"
+ppc_values_cf$direction[ppc_values_cf$dom_species %in% c("Panthera_tigris", "Panthera_pardus", 
+                                                         "Neofelis_genus", "Cuon_alpinus")] = "top-down" # this should allow large carnivore pairings to be top-down
+## Assign 3 levels of non-support --> unsupported_1, unsupported_2, unsupported_3
+ppc_values_cf$support[ppc_values_cf$BPV_valid == "No" |
+                        ppc_values_cf$OD_valid == "No" |
+                        ppc_values_cf$parameter_valid == "No"] = "Unsupported_3" # lowest level of support --> bad mod.
+ppc_values_cf$support[ppc_values_cf$BPV_valid == "Yes" & 
+                        ppc_values_cf$OD_valid == "Yes" &
+                        ppc_values_cf$parameter_valid == "Yes" &
+                        ppc_values_cf$Significance == "Non-Significant"] = "Unsupported_2" # mid-low support --> good mod, but not important
+ppc_values_cf$support[ppc_values_cf$BPV_valid == "Yes" & 
+                        ppc_values_cf$OD_valid == "Yes" &
+                        ppc_values_cf$parameter_valid == "Yes" &
+                        ppc_values_cf$Significance == "Significant" &
+                        ppc_values_cf$direction == "top-down" &
+                        ppc_values_cf$Interaction_Estimate > 0] = "Unsupported_1" # almost supportive --> good model, significant result, but not in correct direction for hypothesis.  
+ppc_values_cf$support[ppc_values_cf$BPV_valid == "Yes" & 
+                        ppc_values_cf$OD_valid == "Yes" &
+                        ppc_values_cf$parameter_valid == "Yes" &
+                        ppc_values_cf$Significance == "Significant" &
+                        ppc_values_cf$direction == "bottom-up" &
+                        ppc_values_cf$Interaction_Estimate < 0] = "Unsupported_1" # Same as above, but applied for bottom-up direction. 
+## assign which models support our hypothesis
+ppc_values_cf$support[ppc_values_cf$BPV_valid == "Yes" & 
+                        ppc_values_cf$OD_valid == "Yes" &
+                        ppc_values_cf$parameter_valid == "Yes" &
+                        ppc_values_cf$Significance == "Significant" &
+                        ppc_values_cf$direction == "top-down" &
+                        ppc_values_cf$Interaction_Estimate <= 0] = "Supported" # good model, significant result, in correct direction for hypothesis.  
+ppc_values_cf$support[ppc_values_cf$BPV_valid == "Yes" & 
+                        ppc_values_cf$OD_valid == "Yes" &
+                        ppc_values_cf$parameter_valid == "Yes" &
+                        ppc_values_cf$Significance == "Significant" &
+                        ppc_values_cf$direction == "bottom-up" &
+                        ppc_values_cf$Interaction_Estimate >= 0] = "Supported" # Same as above, but applied for bottom-up direction. 
+## inspect
+table(ppc_values_cf$support);anyNA(ppc_values_cf$support) # must be F for NA! 
+
+### Now pull out the matching values from original tests
+setdiff(names(ppc_values_cf), names(preform))
+ppc_pref = preform[preform$preference == "preferred",]
+# add the test 
+ppc_pref$counter_factual_test = "original_test"
+# rename cols for easier merging 
+names(ppc_pref)[2:3] = c("dom_species","sub_species")
+setdiff(names(ppc_values_cf), names(ppc_pref))
+# and select the relevant matching cols 
+ppc_pref = ppc_pref[, names(ppc_values_cf)]
+# And finally rbind the rest! 
+ppc_values_cf = rbind(ppc_pref, ppc_values_cf)
+rm(ppc_pref)
+
+
+### What is support levels per cf test?
+ddply(ppc_values_cf, .(counter_factual_test), summarize,
+      num_support = length(support[support == "Supported"]))
+## hmmm! OG is most supported, unsurprisingly. 
+
+### check abundance declines
+ppc_values_cf[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == "isolate_abundance_declines", ]
+## no dhole or pigs present at all... 
+ppc_values_cf$Species_Pair[grepl("Cuon_alpinus|Sus_scrofa", ppc_values_cf$Species_Pair) & 
+                             ppc_values_cf$counter_factual_test == "isolate_abundance_declines"]
+## Dhole made it to the test, just didnt produce any supported results. Pigs only got one test?
+## This could be because the sites w/ such low pig abundance has no predators. 
+
+#### THERE IS A REVERSAL HERE!
+ppc_values_cf[ppc_values_cf$Species_Pair == "SUB-Panthera_pardus~DOM-Macaca_nemestrina" & 
+                ppc_values_cf$counter_factual_test == "isolate_abundance_declines", ]
+## significant and positive. 
+
+
+### Check extirpations test 
+ppc_values_cf[ppc_values_cf$support == "Supported" & 
+                ppc_values_cf$counter_factual_test == "isolate_extirpations", ]
+## INTERESTING! got results showing leopards are both bolstered by muntjac and they suppress them. 
+# Piggies still support all predators, and muntjac and rusa still important. 
+
+### Check site matching
+ppc_values_cf[ppc_values_cf$support == "Supported" & 
+                ppc_values_cf$counter_factual_test == "site_matching", ]
+## interesting new top-down result for clouded leopards suppressing binturong
+## piggies still support all predators, and muntjac and rusa still important. 
+
+## Which species pairs have similar results across tests?
+ppc_values_cf$testing_agreement = NA
+for(i in 1:length(unique(ppc_values_cf$Species_Pair))){
+  
+  ## select data from one pair
+  dat = ppc_values_cf[ppc_values_cf$Species_Pair == unique(ppc_values_cf$Species_Pair)[i], ]
+  # "SUB-Arctictis_binturong~DOM-Neofelis_genus"
+  ## if all support values are the same 
+  if(length(unique(dat$support)) == 1 & length(unique(dat$counter_factual_test)) > 1){
+    
+    ## and if all of those support values are supported
+    if(unique(dat$support) == "Supported"){
+      ## update w/ good news
+      ppc_values_cf$testing_agreement[ppc_values_cf$Species_Pair == unique(ppc_values_cf$Species_Pair)[i]] = "agreement"
+    }else{
+      ## update w/ bad news
+      ppc_values_cf$testing_agreement[ppc_values_cf$Species_Pair == unique(ppc_values_cf$Species_Pair)[i]] = "disagreement"
+    } # end supported condition
+  }else{
+    ## update w/ bad news
+    ppc_values_cf$testing_agreement[ppc_values_cf$Species_Pair == unique(ppc_values_cf$Species_Pair)[i]] = "disagreement"
+  } # end length condition
+}# end per sp 
+rm(i, dat)
+## inspect
+anyNA(ppc_values_cf$testing_agreement) # MUST BE F
+table(ppc_values_cf$testing_agreement) # There is agreement! 
+# who agrees across methods?
+sort(unique(ppc_values_cf$Species_Pair[ppc_values_cf$testing_agreement == "agreement"]))
+## interesting that no models where large carnivores are dominant agree between methods. 
+## maybe this is further evidence for stronger bottom-up regulation?
+
+### ALSO, this is probably good info to include in the MS! 
+## 11 mods agree across tests, all bottom-up results, all large carnivores present. 
+# and pigs show up in every test too, thats great! Along w/ other classic prey like muntjac and sambar 
+
+### Did all 11 results pass thru all tests?
+sort(table(ppc_values_cf$Species_Pair[ppc_values_cf$testing_agreement == "agreement"]))
+### only one passed thru all tests: SUB-Neofelis_genus~DOM-Macaca_nemestrina, but no gurantee all sp pairs included in all tests! 
+## 9 passed 3 tests, and one only passed 2 tests, but clear data limits! 
+
+## Save this table, it will be useful! 
+# write.csv(ppc_values_cf[ppc_values_cf$testing_agreement == "agreement",], paste("explore/counterfactual_results_11_agreeing_mods_MIDDLE_5km_", date, ".csv", ""), row.names = F)
+
+### Finally, add simple support for easier plotting
+ppc_values_cf$support_simple[grepl("Unsuppor", ppc_values_cf$support)] = "unsupported"
+ppc_values_cf$support_simple[ppc_values_cf$support == "Supported" & ppc_values_cf$direction == "top-down"] = "top-down"
+ppc_values_cf$support_simple[ppc_values_cf$support == "Supported" & ppc_values_cf$direction == "bottom-up"] = "bottom-up"
+table(ppc_values_cf$support_simple)
+
+
+
+############# Visualize counterfactual testing via SIV histogram #####
+
+## goal here is to recreate the SIV histogram, but facet-wrap it for the 4 different tests
+## but make sure there are no crazy outliers (esp b/c of MIDDLE testing)
+ppc_values_cf$Species_Pair[ppc_values_cf$Interaction_Estimate < -1.7] # 1 pair
+ppc_values_cf$support[ppc_values_cf$Interaction_Estimate < -1.7] # and  unsupported. 
+ppc_values_cf$counter_factual_test[ppc_values_cf$Interaction_Estimate < -1.7] # and both from isolating abundance declines.  
+## remove from plot, but remember to add to figure description! 
+ppc_values_cf = ppc_values_cf[ppc_values_cf$Interaction_Estimate > -1.7, ]
+# inspect
+summary(ppc_values_cf$Interaction_Estimate) # good spread! 
+
+### Make sure colors are loaded here (copy/paste from above)
+new_colors = c("unsupported_1" = "gray87",
+               "unsupported_2" = "gray55",
+               "unsupported_3" = "gray32",
+               "unsupported" = "gray32",
+               "top-down" = "darkorange4",
+               "bottom-up" = "springgreen4")
+
+## Set the facet wrap factor levels for nice ordering
+ppc_values_cf$counter_factual_test = factor(ppc_values_cf$counter_factual_test,
+                                            levels = c("original_test", "site_matching",
+                                                       #"isolate_abundance_declines",
+                                                       "isolate_extirpations",
+                                                       "isolate_altitude", "isolate_FLII",
+                                                       "isolate_HFP"))
+## remove NA values for failed tests
+ppc_values_cf = ppc_values_cf[! is.na(ppc_values_cf$Interaction_Estimate),]
+
+## Add info about # and percent in each category 
+sum_table = ddply(ppc_values_cf, .(counter_factual_test, support_simple), summarize,
+                  num_lvl = length(Species_Pair))
+## Calculate percentage per test 
+sum_table$percent[sum_table$counter_factual_test == "original_test"] = round(sum_table$num_lvl[sum_table$counter_factual_test == "original_test"] / 
+                                                                               length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "original_test"]) * 100, 1)
+sum_table$percent[sum_table$counter_factual_test == "site_matching"] = round(sum_table$num_lvl[sum_table$counter_factual_test == "site_matching"] / 
+                                                                               length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "site_matching"]) * 100, 1)
+sum_table$percent[sum_table$counter_factual_test == "isolate_abundance_declines"] = round(sum_table$num_lvl[sum_table$counter_factual_test == "isolate_abundance_declines"] / 
+                                                                                            length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "isolate_abundance_declines"]) * 100, 1)
+sum_table$percent[sum_table$counter_factual_test == "isolate_extirpations"] = round(sum_table$num_lvl[sum_table$counter_factual_test == "isolate_extirpations"] / 
+                                                                                      length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "isolate_extirpations"]) * 100, 1)
+sum_table$percent[sum_table$counter_factual_test == "isolate_altitude"] = round(sum_table$num_lvl[sum_table$counter_factual_test == "isolate_altitude"] / 
+                                                                                      length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "isolate_altitude"]) * 100, 1)
+sum_table$percent[sum_table$counter_factual_test == "isolate_HFP"] = round(sum_table$num_lvl[sum_table$counter_factual_test == "isolate_HFP"] / 
+                                                                                      length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "isolate_HFP"]) * 100, 1)
+sum_table$percent[sum_table$counter_factual_test == "isolate_FLII"] = round(sum_table$num_lvl[sum_table$counter_factual_test == "isolate_FLII"] / 
+                                                                                      length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "isolate_FLII"]) * 100, 1)
+
+## inspect
+sum_table # looks good! 
+## manually add via ppt 
+
+
+## make the plot 
+p = 
+  ggplot(ppc_values_cf, aes(x = Interaction_Estimate, fill = support_simple))+
+  geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1, alpha = 1)+#, position = "dodge")+
+  theme_classic()+
+  geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+  scale_fill_manual(values = new_colors) +
+  scale_y_continuous(breaks = seq(0, max(table(ppc_values_cf$support_simple)), by = 2)) + 
+  labs(x = "Species Interaction Value", y = "Number of pairwise co-abundance models", color = NULL)+
+  facet_wrap(~counter_factual_test) + 
+  guides(fill = "none") + 
+  theme(axis.text.x = element_text(size = 16),
+        axis.text.y = element_text(size = 16),
+        axis.text = element_text(color = "black"),
+        text = element_text(family = "Helvetica"))
+## Grab the date 
+day<-str_sub(Sys.Date(),-2)
+month<-str_sub(Sys.Date(),-5,-4)
+year<-str_sub(Sys.Date(),-10,-7)
+date = paste(year,month,day, sep = "")
+rm(year,month,day)
+
+## and save it! 
+# ggsave(paste("explore/counter_factual_testing_SIV_histograms_", date, ".png", sep = ""), p,
+#        width = 15, height = 7, units = "in")
+
+
+
 
 
 

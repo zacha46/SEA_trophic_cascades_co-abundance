@@ -57,22 +57,22 @@ bdata = dat[[slurm]]
 ## and save the name of the species pair 
 n = names(dat)[slurm]
 
-### Verify that this species pair at this setting has not already been completed-
-# First, create file name that mimics results to check if already present
-res =  paste(setting, "_co-abundance_coefficents_", n, sep = "")
-
-# Second, list all completed results
-res_search = list.files("results/co-abundance/coefficent_dataframes/")
-
-# If the newly constructed file name matches ANY values already present in results,
-if(any(grepl(res, res_search))){
-
-  ## Print a message stating so
-  print(paste("The species pair:", n, "run with MCMC settings:", setting, "is already present in the results folder. This R script is terminating now."))
-
-  ## and terminate the R script fully
-  stop("The script was terminated.")
-}
+# ### Verify that this species pair at this setting has not already been completed-
+# # First, create file name that mimics results to check if already present
+# res =  paste(setting, "_co-abundance_coefficents_", n, sep = "")
+# 
+# # Second, list all completed results
+# res_search = list.files("results/co-abundance/coefficent_dataframes/")
+# 
+# # If the newly constructed file name matches ANY values already present in results,
+# if(any(grepl(res, res_search))){
+# 
+#   ## Print a message stating so
+#   print(paste("The species pair:", n, "run with MCMC settings:", setting, "is already present in the results folder. This R script is terminating now."))
+# 
+#   ## and terminate the R script fully
+#   stop("The script was terminated.")
+# }
 
 ## matricies saved as char but need to be numeric 
 bdata$y.dom = apply(bdata$y.dom, 2, as.numeric)
@@ -267,7 +267,7 @@ params = c('a0', 'a1', 'a2', 'a3', 'a5',          # Abundance parameters
            "fit.dom", "fit.rep.dom"               # Chi2 stat for dom, real then simulated
            # "E.dom", "E.rep.dom",
            # "E.sub", "E.rep.sub",
-           # "N.dom", "N.sub"                     # NOT monitoring abundance per site to save RAM on HALF_LONG mods. 
+           # "N.dom", "N.sub"                     # NOT monitoring abundance per site to save RAM on LONG mods. 
            )                         
 
 
@@ -298,7 +298,7 @@ if(setting == "SHORT"){
 if(setting == "MIDDLE"){
   ni = 50000;  nt = 20; nb = 10000 ; nc <- 3; na = NULL   #examine parameter values --> use this for prelim testing. 36-49 hrs per mod
 }
-if(setting == "HALF_LONG"){
+if(setting == "LONG"){
   ni = 250000;  nt = 20; nb = 50000 ; nc <- 3; na = NULL  #publication quality run --> ~160 hours per mod, all finish in < 2 weeks! 
 }
 

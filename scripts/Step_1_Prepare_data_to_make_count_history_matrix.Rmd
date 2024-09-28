@@ -1,0 +1,907 @@
+---
+title: "Step 1 Prepare data to make count history matrix"
+author: "Zachary Amir"
+date: "`r Sys.time()`"
+output: html_document
+---
+
+## Introduction
+
+This code will prepare camera trap data to create count history matrices and the associated covariates. This is a necessary first step towards preparing the data to implement Zachary Amir's co-abundance models on the High Performance Computers (HPC).
+
+This code works off the spatially re-sampled captures and covariates that are generated in the 4-step Southeast Asian camera trap data standardization pipeline. To learn more about this Southeast Asian camera trap data standardization pipeline, please contact Zachary Amir (z.amir@uq.edu.au) or Matthew Luskin (m.luskin@uq.edu.au) to request access to the following relevant [GitHub repository](https://github.com/EcologicalCascadesLab/AsianCaptureHistories).
+
+```{r global-options, include=FALSE, warning=FALSE, error=FALSE}
+## We can knit this into a nice document! but dont include all the code unless otherwise specified (i.e. include=TRUE)
+knitr::opts_chunk$set(include=FALSE, warning=FALSE, error = FALSE)
+
+## start fresh
+rm(list = ls())
+
+## load libraries
+library(tidyverse)  # For basic data wrangling
+library(plyr)       # For data summaries
+library(traitdata)  # For species trait data (e.g. body mass, trophic guild, home ranges)
+
+```
+
+```{r import captures}
+
+#### Re-sampled captures and metadata are saved per survey in a folder in the cap hist DB on DropBox
+### This raw data is not available for public usage, but a derived version will be hosted on DropBox. 
+
+### captures first 
+
+## specify where the data lives
+wd = "/Users/zachary_amir/Dropbox/CT capture histories database/Asian ECL raw CT data/Step5_HPC_import_resampled_captures/"
+
+## import and combine here
+files = list.files(wd)
+files = files[!grepl("OLD", files)] # remove old data folder
+
+## save the scale we are interested in 
+scale = "5km" #
+
+## thin to the relevant scale were interested in 
+files = files[grepl(scale, files)] 
+
+## store caps here-
+caps = list()
+
+for(i in 1:length(files)){
+  
+  # select a file 
+  f = files[i]
+  
+  # make the path 
+  f_path = paste(wd, f, sep = "")
+  
+  # read it
+  d = read.csv(f_path)
+  
+  ## rename cell_id so it is scale agnostic
+  names(d)[grepl("cell_id", names(d))] = "cell_id"
+  
+  ## extract ID tag from file name
+  id = strsplit(f, "_spatially_resampled_captures")[[1]][1]
+  
+  # remove the number
+  id = gsub("^\\d+_", "", id)
+  
+  ## save it! 
+  caps[[i]] = d
+  names(caps)[i] = id
+  
+  ## let us know if there are any duplicate files in our repo
+  if(any(duplicated(names(caps)))){
+    print(paste("There are repeated files from the same survey with the tag:", id,
+                "Make sure to remove it before importing!"))
+  }# end conditional
+  
+} # end per file 
+rm(f,f_path, d, id, i, files, wd)
+
+## combine list into a df
+caps = do.call(rbind, caps)
+rownames(caps) = NULL
+
+
+```
+
+```{r import metdata}
+
+### Same deal as the captures, this data lives in a separate dropbox directory not linked to R Project, so we need to specify that directly specifically. 
+
+## specify where the data lives
+wd = "/Users/zachary_amir/Dropbox/CT capture histories database/Asian ECL raw CT data/Step5_HPC_import_resampled_metadata/"
+
+## import and combine here
+files = list.files(wd)
+files = files[!grepl("OLD", files)] # remove old data folder
+
+## thin to the same scale as above
+files = files[grepl(scale, files)]
+
+## store caps here-
+meta = list()
+
+for(i in 1:length(files)){
+  
+  # select a file 
+  f = files[i]
+  
+  # make the path 
+  f_path = paste(wd, f, sep = "")
+  
+  # read it
+  d = read.csv(f_path)
+  
+  ## rename cell_id so it is scale agnostic
+  names(d)[grepl("cell_id", names(d))] = "cell_id"
+  
+  ## extract ID tag from file name
+  id = strsplit(f, "_spatially_resampled_metadata")[[1]][1]
+  
+  # remove the number
+  id = gsub("^\\d+_", "", id)
+  
+  ## save it! 
+  meta[[i]] = d
+  names(meta)[i] = id
+  
+  ## let us know if there are any duplicate files in our repo
+  if(any(duplicated(names(meta)))){
+    print(paste("There are repeated files from the same survey with the tag:", id,
+                "Make sure to remove it before importing!"))
+  }# end conditional
+  
+} # end per file 
+rm(f,f_path, d, id, i, files, wd)
+
+## combine list into a df
+meta = do.call(rbind, meta)
+rownames(meta) = NULL
+
+```
+
+```{r Inspect and prepare data}
+
+## ensure all cell_ids match!
+setdiff(meta$cell_id, caps$cell_id)
+setdiff(caps$cell_id, meta$cell_id) # full match, good to go! 
+
+## format classes
+caps$Date = as.Date(caps$Date, format = "%Y-%m-%d")
+meta$Sampling_begin = as.Date(meta$Sampling_begin, format = "%Y-%m-%d")
+meta$Sampling_end = as.Date(meta$Sampling_end, format = "%Y-%m-%d")
+
+## need survey year in covariates 
+meta$year = str_extract(meta$survey_id, stringr::regex("(\\d+)(?!.*\\d)"))
+sort(table(meta$year)) #looks good! 
+
+
+#### Remove data that does not meet inclusion criteria
+
+## Remove Brodie's data W of wallace line --> doesnt have relevant species
+meta = meta[! grepl("E_Indonesia", meta$Landscape),]
+
+# and thin caps to match
+caps = caps[caps$survey_id %in% meta$survey_id,]
+
+
+#### To be conservative, lets thin the data surveys with enough data
+
+## summarize info about surveys
+surv_summary = ddply(caps, .(survey_id), summarize,
+                     num_SU = length(unique(cell_id)), # total number of sampling units (SUs)
+                     max_cam = max(num_cams_active_at_date), # maximum number of cams active in a single sampling unit
+                     dur = difftime(max(Date), min(Date), units= "days")) # duration of the survey 
+## calculate trap nights 
+surv_summary$trap_nights = surv_summary$num_SU * surv_summary$dur
+
+## Extract surveys that do not meet inclusion criteria. 
+rm = surv_summary$survey_id[as.numeric(surv_summary$trap_nights) < 100] # less than 100 trap nights 
+rm2 = surv_summary$survey_id[(surv_summary$num_SU) < 3] # less than 3 sampling units in a survey 
+rm = unique(c(rm,rm2))
+
+## how much do we lose when we remove this data?
+dat_rm = round(dim(caps[caps$survey_id %in% rm,])[1]  / dim(caps)[1] * 100, 3)
+
+## remove the data from caps
+caps = caps[!caps$survey_id %in% rm,]
+
+## and metadata
+meta = meta[meta$survey_id %in% caps$survey_id,]
+
+## display survey information below
+
+
+```
+
+## Camera trap data included for analysis  
+
+The camera trap data used in this analysis comes from **`r length(unique(meta$source))` data providers** that sampled **`r length(unique(meta$Landscape))` spatially distinct landscapes** from a total of **`r length(unique(meta$survey_id))` temporally distinct survey_ids** that have been defined to be a maximum of 100 days long. 
+We have spatially re-sampled the camera trap captures and covariates to the **`r scale` spatial scale**, meaning that any cameras within a `r scale` hexagon had their captures aggregated. There are a total of **`r paste(length(unique(meta$cell_id)), scale, "sampling units")`** available for analysis. 
+
+As part of ensuring we are using robust data, a landscape needs be at least 9 km2 to provide spatial variation and a survey needs to contain at least 100 trap-nights. Therefore, a total of __`r length(rm)` surveys have been removed__ that do not meet these standards, and this represents __`r paste(round(dat_rm,1), "%", sep = "")` of the captures__. For the remaining `r length(unique(meta$survey_id))` valid surveys, the __median number of `r scale` sampling units is `r median(surv_summary$num_SU[!surv_summary$survey_id %in% rm])` with a range from `r paste(min(surv_summary$num_SU[!surv_summary$survey_id %in% rm]), max(surv_summary$num_SU[!surv_summary$survey_id %in% rm]), sep = " - ")`__, and the __median sampling effort is `r as.numeric(median(surv_summary$trap_nights[!surv_summary$survey_id %in% rm]))` trap-nights, with a range from `r paste(as.numeric(min(surv_summary$trap_nights[!surv_summary$survey_id %in% rm])), as.numeric(max(surv_summary$trap_nights[!surv_summary$survey_id %in% rm])), sep = " - ")`__.
+
+## Determine which species to analyze
+
+In these code chunks, I will determine which species have **sufficient captures (n = 100)**, standardize similar species to the genera level (*e.g.*, clouded leopards in the genus *Neofelis*), and remove non-relevant 'species' (e.g. blanks). 
+
+I will also gather species traits from the `library(speciestraits)` databases. Each species will have 1) a trophic level (*i.e.*, carnivore, omnivore, herbivore), 2) body mass (in grams), and 3) home range size (in km2). Finally, I have also added dietary preferences for the four large carnivores species that are the focus of this analysis. 
+
+```{r select and standardize species to include}
+
+## clean up environment from previous reporting text
+rm(dat_rm, rm, rm2, surv_summary)
+
+##### Which species will be included and how to standardize species?
+
+## replace space with underscore to facilitate clean code/data
+caps$Species = gsub(" ", "_", caps$Species)
+
+# which species have sufficent (n=100) detections?
+sp_count = ddply(caps, .(Species), summarize,
+                 num_cap = length(Species))
+keep = sp_count[sp_count$num_cap >= 100,]
+
+## what did we get?
+keep[order(keep$num_cap),] ## Awesome!! 
+full_length = length(keep$Species) # 106 species before any cleaning 
+
+
+## Standardize muntjacs, tragulus, Hystrix (?), Neofelis, Capricornis, Tupaia, maybe Canis_lupus
+## remove from analysis: Ghost Homo_sapiens, unID'd, remove, Aves, bird, unkown, bird_pheasent, etc
+
+### Clean up and combine some speices names
+
+# Hystrix
+sort(table(caps$Species[grepl("Hystrix", caps$Species)])) ## dont change crassispinis or brachyura b/c we have enough! 
+# caps$Species[caps$Species %in% c("Hystrix_brachyura", "Hystrix")] = "Hystrix_genus"
+
+# Muntjac
+sort(table(caps$Species[grepl("Munt", caps$Species)])) # ecologically very similar species, but what about spatial distribution?
+## where do all these muntjacs come from?
+Ma = caps$cell_id[caps$Species == "Muntiacus_atherodes"]
+unique(meta$Landscape[meta$cell_id %in% Ma]) # Sarawak and Sabah.
+Mr = caps$cell_id[caps$Species == "Muntiacus_reevesi"]
+unique(meta$Landscape[meta$cell_id %in% Mr]) # Sarawak, Sabah, Sumatra, and S. Thailand...
+Mv = caps$cell_id[caps$Species == "Muntiacus_vaginalis"]
+unique(meta$Landscape[meta$cell_id %in% Mv]) # Thailand, Vietnam, China
+Mm = caps$cell_id[caps$Species == "Muntiacus_muntjak"]
+sort(unique(meta$Landscape[meta$cell_id %in% Mm])) # Laos, P_Malaysia, Sarawak, Sabah, Sumatra, Thailand (many)
+M = caps$cell_id[caps$Species == "Muntiacus"]
+sort(unique(meta$Landscape[meta$cell_id %in% M])) # Laos, Sarawak, Thailand (many), Vietnam.
+## These are all quite spatially distinct, so there is good motivation to combine these species into one
+# Make sure to save independent detections of all for supplementary materials later! 
+rm(Ma, Mr, Mv, Mm, M)
+
+## combine
+caps$Species[grepl("Munt", caps$Species)] = "Muntiacus_genus"
+
+# clouded leopards
+sort(table(caps$Species[grepl("Neof", caps$Species)])) #just geographical differences, but way more bornean than mainland! 
+caps$Species[grepl("Neof", caps$Species)] = "Neofelis_genus"
+
+# mousedeer
+sort(table(caps$Species[grepl("Trag", caps$Species)])) #Amazed that these are even differentiated 
+caps$Species[grepl("Trag", caps$Species)] = "Tragulus_genus"
+
+# serow
+sort(table(caps$Species[grepl("Capric", caps$Species)])) #I think these were recently combined by taxonomists anyway 
+caps$Species[grepl("Capric", caps$Species)] = "Capricornis_genus"
+
+# treeshrew
+sort(table(caps$Species[grepl("Tupai", caps$Species)])) #Amazed that these are even differentiated 
+caps$Species[grepl("Tupai", caps$Species)] = "Tupaia_genus"
+
+#dogs
+sort(table(caps$Species[grepl("Canis_lup", caps$Species)])) #Just call these dogs, we dont have pics to know if domestic or not 
+caps$Species[grepl("Canis_lup", caps$Species)] = "Canis_lupus_familiaris"
+
+# mongoose
+sort(table(caps$Species[grepl("Herpe", caps$Species)])) # Just stick with H_urva and H_brachyrus 
+caps$Species[caps$Species %in% c("Herpestes", "Herpestes_semitorquatus",
+                                 "Herpestidae")] = "Herpestes_genus" # this will get excluded later anyway b/c we have more specific species, which is better. 
+
+# Murids
+unique(caps$Species[grepl("Muri", caps$Species)]) #only the family muridae
+caps$Species[grepl("Muri", caps$Species)] = "Muridae_spp" #spp denotes family here. 
+
+#squirells 
+unique(caps$Species[grepl("Sciur", caps$Species)]) #only the family sciuridae
+caps$Species[grepl("Sciur", caps$Species)] = "Sciuridae_spp"
+
+
+#Combine northern and southern pig tail macaques into one species Macaca_leonina Macaca_nemestrina 
+sort(table(caps$Species[grepl("Macaca_", caps$Species)]))
+caps$Species[caps$Species %in% c("Macaca_leonina", "Macaca_nemestrina" )] = "Macaca_nemestrina"
+
+#chickens
+unique(caps$Species[grepl("Gallu", caps$Species)]) #analyze at genus level. 
+caps$Species[startsWith(caps$Species, "Gallus")] = "Gallus_genus"
+
+## attach genus to the other Genera names that need it to stay consistent
+caps$Species[caps$Species %in% c("Amaurornis", "Macaca", "Hystrix",
+                                 "Maxomys","Melogale", "Varanus")] = paste(caps$Species[caps$Species %in% c("Amaurornis", "Macaca",
+                                                                                                            "Hystrix","Maxomys","Melogale", "Varanus")], "genus", sep = "_")
+
+### Make a new species count w/ updated species names
+sp_count = ddply(caps, .(Species), summarize,
+                 num_cap = length(Species))
+keep = sp_count[sp_count$num_cap >= 100,]
+
+## what did we get?
+sort(keep$Species) #reduced to 91 species
+
+# remove some of the not useful fluff
+keep = keep[!keep$Species %in% c("Aves", "Ghost", "Mammalia",
+                                 "Unknown","Vehicle"),] 
+
+#remove all  people 
+keep = keep[!grepl("Homo", keep$Species ),] 
+
+# remove species not ID to the species or genus level 
+keep = keep[!endsWith(keep$Species, "_spp"),]
+# and the others. 
+keep = keep[! keep$Species %in% c("Scincidae","Small_mammal", "Herpestidae",
+                                  "Phasianidae", "Rodentia","Scandentia"),]
+
+length(keep$Species) # 73 species after removing fluff. 
+rm(sp_count)
+
+### Looks good, but will remove more species once body weights are accounted for. 
+sort(keep$Species)
+
+## save it as a vector, not dataframe
+keep = keep$Species
+
+```
+
+```{r initalize species trait data, include=FALSE}
+
+## access panthera dataset
+pan = pantheria
+# replace space with underscore for species names to match our style
+pan$scientificNameStd = gsub(" ", "_", pan$scientificNameStd)
+
+## access mammal_diet dataset
+mam = mammal_diet2
+mam = as.data.frame(mam) # remove silly tibble
+# replace space with underscore for species names to match our style
+mam$scientificNameStd = gsub(" ", "_", mam$scientificNameStd)
+## remove NA species names
+mam = mam[!is.na(mam$scientificNameStd),]
+
+## import Sam Lee's cleaned avonet dataframe from dropbox 
+wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/"
+
+bird = read.csv(paste(wd, "bird_guild_information_20221102.csv", sep = ""))
+
+# replace space with underscore for bird species names
+bird$Species = gsub(" ", "_", bird$Species)
+
+## check which species we have matches for 
+intersect(bird$Species, keep) # 12 matches and all birds, great! 
+# thin bird to relevant species
+bird = bird[bird$Species %in% c(keep, "Gallus_gallus"),]
+bird$Species[bird$Species == "Gallus_gallus"] = "Gallus_genus" #std to match
+
+## copy "Amaurornis_phoenicurus" and provide for genus Amaurornis catch-all
+am = bird[bird$Species == "Amaurornis_phoenicurus",]
+am$Species = "Amaurornis_genus" 
+bird = rbind(bird,am)
+rm(am)
+
+## access a dataset for varanus salvator 
+rep = lizard_traits
+# thin to our singular herp species
+rep = rep[rep$scientificNameStd == "Varanus salvator",] # good! 
+rep = rep[!is.na(rep$scientificNameStd),] # idk why, but it comes with lots of NA
+# make sure species name is consistent!
+rep$scientificNameStd = gsub(" ", "_", rep$scientificNameStd)
+# thin to relevant info
+rep = select(rep, scientificNameStd, diet) # missing body wieght and home range 
+
+## adding custom body weight as determined by Shine et al 1996, "Commercial harvesting of giant lizards: The biology of water monitors Varanus salvator in southern Sumatra"
+rep$Body_mass = 3.24
+names(rep)[2] = "TrophicLevel"
+
+## add a second row of rep for Varanus catch-all genus
+rep = rbind(rep,rep)
+rep$scientificNameStd[2] = "Varanus_genus"
+
+## rbind w/ our birds
+names(bird)[1:2] = c("scientificNameStd","TrophicLevel")
+rep_bird = rbind(rep, bird)
+
+# convert kg masses to grams to match mammal format 
+rep_bird$Body_mass = rep_bird$Body_mass * 1000
+names(rep_bird)[3] = "AdultBodyMass_g"
+
+## dont know home range for these guys, so just leave as NA
+rep_bird$HomeRange_km2 = NA
+
+## thin mam and pan to relevant info while incorporating known typo
+mam = select(mam[mam$scientificNameStd %in% c(keep, "Taperus_indicus", 
+                                              "Canis_lupus"),], scientificNameStd, TrophicLevel) # diet from here
+pan = select(pan[pan$scientificNameStd %in% c(keep, "Taperus_indicus", 
+                                              "Canis_lupus"),], scientificNameStd, AdultBodyMass_g, HomeRange_km2) # mass and home range from here
+
+# and merge together
+mam_pan = distinct(merge(mam, pan, by = "scientificNameStd"))
+
+# There are two duplicated rows, remove them! 
+a = mam_pan[mam_pan$scientificNameStd == "Callosciurus_notatus" & !is.na(mam_pan$AdultBodyMass_g),] # remove dup w/out mass
+b = mam_pan[mam_pan$scientificNameStd == "Atherurus_macrourus" & 
+              mam_pan$TrophicLevel == "Herbivore",] # remove dup w/ omnivore tag for porcupine
+c = rbind(a,b)
+## remove bad species
+mam_pan = mam_pan[!mam_pan$scientificNameStd %in% c("Atherurus_macrourus", "Callosciurus_notatus"),]
+## and rbind good records of those species
+mam_pan = rbind(mam_pan, c)
+rm(a,b,c)
+
+
+# Now combine them all!
+traits = rbind(mam_pan, rep_bird)
+
+## check which species are missing 
+setdiff(keep, traits$scientificNameStd) # 12, though mostly genera or a few typos 
+
+## fix obvious typos first
+traits$scientificNameStd[traits$scientificNameStd == "Taperus_indicus"] = "Tapirus_indicus"
+traits$scientificNameStd[traits$scientificNameStd == "Canis_lupus"] = "Canis_lupus_familiaris"
+
+## add 10 missing species to traits object
+traits[64:(64+9), "scientificNameStd"] = setdiff(keep, traits$scientificNameStd)
+
+### re-load mam and pam to include other species
+# pan
+pan = pantheria
+pan$scientificNameStd = gsub(" ", "_", pan$scientificNameStd)
+pan = select(pan, scientificNameStd, AdultBodyMass_g, HomeRange_km2)
+# mam
+mam = mammal_diet2
+mam = as.data.frame(mam) # remove silly tibble
+mam$scientificNameStd = gsub(" ", "_", mam$scientificNameStd)
+mam = mam[!is.na(mam$scientificNameStd),]
+mam = select(mam, scientificNameStd, TrophicLevel)
+
+
+## add info per species/guild
+#serow
+traits[traits$scientificNameStd == "Capricornis_genus", "TrophicLevel"] = mam$TrophicLevel[mam$scientificNameStd == "Capricornis_sumatraensis"]
+traits[traits$scientificNameStd == "Capricornis_genus", c("AdultBodyMass_g", "HomeRange_km2")] = pan[pan$scientificNameStd == "Capricornis_sumatraensis", c("AdultBodyMass_g", "HomeRange_km2")]
+
+# mongooses 
+traits[traits$scientificNameStd == "Herpestes_genus", "TrophicLevel"] = mam$TrophicLevel[mam$scientificNameStd == "Herpestes_urva"]
+traits[traits$scientificNameStd == "Herpestes_genus", c("AdultBodyMass_g", "HomeRange_km2")] = pan[pan$scientificNameStd == "Herpestes_urva", c("AdultBodyMass_g", "HomeRange_km2")]
+
+#muntjacs
+traits[traits$scientificNameStd == "Muntiacus_genus", "TrophicLevel"] = unique(mam$TrophicLevel[mam$scientificNameStd == "Muntiacus_muntjak"])
+traits[traits$scientificNameStd == "Muntiacus_genus", c("AdultBodyMass_g", "HomeRange_km2")] = pan[pan$scientificNameStd == "Muntiacus_muntjak", c("AdultBodyMass_g", "HomeRange_km2")]
+
+#clouded leopards
+traits[traits$scientificNameStd == "Neofelis_genus", "TrophicLevel"] = mam$TrophicLevel[mam$scientificNameStd == "Neofelis_nebulosa"]
+traits[traits$scientificNameStd == "Neofelis_genus", c("AdultBodyMass_g", "HomeRange_km2")] = pan[pan$scientificNameStd == "Neofelis_nebulosa", c("AdultBodyMass_g", "HomeRange_km2")]
+
+#mousedeer
+traits[traits$scientificNameStd == "Tragulus_genus", "TrophicLevel"] = mam$TrophicLevel[mam$scientificNameStd == "Tragulus_napu"]
+traits[traits$scientificNameStd == "Tragulus_genus", c("AdultBodyMass_g", "HomeRange_km2")] = pan[pan$scientificNameStd == "Tragulus_napu", c("AdultBodyMass_g", "HomeRange_km2")]
+
+#gaur
+traits[traits$scientificNameStd == "Bos_gaurus", "TrophicLevel"] = mam$TrophicLevel[mam$scientificNameStd == "Bos_javanicus"]
+traits[traits$scientificNameStd == "Bos_gaurus", c("AdultBodyMass_g", "HomeRange_km2")] = pan[pan$scientificNameStd == "Bos_javanicus", c("AdultBodyMass_g", "HomeRange_km2")]
+
+#porcupines
+traits[traits$scientificNameStd == "Hystrix_genus", "TrophicLevel"] = unique(mam$TrophicLevel[mam$scientificNameStd == "Hystrix_brachyura"])
+traits[traits$scientificNameStd == "Hystrix_genus", c("AdultBodyMass_g", "HomeRange_km2")] = pan[pan$scientificNameStd == "Hystrix_brachyura", c("AdultBodyMass_g", "HomeRange_km2")]
+
+#maxomys
+traits[traits$scientificNameStd == "Maxomys_genus", "TrophicLevel"] = mam$TrophicLevel[mam$scientificNameStd == "Maxomys_rajah"] # widespread in Sundaland
+traits[traits$scientificNameStd == "Maxomys_genus", c("AdultBodyMass_g", "HomeRange_km2")] = pan[pan$scientificNameStd == "Maxomys_rajah", c("AdultBodyMass_g", "HomeRange_km2")]
+
+#Tupaia_genus
+traits[traits$scientificNameStd == "Tupaia_genus", "TrophicLevel"] = unique(mam$TrophicLevel[mam$scientificNameStd == "Tupaia_glis"])
+traits[traits$scientificNameStd == "Tupaia_genus", c("AdultBodyMass_g", "HomeRange_km2")] = pan[pan$scientificNameStd == "Tupaia_glis", c("AdultBodyMass_g", "HomeRange_km2")]
+
+#Macaca
+traits[traits$scientificNameStd == "Macaca_genus", "TrophicLevel"] = unique(mam$TrophicLevel[mam$scientificNameStd == "Macaca_nemestrina"]) # maybe silly b/c already present?
+traits[traits$scientificNameStd == "Macaca_genus", c("AdultBodyMass_g", "HomeRange_km2")] = pan[pan$scientificNameStd == "Macaca_nemestrina", c("AdultBodyMass_g", "HomeRange_km2")]
+
+#Melogale
+traits[traits$scientificNameStd == "Melogale_genus", "TrophicLevel"] = unique(mam$TrophicLevel[mam$scientificNameStd == "Melogale_moschata"]) 
+traits[traits$scientificNameStd == "Melogale_genus", c("AdultBodyMass_g", "HomeRange_km2")] = pan[pan$scientificNameStd == "Melogale_moschata", c("AdultBodyMass_g", "HomeRange_km2")]
+
+### two civets are missing weights!! 
+# Hose civet
+traits$AdultBodyMass_g[traits$scientificNameStd == "Diplogale_hosei"] = 2500 #https://www.ecologyasia.com/verts/mammals/hose's-civet.htm
+# large spotted civet
+traits$AdultBodyMass_g[traits$scientificNameStd == "Viverra_megaspila"] = 6600 #https://en.wikipedia.org/wiki/Large-spotted_civet
+
+### Inspect
+anyNA(traits[, c("scientificNameStd", "TrophicLevel", "AdultBodyMass_g")]) # must be F, tho home range could be true 
+
+## double check
+setdiff(keep, traits$scientificNameStd) # full match! 
+setdiff(traits$scientificNameStd, keep) # full match! 
+## should be good to go! 
+
+## keep it clean! 
+rm(mam,pan, bird,rep, rep_bird, mam_pan)
+
+```
+
+```{r clean species traits data }
+
+## each macaque species has a different guild (omni, herb, and carn), 
+## standardize to omnivore
+traits$TrophicLevel[grepl("Macaca", traits$scientificNameStd)] = "Omnivore"
+## make all bears omnivores, not herbivore as currently recognized
+traits$TrophicLevel[traits$scientificNameStd %in% c("Helarctos_malayanus", "Ursus_thibetanus")] = "Omnivore"
+## make all Lophura herbivores
+traits$TrophicLevel[grepl("Lophura", traits$scientificNameStd)] = "Herbivore"
+## caught a typo from the rep data base to be corrected here
+traits$TrophicLevel[traits$TrophicLevel == "Carnivorous"] = "Carnivore"
+## Orangutans should be herbivores, not omnivores
+traits$TrophicLevel[traits$scientificNameStd == "Pongo_pygmaeus"] = "Herbivore"
+
+# make body mass numeric 
+traits$AdultBodyMass_g = as.numeric(traits$AdultBodyMass_g)
+
+## We do NOT want to analyze anything < 1kg in body mass, so remove them here
+# which do we lose?
+sort(traits$scientificNameStd[traits$AdultBodyMass_g < 1000]) 
+## double checked old results for those >500g, and doesnt seem like we will miss much here... REMOVE
+traits = traits[traits$AdultBodyMass_g > 1000,]
+## also remove anything over 1000 kg, which is too large to be preyed upon 
+sort(traits$scientificNameStd[traits$AdultBodyMass_g > 1000000])  # just elephants
+traits = traits[traits$AdultBodyMass_g < 1000000,]
+
+## We are also NOT interested in examining domestic animals, so remove them here
+traits = traits[! traits$scientificNameStd %in% c("Canis_lupus_familiaris", "Bos_taurus"), ]
+
+## There is also no point analyzing species that are ID'd at the genus level AND species level --> extra noise
+traits = traits[! traits$scientificNameStd %in% c("Herpestes_genus", "Hystrix_genus", "Macaca_genus", "Varanus_genus" ), ]
+
+## also do not include species that are primarily arboreal --> orangutans, langur, tufted squirrell any anyone else?
+traits = traits[! traits$scientificNameStd %in% c("Pongo_pygmaeus", "Presbytis_rubicunda", "Rheithrosciurus_macrotis"), ]
+
+# thin keep to match 
+keep = keep[keep %in% traits$scientificNameStd]
+
+## add small and large to trophic levels 
+traits$TrophicGuild = traits$TrophicLevel
+
+# inspect omnivores first --> 50 kg cut off for omnivores
+traits$scientificNameStd[traits$TrophicLevel == "Omnivore"] 
+traits$TrophicGuild[traits$TrophicLevel == "Omnivore" & 
+                      traits$AdultBodyMass_g < 50000] = "Small_Omnivore"
+traits$TrophicGuild[traits$TrophicLevel == "Omnivore" & 
+                      traits$AdultBodyMass_g > 50000] = "Large_Omnivore"
+# inspect
+sort(table(traits$TrophicGuild[traits$TrophicLevel == "Omnivore"]))
+
+
+## herbivores --> 100 kg cut off
+traits$scientificNameStd[traits$TrophicLevel == "Herbivore"] # good mix
+traits$TrophicGuild[traits$TrophicLevel == "Herbivore" & 
+                      traits$AdultBodyMass_g < 100000] = "Small_Herbivore"
+traits$TrophicGuild[traits$TrophicLevel == "Herbivore" & 
+                      traits$AdultBodyMass_g > 100000] = "Large_Herbivore"
+# inspect
+sort(table(traits$TrophicGuild[traits$TrophicLevel == "Herbivore"]))
+
+## Carnivores --> 15kg cut off (but just less than 15 to accomodate clouded leopards)
+traits$scientificNameStd[traits$TrophicLevel == "Carnivore"] # 
+traits$TrophicGuild[traits$TrophicLevel == "Carnivore" & 
+                      traits$AdultBodyMass_g < 14940] = "Small_Carnivore"
+traits$TrophicGuild[traits$TrophicLevel == "Carnivore" & 
+                      traits$AdultBodyMass_g > 14940] = "Large_Carnivore"
+# inspect
+sort(table(traits$TrophicGuild[traits$TrophicLevel == "Carnivore"]))
+
+
+table(traits$TrophicGuild) # looks good! 
+## many more small than large, but this is to be expected. 
+
+
+```
+
+```{r determine large carnivore dietary preferences }
+
+### The goal here is to determine if large carnivores have different effects 
+## when looking at 'preferred' prey species vs non-preferred species. 
+# Ideally, just add a yes-no column to the guilds dataframe for each large carnivore. 
+
+# Diet changes so much based on habitat, interactions, and time of year... 
+# All species seem to prefer to some degree Sus scrofa based on readings. 
+
+#### Tigers
+# https://zslpublications.onlinelibrary.wiley.com/doi/full/10.1111/j.1469-7998.2011.00871.x
+# suggests preferred weight range of 60-250 kg, and wil eat the largest available prey.... So anything >= 60 kg to accomodate tapir, gaur, and cattle
+### Change minimum wieght to 17 kg to include muntjac and cite eco-evo paper about it. 
+## and can cite Allan Rabinowitz about it: https://thesiamsociety.org/wp-content/uploads/2020/04/NHBSS_037_2k_Rabinowitz_TheDensityAndB.pdf
+traits$tiger_pref = "No"
+traits$tiger_pref[traits$AdultBodyMass_g > 17000] = "Yes"
+traits$tiger_pref[traits$scientificNameStd == "Panthera_tigris"] = "No" # no cannibals allowed. 
+traits$tiger_pref[traits$TrophicGuild == "Large_Carnivore"] = "No" # no other large carnivores
+# who is preferred?
+sort(traits$scientificNameStd[traits$tiger_pref == "Yes"]) # 10 species, ok
+# black bear made it in, and this MS says they are preyed upon by tigers in Laos: https://onlinelibrary.wiley.com/doi/full/10.1002/ece3.9067
+# Might as well leave sun bear in here too. 
+#who is missing?
+sort(traits$scientificNameStd[traits$tiger_pref == "No"]) # seems ok, 33 species
+
+
+
+#### Leopards 
+#  https://doi.org/10.1111/j.1469-7998.2006.00139.x
+# suggest preferred weight range of 10-40 kg. 
+# https://www.sciencedirect.com/science/article/pii/S0006320712005149 
+# langurs/primates, pigs when tigers are absent. 
+# https://royalsocietypublishing.org/doi/10.1098/rsos.171187
+# suggest large prey (Banteng/Gaur) is possible in the absence of tigers, but not common and restricted to males. 
+# https://thesiamsociety.org/wp-content/uploads/2020/04/NHBSS_037_2k_Rabinowitz_TheDensityAndB.pdf
+# Muntjac (for tigers too), then primates, then pig == sambar == porcupines == hog badger 
+# https://thesiamsociety.org/wp-content/uploads/2020/04/NHBSS_047_1l_Grassman_EcologyAndBehavi.pdf
+# Suggests hog badger is important too. 
+
+traits$leopard_pref = "No"
+traits$leopard_pref[traits$AdultBodyMass_g > 10000 & traits$AdultBodyMass_g <= 40000] = "Yes"
+traits$tiger_pref[traits$scientificNameStd == "Panthera_pardus"] = "No" # no cannibals allowed. 
+# who is preferred?
+traits$scientificNameStd[traits$leopard_pref == "Yes"] # 4 species, mostly carnivores
+## exclude clouded leopards and dholes, leave dogs tho (evidence from india)
+traits$leopard_pref[traits$scientificNameStd %in% c("Cuon_alpinus","Neofelis_genus")] = "No"
+## also add primates and pigs based off readings
+traits$leopard_pref[grepl("Macac", traits$scientificNameStd)] = "Yes" # only include macaques. 
+## include pigs and hog badger 
+traits$leopard_pref[traits$scientificNameStd %in% c("Sus_scrofa","Arctonyx_collaris")] = "Yes"
+# who is preferred now?
+sort(traits$scientificNameStd[traits$leopard_pref == "Yes"]) # 7 species, better! 
+#who is missing?
+sort(traits$scientificNameStd[traits$leopard_pref == "No"]) # seems ok, 38 species --> nothing obvious to include here. 
+
+
+#### Dholes
+# https://zslpublications.onlinelibrary.wiley.com/doi/10.1111/jzo.12171
+## Hayward style pref wieght range of 130–190 kg, and highlights sambar as important. 
+# https://www.ncbi.nlm.nih.gov/pmc/articles/PMC9388674/
+## scat analysis that emphasizes large deer (sambar + chital), pigs and muntjac were moderetly avoided but still consumed.
+# https://doi.org/10.1016/j.mambio.2013.08.007
+## lit review of scats and abundance: 40 and 60 kg weight range, sambar preferred most. 
+### Matthew suggests a drop down to 10 kg, but wait for citation from him --> would only add binturongs anyway... 
+traits$dhole_pref = "No"
+traits$dhole_pref[traits$AdultBodyMass_g > 40000 & traits$AdultBodyMass_g < 190000 &
+                    traits$TrophicGuild != "Large_Carnivore"] = "Yes"
+# who is preferred?
+traits$scientificNameStd[traits$dhole_pref == "Yes"] # Some species here dont make sense: bears --> remove! 
+# remove bears, no evidence for this! 
+traits$dhole_pref[traits$scientificNameStd %in% c("Helarctos_malayanus", "Ursus_thibetanus")] = "No"
+## Adding muntjac because they are consumed according to lit (eaten by everything)
+traits$dhole_pref[traits$scientificNameStd %in% c("Muntiacus_genus")] = "Yes"
+# who is preferred?
+traits$scientificNameStd[traits$dhole_pref == "Yes"] # 5 species now... just ok. 
+#who is missing?
+sort(traits$scientificNameStd[traits$dhole_pref == "No"]) # seems ok, 38 species --> nothing obvious to include here. 
+
+
+#### Clouded leopards
+# https://onlinelibrary.wiley.com/doi/full/10.1002/ece3.9067 
+# Serow! Ungulates in particular. No evidence for primates in this citation,
+# but evidence from elsewhere for primates, and generally evidence for a varied and wide diet. 
+# https://www.sciencedirect.com/science/article/pii/S235198941930976X#bib14
+# Evidence for small carnivores as prey --> vivverids (but not other cats) fit! 
+# http://cloudedleopardpartners.org/wp-content/uploads/2021/03/2015-First-description-of-population-density-_-habitat-use-of-the-mainland-clouded-leopard-within-a-logged-primary-forest-in-South-East-Asia-PopulationEco.pdf
+# Evidence for prey < 10 kg, tho old outdated methods. 
+# Justification 
+traits$CL_pref = "No"
+traits$CL_pref[traits$AdultBodyMass_g > 7000 & traits$AdultBodyMass_g < 190000 &
+                 traits$TrophicGuild != "Large_Carnivore"] = "Yes"
+# who is preferred?
+traits$scientificNameStd[traits$CL_pref == "Yes"] # Remove some of the larger carnivores (e.g. bears, cats), but leaving binturong b/c evidence exists! https://www.researchgate.net/publication/271701967_First_record_of_a_clouded_leo-pard_predating_on_a_binturong
+traits$CL_pref[traits$scientificNameStd %in% c("Catopuma_temminckii", "Helarctos_malayanus", "Ursus_thibetanus")] = "No"
+
+# who is preferred?
+traits$scientificNameStd[traits$CL_pref == "Yes"] # 12 species now... more than tigers! b/c of small carnivores
+#who is missing?
+sort(traits$scientificNameStd[traits$CL_pref == "No"]) # seems ok, 32 species --> nothing obvious to include here. 
+
+## What is the median home range for species where its known?
+summary(traits$HomeRange_km2) # 3.5 km is the median, 12.4 km is the mean 
+# what is the SD?
+sd(traits$HomeRange_km2, na.rm = T) #19.2 km 
+
+## whqt about home range for our predators?
+summary(traits$HomeRange_km2[traits$scientificNameStd %in% c("Panthera_tigris", "Panthera_pardus", "Neofelis_genus", "Cuon_alpinus")]) 
+## order of magnitude difference! median is 33, mean is 39
+## one NA that is for clouded leopards. 
+sd(traits$HomeRange_km2[traits$scientificNameStd %in% c("Panthera_tigris", "Panthera_pardus", "Neofelis_genus", "Cuon_alpinus")], na.rm = T) #SD is 23.5
+
+
+```
+
+Before any standardization there are a total of `r full_length` 'species' with 100 captures ready for analysis, but after removing domestic species (*e.g.*, *Canis lupus familiaris* & *Bos taurus*), primarily arboreal species (*e.g.*, *Pongo pygmaeus* & *Presbytis rubicunda*), species less than 1kg or greater than 1000 kg, or species lacking any trait data, we are left with a __total of `r length(keep)` species ready for analysis__. 
+
+A total of `r length(unique(traits$TrophicGuild))` trophic guilds were constructed based on trophic level and body mass. Unfortunately, __home-range data was lacking for `r length(traits$scientificNameStd[is.na(traits$HomeRange_km2)])` species__, but for the known home-range values. For the remaining values, the median value is `r median(traits$HomeRange_km2, na.rm = T)` with a range of `r paste(min(traits$HomeRange_km2, na.rm = T), max(traits$HomeRange_km2, na.rm = T), sep = " - " )` square kilometers. 
+
+There are a **total of `r length(traits$scientificNameStd[traits$TrophicLevel == "Herbivore"])` herbivores**, split between **`r length(traits$scientificNameStd[traits$TrophicGuild == "Small_Herbivore"])` small herbivores** and **`r length(traits$scientificNameStd[traits$TrophicGuild == "Large_Herbivore"])` large herbivores** using a 100 kg cut-off. 
+
+There are a **total of `r length(traits$scientificNameStd[traits$TrophicLevel == "Omnivore"])` omnivores**, split between **`r length(traits$scientificNameStd[traits$TrophicGuild == "Small_Omnivore"])` small omnivores** and **`r length(traits$scientificNameStd[traits$TrophicGuild == "Large_Omnivore"])` large omnivores** using a 50 kg cut-off. 
+
+There are a **total of `r length(traits$scientificNameStd[traits$TrophicLevel == "Carnivore"])` carnivores**, split between **`r length(traits$scientificNameStd[traits$TrophicGuild == "Small_Carnivore"])` small carnivores** and **`r length(traits$scientificNameStd[traits$TrophicGuild == "Large_Carnivore"])` large carnivores** using a 15 kg cut-off. 
+
+__Tigers (*Panthera tigris*)__ were deemed to prefer any other species that is not a large carnivore and above 17 kg. This includes a total of **`r length(traits$scientificNameStd[traits$tiger_pref == "Yes"])` species composed of `r paste(traits$scientificNameStd[traits$tiger_pref == "Yes"], collapse = ", ")`**. 
+
+__Leopards (*Panthera pardus*)__ were deemed to prefer any other species that is not a large carnivore and with a weight range of 10-40 kg. Also, all primates were included as preferred prey. This includes a total of **`r length(traits$scientificNameStd[traits$leopard_pref == "Yes"])` species composed of `r paste(traits$scientificNameStd[traits$leopard_pref == "Yes"], collapse = ", ")`**. 
+
+__Dholes (*Cuon alpinus*)__ were deemed to prefer any other species that is not a large carnivore and with a weight range of 40-190 kg. Also, all bear species were removed as preferred prey and muntjac deer were included. This includes a total of **`r length(traits$scientificNameStd[traits$dhole_pref == "Yes"])` species composed of `r paste(traits$scientificNameStd[traits$dhole_pref == "Yes"], collapse = ", ")`**. 
+
+__Clouded leopards (*Neofelis* genus)__ were deemed to prefer any other species that is not a large carnivore and with a weight range of 7-190 kg. Also, all bear species and golden cats were removed as preferred prey. This includes a total of **`r length(traits$scientificNameStd[traits$CL_pref == "Yes"])` species composed of `r paste(traits$scientificNameStd[traits$CL_pref == "Yes"], collapse = ", ")`**. 
+
+
+## Prepare data to be saved
+
+Now that relevant species have been determined and species traits are sorted, I will finalize preparing the data by generating a sampling occasion index to create count history matrices for each species using the formatted captures and metadata files. Instead of creating a detection history matrix based on the date a photo was taken, I make all cameras start on the same 'day' (based around start/end dates) to increase model speed and efficiency.
+
+```{r Generate a sampling occasion index in the captues}
+
+## Instead of creating a detection history matrix based on the date a photo was taken
+## make all cameras start on the same 'day' to increase model speed and efficiency. 
+
+### Create a data frame with each sampling unit as a row, with start and stop dates
+s = distinct(dplyr::select(meta, cell_id, Sampling_begin, Sampling_end))  
+
+## split the dataframe by cell_id, and add the full sequence of dates between start/stop dates. 
+s2 = ddply(s, .(cell_id), summarize,
+           Date = as.character(seq.Date(from = min(Sampling_begin), to = (max(Sampling_end)), by = 1)))
+
+
+#That worked, now bring back the start and stops. Make sure you dont loose records
+dim(s2) #232760
+t = merge(s2, s, by = "cell_id")
+dim(t) #232760, good! 
+
+
+## Add sequence from 1-n for each sampling unit
+res = t[0,]
+res$seq = numeric()
+
+for(i in unique(t$cell_id)){
+  
+  d = t[t$cell_id == i,]
+  
+  d$seq = as.numeric(seq(from= 1, 
+                         to = unique(as.numeric(difftime(d$Sampling_end+1, # Add one to start seq on 1 instead of 0
+                                                         d$Sampling_begin, units = "days"))), by = 1))
+  
+  res = rbind(res, d)
+}
+rm(d,i)
+
+#inspect
+str(res)
+dim(res) #264568 , same as before! Good! 
+
+## Make sure all cams got accounted for
+setdiff(res$cell_id, unique(caps$cell_id))
+setdiff(unique(caps$cell_id), res$cell_id) # no difference
+
+## merge the sequence with the captures
+t = merge(caps, res, by = c("cell_id", "Date"))
+dim(caps) #240177
+dim(t) #240058, not exactly the same...
+
+## make a statement in the text below. 
+lost =  round((nrow(caps) - nrow(t))/nrow(caps) * 100, 2)
+
+
+## Captures are all good with updated observation sequence! 
+# head(t)
+caps = t
+
+## keep your global environment clutter free
+rm(t, s, s2, res, full_length)
+
+```
+
+By adding the observation sequence to the captures, we lost `r paste(lost*100, "%", sep = "")` of the captures. This is an acceptable amount. 
+
+```{r Determine species to be analyzed as a group}
+
+## first, determine which species will need to be analyzed as groups rather than individuals 
+# because of very large group sizes skewing results
+big = ddply(caps[caps$Species %in% keep,], .(Species), summarize,
+            max_count = max(total_indiv_records),
+            mean_count = mean(total_indiv_records),
+            mode_count = median(total_indiv_records))
+
+big$Species[big$mean_count >= 2] #this is probably it... 
+# big$Species[big$max_count >= 10] #but this is concerning 
+
+## go w/ mean >= 2 for now and inspect for later
+group_sp = big$Species[big$mean_count >= 2]
+# adding muntjacs and ALL macaque species because they were probelmatic in the past 
+group_sp = c(group_sp, "Muntiacus_genus", "Macaca_fascicularis" )
+rm(big)
+
+
+```
+
+I have also determined which species need to be analyzed as groups instead of inviduals because of very large group sizes cause N-mixture models to crash and create unrealistic estimates. __This includes `r length(group_sp)` species: `r paste(sort(group_sp), collapse = ", ")`__.
+
+```{r Prepare metadata and check for colinearity}
+
+### Found a downstream error! Sampling units w/ too many active cameras were causing models to crash! 
+# create a new column in the metadata that counts the number of active cams per SU
+meta$cams_included_count = str_count(meta$cameras_included, " - ") + 1
+hist(meta$cams_included_count) # classic Poisson
+
+## > 7 cams per SU was causing probelms earlier... 
+# how many SUs do we lose by exclusing them?
+nrow(meta[meta$cell_id %in% meta$cell_id[meta$cams_included_count > 7],]) / nrow(meta) * 100
+# 4% of SUs, thats fine. 
+
+## now begin gathering covairates at the right spatial scale 
+flii = names(meta)[grepl("FLLI", names(meta))]
+flii = flii[grepl(scale, flii)]
+elev = names(meta)[grepl("altitude", names(meta))]
+elev = elev[grepl(scale, elev)]
+hfp = names(meta)[grepl("human_footprint", names(meta))]
+hfp = hfp[grepl(scale, hfp)]
+## add more if you want! 
+cols = c(flii, elev, hfp)
+rm(flii, elev, hfp)
+
+
+### Verify key covariates  are not strongly correlated
+check = meta[, cols]
+cov.corr = cor(check[,sapply(check, is.numeric)])
+cov.corr= as.data.frame(cov.corr)
+# cov.corr[abs(cov.corr) < abs(.6)] = "good" # stick w/ .6
+# rm(check, cov.corr)
+
+## make sure to grab other relevant variables
+other = c("cell_id", "survey_id", "Landscape", "source", "cams_included_count", "year")
+
+### To ensure that data remains spatially secure regarding sensetive species locations
+## remove any spatial variables and thin to only include bare minimum variables. 
+meta = meta[, c(cols, other)]
+
+
+### Also thin down captures to the salient info 
+caps = select(caps, cell_id, survey_id, seq, Date, num_cams_active_at_date, Species, total_indiv_records, independent_events)
+# and thin to only include relevant species
+setdiff(traits$scientificNameStd, caps$Species) # all species in traits are present in caps  
+caps = caps[caps$Species %in% traits$scientificNameStd, ]
+
+
+```
+
+The key spatial variables that will get included in each species' N-mixture model to account for habitat filtering are: **`r paste(cols, collapse = ", ")`**. The correlation coefficient between forest integrity and human footprint is **`r round(cov.corr["Avg_FLLI_5km", "Avg_human_footprint_5km"], 3)`**. The correlation coefficient between elevation and human footprint is **`r round(cov.corr["Avg_altitude_5km", "Avg_human_footprint_5km"], 3)`**. The correlation coefficient between forest integrity and elevation is **`r round(cov.corr["Avg_FLLI_5km", "Avg_altitude_5km"], 3)`**.
+
+## Save data 
+
+Generating the count histories and covariates for each species on a regular computer takes hours, so instead I will send the information to the High Performance Computers (HPC) to run much faster. The data is saved in my personal Dropbox folder, but will move to GitHub eventually. 
+
+```{r Save everything!}
+
+## grab today's date 
+day<-str_sub(Sys.Date(),-2)
+month<-str_sub(Sys.Date(),-5,-4)
+year<-str_sub(Sys.Date(),-10,-7)
+date = paste(year,month,day, sep = "")
+
+## grab the WD where we want to save data 
+wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step1_output/"
+
+
+### Save all relevant files
+saveRDS(keep, paste(wd, "/species_vector_", length(keep), "_species_", scale, "_scale_", date, ".RDS", sep = ""))
+
+saveRDS(group_sp, paste(wd, "/group_living_", length(group_sp), "_species_", scale, "_scale_",  date, ".RDS", sep = ""))
+
+write.csv(caps, paste(wd, "/clean_captures_to_make_UMFs_", scale, "_scale_",  date,".csv", sep = ""), row.names = F)
+
+write.csv(meta, paste(wd, "/clean_metadata_to_make_UMFs_", scale, "_scale_",  date,".csv", sep = ""), row.names = F)
+
+## Also save trait data so I dont have to remake it later
+write.csv(traits, paste(wd, "/clean_", nrow(traits), "_species_trait_data_", date, ".csv", sep = ""), row.names = F)
+
+
+
+
+```
+
+## HPC matrix and covariate creation code
+
+The next section of analysis relies on the HPC, where we convert our covariates and metadata into a count history matrix with the proper associated observation- and site-level covariates. We use the HPC to iterate the process per species with more computational power which vastly speeds up the process. 
+
+The separate R script is called: __scripts/HPC_code/HPC_matrix_generator_SEA_TC.R__.
+
+To make that code run on the HPC, I use the SLURM script called: __scripts/SLURM_code/SLURM_generate_matricies.txt__.
+
+

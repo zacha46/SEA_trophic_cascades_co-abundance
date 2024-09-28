@@ -1,0 +1,2782 @@
+---
+title: "Step 2_generate co-abundance pairwise data bundles"
+author: "Zachary Amir"
+date: "`r Sys.time()`"
+output: html_document
+---
+
+```{r global-options, include=FALSE, warning=FALSE, error=FALSE}
+## We can knit this into a nice document! but dont include all the code unless otherwise specified (i.e. include=TRUE)
+knitr::opts_chunk$set(include=FALSE, warning=FALSE, error = FALSE)
+
+## start fresh
+rm(list = ls())
+
+## load libraries
+library(tidyverse)  # For basic data wrangling
+library(plyr)       # For data summaries
+
+```
+
+## Import data 
+
+Import count matrices for each species that was generated on the High Performance Computer [(HPC)](https://rcc.uq.edu.au/systems/high-performance-computing/bunya). Objects were saved as .RDS files because they were list(), so I will use the readRDS function to import them into R. 
+
+```{r import matricies generated on HPC via loop}
+
+## specify where the data lives in dropbox 
+wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/UMFs/"
+
+## Store imported data here
+umfs = list()
+
+## list all files that should be imported 
+files = list.files(wd)
+files = files[!grepl("OLD", files)] # remove any old data 
+
+for(i in 1:length(files)){
+  
+  #import the file
+  f = files[i]
+  path = paste(wd, f, sep = "")
+  u = readRDS(here::here(path))
+  
+  #save it in a list 
+  umfs[[i]] = u
+  names(umfs)[i] = paste0(str_split(f, "_")[[1]][2:3], collapse = "_")
+  
+}
+rm(i,u,f,path, files)
+
+sort(names(umfs)) # looks good
+
+### Can inspect present data
+# head(umfs$Panthera_pardus$siteCovs) #nice
+# head(umfs$Sus_barbatus$ObsCovs) #nice
+# head(umfs$Ursus_thibetanus$y) #nice
+# ## should be good to go! 
+
+```
+
+```{r Import data from step 1}
+
+### Also import data from step1 for comparison
+
+## specify where the data lives
+wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step1_output/"
+
+## list all files that should be imported 
+files = list.files(wd)
+files = files[!grepl("OLD", files)] # remove any old data 
+
+## import each file as distinct objects 
+caps = read.csv(paste(wd, files[grepl("captures", files)], sep = ""))
+meta = read.csv(paste(wd, files[grepl("metadata", files)], sep = ""))
+keep = readRDS(paste(wd, files[grepl("species_vector", files)], sep = ""))
+traits = read.csv(paste(wd, files[grepl("trait_data", files)], sep = ""))
+
+## check if all species are present by importing old species vector
+setdiff(keep, names(umfs)) # present and accounted for! 
+
+## and grab the spatial scale, which is saved in the colnames of metadata
+scale = names(meta)[grepl("Avg", names(meta))][1]
+scale = str_split(scale, "_")[[1]][3]
+
+## clean up
+rm(files, wd)
+
+
+```
+
+## Generate co-abundance data bundles 
+
+Now that the data is loaded in our environment, I will use a very large for-loop to generate co-abundance data bundles that will be ready to run on the HPC. Bundles will be generated for species pairs, where one species is explicitly assigned as a dominant species (predictor/independent variable), while the other is the subordinate species (response/dependent variable). 
+
+Bundles will be generated based on spatial associations. Each species pair needs to be present in at least one landscape and have at least 100 independent detection from a shared landscape. Despite the loop being very long and complex, it is mainly reorganizing and sorting data rather than running calculations. Therefore, it completes in < 5 min. 
+
+
+```{r Ultra-Loop to generate data bundles based on guild-pairs, echo=FALSE }
+
+## bind landscapes to captures to facilitate finding where critters are detected
+l = distinct(select(meta, survey_id, Landscape))
+caps = merge(caps, l, by = "survey_id")
+rm(l)
+
+#create a list to store results
+bdata_list = list()
+
+for(i in 1:length(umfs)){ # repeat for each first speices
+  
+  ## select a single species and thier data 
+  # 1st species is the dominant! 
+  sp_dom = names(umfs)[i]
+  sp_dom_dat = umfs[[i]]
+  
+  ## grab the trophic guild of the dom species
+  dom_tg = traits$TrophicGuild[traits$scientificNameStd == sp_dom]
+  
+  ## subset all other species
+  all_else = names(umfs)
+  all_else = all_else[all_else != sp_dom] # remove first species
+  
+  ### Thin all_else based upon the dominant species traits to avoid making too many models
+  
+  # if the dominant species is large+small herbivores+ominivores,
+  if(dom_tg %in%  c("Small_Omnivore", "Large_Omnivore",
+                    "Small_Herbivore","Large_Herbivore")){
+    
+    ## Then sub_species should only be large carnivores
+    all_else = all_else[all_else %in%
+                          traits$scientificNameStd[traits$TrophicGuild == "Large_Carnivore"]]
+
+  } # end sub large carnivore conditional 
+  
+  # if the dominant species is a small carnivore,
+  if(dom_tg == "Small_Carnivore"){
+    
+    ## skip it! 
+    next
+  }
+  
+  temp = list() # store results per sp1 here 
+  for(l in 1:length(all_else)){ # repeat for each second species
+    
+    ## select a second species and their data
+    # 2nd species is the subordinate! 
+    sp_sub = all_else[l]
+    sp_sub_dat = umfs[[sp_sub]]
+    
+    ##### Add a conditional to verify there are a combined total of 100 detections
+    ##### shared across the landscapes where BOTH species were detected. 
+    
+    ## Grab landscapes present for each species
+    dom_land = unique(caps$Landscape[caps$Species == sp_dom])
+    sub_land = unique(caps$Landscape[caps$Species == sp_sub])
+    ## and only save the ones where they intersect 
+    lands = intersect(dom_land, sub_land)
+    
+    ## gather number of detections at shared landscapes for both species
+    dom_det = nrow(caps[caps$Species == sp_dom &
+                          caps$Landscape %in% lands,])
+    sub_det = nrow(caps[caps$Species == sp_sub &
+                          caps$Landscape %in% lands,])
+    
+    ## if there are less than 100 detections of both species from shared landscapes, 
+    if(dom_det + sub_det < 100){
+      # let us know
+      print(paste("The species combo of", sp_sub, "~", sp_dom, 
+                  "have less than 100 detections in shared landscapes! This pair was skipped."))
+      # and skip the probelmatic pair
+      next
+      
+    } # end 100 detection conditional 
+    
+    ## this conditional will also catch species pairs that dont spatially overlap, 
+    ## where a conditonal does that below and isnt needed anymore, but leaving for saftey. 
+    
+    #
+    ##
+    ###
+    #### Remove landscapes where neither species was detected and convert to matrix
+    ###
+    ##
+    #
+    
+    ## First, determine which landscapes species are extirpated in
+    exp = distinct(select(caps[caps$Species %in% c(sp_sub, sp_dom),], Landscape, Species))
+    exp$presence = "yes"
+    
+    ## need to add landscapes where Species was NOT detected via loop 
+    exp2 = list()
+    # e = unique(exp$Species)[1]
+    for(e in unique(exp$Species)){ # repeat for each species
+      
+      # select the relevant landscapes
+      b = unique(caps$Landscape[caps$Species == e])
+      #and make it a dataframe
+      a = data.frame("Landscape" = unique(caps$Landscape[!caps$Landscape %in% b]))
+      
+      # save species name and make it a no
+      a$Species = e
+      a$presence = "no"
+      
+      exp2[[e]] = a
+      
+    }
+    rm(a, b, e)
+    
+    # combine list into a df
+    exp2 = do.call(rbind, exp2)
+    rownames(exp2)= NULL
+    
+    # rbind presence w/ absences
+    exp = rbind(exp, exp2)
+    rm(exp2)
+    
+    ## grab all landscapes where neither species was detected
+    non_det_land <- exp %>%
+      group_by(Landscape) %>%
+      filter(all(presence == "no"))
+    
+    ## extract all the sampling unit names from these landscapes
+    non_det_SU = meta$cell_id[meta$Landscape %in% unique(non_det_land$Landscape)]
+    
+    ## extract both count matricies
+    data.dom<- sp_dom_dat$y #dominant
+    data.sub<- sp_sub_dat$y #subordinate
+    
+    ## and thin both to remove empty SUs
+    data.dom = data.dom[!data.dom$SU %in% non_det_SU,]
+    data.sub = data.sub[!data.sub$SU %in% non_det_SU,]
+    
+    ## make sure we match! 
+    if(nrow(data.dom) != nrow(data.sub)){
+      
+      # if we dont, let us know
+      print(paste("The species combo of", sp_sub, "~", sp_dom, 
+                  "have different sized matricies! This pair was skipped."))
+      # and skip the probelmatic one
+      next
+      
+    } # end exact matrix size validation
+    
+    ### Now verify that both species are detected together in at least one landscape
+    pres = unique(exp$Landscape[exp$presence == "yes" & exp$Species == unique(exp$Species)[1] &
+                                  exp$Landscape %in% exp$Landscape[exp$presence == "yes" & 
+                                                                     exp$Species ==  unique(exp$Species)[2]]])
+    ## if there are no landscapes where both are detected,
+    if(length(pres) == 0){
+      
+      ## let us know 
+      print(paste("The species combo of", sp_sub, "~", sp_dom, 
+                  "do not spatially overlap! This pair was skipped."))
+      ## and skip the problematic one
+      next
+      
+    }
+    
+    ## convert matrix dataframes back to matrix 
+    dom_rows =data.dom[,1] #save sampling unit as rownames 
+    data.dom=data.dom[,-1] #remove sampling unit col
+    data.dom=as.matrix(data.dom) #turn into a matrix
+    data.dom = apply(data.dom, 2, as.numeric) # make sure its numeric
+    rownames(data.dom) = dom_rows # and re-instate the rownames 
+    # repeat for spp 2
+    sub_rows=data.sub[,1]
+    data.sub=data.sub[,-1]
+    data.sub=as.matrix(data.sub)
+    data.sub = apply(data.sub, 2, as.numeric)
+    rownames(data.sub) = sub_rows
+    
+    #
+    ##
+    ###
+    #### Site-level covairtes
+    ###
+    ##
+    #
+
+    # Make sure we have the same number of sampling units
+    if(dim(sp_dom_dat$siteCovs)[1] != dim(sp_sub_dat$siteCovs)[1]){
+      
+       # if we dont, let us know
+      print(paste("The species combo of", sp_sub, "~", sp_dom, 
+                  "have a different number of sampling units! This pair was skipped."))
+      # and skip the probelmatic one
+      next
+     
+    }else{
+      
+      # thin to match relevant sampling units
+      covs = sp_dom_dat$siteCovs[sp_dom_dat$siteCovs$cell_id %in% rownames(data.dom),]
+      
+    } # end cov size conditional 
+
+    
+    ### Add conditional if no sites match each other
+    if(dim(covs)[1] == 0){
+      print(paste0(sp_dom, " & ", sp_sub, " dont spatially overlap, no combo created."))
+      next
+    }# end lack of spatial overlap bypass  
+    
+    
+    #Extract Landscape for random effect, stored as a number
+    d = data.frame("Landscape"= sort(unique(covs$Landscape)),
+                   "land.num" = seq(from = 1, to = length(unique(covs$Landscape))))
+    covs = merge(covs, d, by = "Landscape")
+
+    #Extract years for random effect, stored as a number
+    d = data.frame("year"= sort(unique(covs$year)),
+                   "year.num" = seq(from = 1, to = length(unique(covs$year))))
+    covs = merge(covs, d, by = "year")
+
+     #Extract data source for random effect, stored as a number
+    d = data.frame("source"= sort(unique(covs$source)),
+                   "source.num" = seq(from = 1, to = length(unique(covs$source))))
+    covs = merge(covs, d, by = "source")
+    rm(d)
+    
+    
+    ## Make sure covs match order of matrix
+    covs = covs[order(match(covs$cell_id, rownames(data.dom))),]
+    
+    #verify
+    # match(covs$cell_id, rownames(data.dom))
+    
+    #
+    ##
+    ###
+    #### Observation-level covariates
+    ###
+    ##
+    #
+    
+    # Make sure we have the same sampling units!
+    if(length(setdiff(sp_dom_dat$ObsCovs$SU, sp_sub_dat$ObsCovs$SU)) == 0 &
+       length(setdiff(sp_sub_dat$ObsCovs$SU, sp_dom_dat$ObsCovs$SU)) == 0){
+      
+      ## thin obs down to relevant SUs
+      obs = sp_dom_dat$ObsCovs[sp_dom_dat$ObsCovs$SU %in% rownames(data.dom),]
+      
+      ## and convert to a matrix 
+      rownames(obs)=obs[,1] #set rownames as sampling units
+      obs=obs[,-1] #remove sampling unit col
+      obs=as.matrix(obs) #turn into a matrix, but only keep one 
+      
+    }else{
+      
+      ## if obs SUs dont match, let us know! 
+      print(paste("The species combo of", sp_sub, "~", sp_dom, 
+                "have a different number of sampling units in ObsCovs! This pair was skipped."))
+      # and skip the probelmatic one
+      next
+    }
+    
+    ## Ensure obs matches the order of matrix 
+    obs = obs[order(match(rownames(obs), rownames(data.dom))),]
+    # #verify
+    # match(rownames(obs), rownames(data.dom))
+    
+    #
+    ##
+    ###
+    ####
+    ##### Prepare the informed ZIP parameters
+    ####
+    ###
+    ##
+    #
+    
+    ## Establish which sites have extirpated dominant species
+    
+    # first get max number of counts per row
+    p.dom = apply(data.dom, 1, max, na.rm = TRUE)
+
+    # subset for only sampling units with detections
+    p.dom = names(p.dom[p.dom >= 1])
+    
+    ### Add conditional if no sites match each other
+    if(length(p.dom) == 0){
+      print(paste0(sp1, " & ", sp2, " may spatially overlap, but were never detected in the same landscape"))
+      next
+    }# end lack of spatial overlap bypass  
+    
+    # gather all sampling units in the Landscapes where species was detected
+    d.dom = select(covs[covs$Landscape %in% unique(meta$Landscape[meta$cell_id %in% p.dom]), ], 
+                   cell_id, Landscape) # only need cell_id and landscape
+    
+    # gather all sites in landscapes without ANY detections
+    e.dom = select(covs[! covs$Landscape %in% unique(meta$Landscape[meta$cell_id %in% p.dom]), ], 
+                   cell_id, Landscape)
+    
+    # this should match number of rows in matrix 
+    if((length(e.dom$cell_id) + length(d.dom$cell_id)) != dim(data.dom)[1] &
+      (length(e.dom$cell_id) + length(d.dom$cell_id)) != dim(data.sub)[1]){
+      
+      print(paste0("problem with ", sp_dom, " & ", sp_sub))
+      
+    } # end data check 
+    
+    
+    ## Add if-else statement for dominant species not extirpated anywhere. 
+    if(length(e.dom$cell_id) > 0){
+      
+      # combine, where 0 = extirpated, and 1 = present. 
+      z.dom = rbind(data.frame("occu" = 0, "cell_id" = e.dom$cell_id),
+                    data.frame("occu" = 1, "cell_id" = d.dom$cell_id))
+      
+    }else{
+      
+      z.dom = data.frame("occu" = 1, "cell_id" = d.dom$cell_id)
+      
+    } # end no extirpation conditional 
+    
+    # make sure its in the same order as the matrix
+    z.dom = z.dom[order(match(z.dom$cell_id, rownames(data.dom))),]
+    
+
+    ## Establish which sites have extirpated subordianate species-
+    
+    # first get max number of counts per row
+    p.sub = apply(data.sub, 1, max, na.rm = TRUE)
+    
+    # subset for only sites with detections
+    p.sub = names(p.sub[p.sub >= 1])
+    
+    ### Add conditional if no sites match each other
+    if(length(p.sub) == 0){
+      print(paste0(sp1, " & ", sp2, " may spatially overlap, but were never detected in the same landscape"))
+      next
+    }# end lack of spatial overlap bypass  
+    
+    # gather all sampling units in the Landscapes where species was detected
+    d.sub = select(covs[covs$Landscape %in% unique(meta$Landscape[meta$cell_id %in% p.sub]), ], 
+                   cell_id, Landscape) # only need cell_id and landscape
+    
+    # gather all sites in landscapes without ANY detections
+    e.sub = select(covs[! covs$Landscape %in% unique(meta$Landscape[meta$cell_id %in% p.sub]), ], 
+                   cell_id, Landscape)
+    
+    
+    # this should match number of rows in matrix 
+    if((length(e.sub$cell_id) + length(d.sub$cell_id)) != dim(data.dom)[1] &
+       (length(e.sub$cell_id) + length(d.sub$cell_id)) != dim(data.sub)[1]){
+      
+      print(paste0("problem with ", sp1, " & ", sp2))
+      
+    } # end data check 
+   
+    # combine, where 0 = extirpated, and 1 = present. 
+    ## Add if-else statement for subordinate species not extirpated anywhere. 
+    if(length(e.sub$cell_id) > 0){
+      
+      z.sub = rbind(data.frame("occu" = 0, "cell_id" = e.sub$cell_id),
+                    data.frame("occu" = 1, "cell_id" = d.sub$cell_id))
+      
+    }else{
+      
+      z.sub = data.frame("occu" = 1, "cell_id" = d.sub$cell_id)
+    } # end no extirpation conditional 
+    
+    # make sure its in the same order as the matrix
+    z.sub = z.sub[order(match(z.sub$cell_id, rownames(data.sub))),]
+    
+    ## verify z.dom and z.sub have the same number of sampling units
+    if(nrow(z.sub) != nrow(z.dom)){
+      print(paste0(sp1, " & ", sp2, " have differing rows in their iZIP parameter! Inspect here!"))
+      
+      ## and end the loop, this is critical! 
+      break
+    }
+    
+    
+    ####### BUNDLE all the data for the bayesian model 
+    
+    #these are the variable names used in the bayes mod! 
+    bdata = list(y.dom = data.dom,                           # Count history matrix for dominant spp
+                 y.sub = data.sub,                           # Count history matrix for subordinate spp
+                 Z.dom = z.dom$occu,                         # Dominant presence/absence for all sites
+                 Z.sub = z.sub$occu,                         # Subordinate presence/absence for all sites 
+                 nsites = dim(data.dom)[1],                  # Number of sampling locations (i.e. rows in matrix)
+                 nreps = dim(data.dom)[2],                   # Number of sampling occasions (i.e. cols in matrix)
+                 # flii = covs$Avg_FLLI_3km,                   # Site covaraite 1
+                 # hfp = covs$Avg_human_footprint_3km,         # Site covaraite 2
+                 # elev = covs$Avg_altitude_3km,               # Site covaraite 3
+                 flii = covs$Avg_FLLI_5km,                   # Site covaraite 1 @ 5km
+                 hfp = covs$Avg_human_footprint_5km,         # Site covaraite 2 @ 5km
+                 elev = covs$Avg_altitude_5km,               # Site covaraite 3 @ 5km
+                 cams = obs,                                 # Observation covaraite 1
+                 narea = length(unique(covs$land.num)),      # number of levels in landscape RE
+                 area = covs$land.num,                       # Landscape random effect (as.num)
+                 nsource = length(unique(covs$source)),      # number of levels in source RE 
+                 source = covs$source.num,                   # Data source random effect (as.num)
+                 nyear = length(unique(covs$year.num)),      # number of levels in year RE
+                 year = covs$year.num)                       # year random effect (as.num)
+    
+    ## save the bundle 
+    temp[[l]] = bdata
+    names(temp)[l] = paste("SUB-", sp_sub, "~DOM-",sp_dom, sep = "" )
+    
+  } # end 2nd species
+  
+  ## remove null values in list for species combos that dont overlap 
+  temp[sapply(temp, is.null)] <- NULL
+  
+  ## save all results for all species
+  bdata_list[[i]] = temp
+  
+  
+} # end 1st species
+rm(i,l,sp_dom,sp_sub, sp_dom_dat, sp_sub_dat, temp, z.dom, z.sub, rm_SU, dom_tg,
+   bdata, all_else, data.dom, data.sub, covs, exp, non_det_SU, non_det_land, pres,
+   ob, obs_dom, obs_sub, o, obs, ob_name, sp, a, dom_det, sub_det, lands, env, check,
+   d.dom,e.dom,p.dom,d.sub,e.sub,p.sub, dom_land, dom_rows, sub_land, sub_rows)
+
+
+
+## flatten the list of lists into a single list
+bdata_list = unlist(bdata_list, recursive = FALSE)
+length(bdata_list) # 262 combos @ 5 km and also better iZIP?
+names(bdata_list) # looks good! 
+
+```
+
+After successfully generating the bundled data, we have a total of `r length(bdata_list)` pairwise interactions composed of both top-down and bottom-up models. 
+
+
+### Reorganize list for efficent analysis
+
+After some preliminary testing, I realized that all co-abundance models don't need the same amount of RAM. Most complete w/ 100 GB, but some need 250 or even 500 GB to complete. Based of prior testing, I will reorganize the list into 100, 250, or 500 GB lists. This process will be achieved by inspecting the OE (output or error) files extracted from the HPC when each job runs. 
+
+```{r Use OE files to determine GB per list, echo=FALSE}
+
+## specify where the OE files live 
+wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/results/LONG_OE_files_Oct_2023/"
+
+
+## First, examine how many OE files we have 
+file = list.files(wd)
+
+## Then extract the unique job numbers 
+jobs = unique(str_extract(file, pattern = "(?<=-|_)[0-9]+(?=-|_)")) #Thx chat GPT for the RegEx
+unique(jobs) # good, should only have three. 
+
+## and save job numbers, GB,  and species pairs  
+jobs = data.frame("number" = jobs, 
+                  "RAM" = c("100GB", "250GB", "500GB"), # Based on personal knowledge of job submissions
+                  "Species_Pair" = as.character(NA))
+## End goal is to fill this species_pair column
+
+# Loop to the rescue as usual!
+
+# Only need to work with .out files, all relevant info is here. 
+out = file[grepl(".out", file)]
+
+for(i in 1:length(bdata_list)){
+  
+  # grab one sp pair
+  sp = names(bdata_list)[i]
+
+  ## import each out file to find the correct one 
+  for(f in 1:length(out)){
+    
+    ## import an out file 
+    o = read.delim(paste(wd, out[f], sep = ""), sep = "\t")
+    
+    ## grab the job number too 
+    job_num = str_extract(out[f], pattern = "(?<=-|_)[0-9]+(?=-|_)")
+    
+    ## and the relevant GB that matches the job num
+    gb = unique(jobs$RAM[jobs$number == job_num])
+    
+    ## grab the 8th word from the first line of the out file to grab the species pair 
+    sp_out = strsplit(o[1,], "\\s+")[[1]]
+    sp_out = sp_out[8]
+    
+    ## Verify the out file has the correct species pair by skipping the iteration if it is wrong! 
+    if(sp != sp_out){next}
+    
+    ## now verify the out file actually completed the job,
+    # by checking for "Finished running co-abundance model" on line 9
+    if(grepl("Finished running co-abundance model", o[9,])){
+      
+      # if it is a match, make a new row to add to the jobs DF 
+      new = data.frame("number" = job_num, 
+                       "RAM" = gb, 
+                       "Species_Pair" = sp)
+      
+      # and combine with jobs 
+      jobs = rbind(jobs, new)
+      
+      
+    } # end finished mod conditional 
+    
+  } # end per out file 
+    
+} # end per sp_pair
+rm(o,f,i,gb,file,job_num,out,sp,sp_out,new)
+
+## remove NA species pairs from making the df
+jobs_final = jobs[!is.na(jobs$Species_Pair),]
+
+## verify all jobs are accounted for 
+setdiff(names(bdata_list), jobs_final$Species_Pair) 
+setdiff(jobs_final$Species_Pair, names(bdata_list)) #all here! 
+
+## inspect to make sure no mods have multiple job numbers
+inspect = ddply(jobs_final, .(Species_Pair), summarize,
+                num_job = length(unique(number)))
+sp = inspect$Species_Pair[inspect$num_job > 1] # 5 mods were completed twice! 
+## verify
+jobs_final[jobs_final$Species_Pair %in% sp,] #Only want the smaller job number
+
+# remove duplicated by taking the min number 
+jobs_final = jobs_final %>%
+  group_by(Species_Pair) %>%
+  filter(number == min(number))
+
+## verify all species are present still! 
+setdiff(names(bdata_list), jobs_final$Species_Pair) #all here! 
+
+## make sure there is no NA
+anyNA(jobs_final) # MUST BE F
+
+### Begin to add preferred prey column
+
+## First, split apart species pair into dom and sub species 
+jobs_final <- within(jobs_final, {
+  sub_sp <- sapply(strsplit(Species_Pair, "~"), function(x) x[1])
+  dom_sp <- sapply(strsplit(Species_Pair, "~"), function(x) x[2])
+})
+jobs_final$dom_sp = gsub("DOM-", "", jobs_final$dom_sp)
+jobs_final$sub_sp = gsub("SUB-", "", jobs_final$sub_sp)
+
+## inspect
+setdiff(keep, jobs_final$dom_sp) # makes sense, small carnivores are not dominant! 
+setdiff(keep, jobs_final$sub_sp) # all here! 
+length(unique(jobs_final$sub_sp)) == length(keep) # MUST BE TRUE
+
+## now add a new column if the model is preferred or not 
+jobs_final$preference = "community" # not preferred
+# top-downs
+jobs_final$preference[jobs_final$dom_sp == "Panthera_tigris" &
+                        jobs_final$sub_sp %in% 
+                        traits$scientificNameStd[traits$tiger_pref == "Yes"]] = "preferred"
+jobs_final$preference[jobs_final$dom_sp == "Panthera_pardus" &
+                        jobs_final$sub_sp %in% 
+                        traits$scientificNameStd[traits$leopard_pref == "Yes"]] = "preferred"
+jobs_final$preference[jobs_final$dom_sp == "Cuon_alpinus" &
+                        jobs_final$sub_sp %in% 
+                        traits$scientificNameStd[traits$dhole_pref == "Yes"]] = "preferred"
+jobs_final$preference[jobs_final$dom_sp == "Neofelis_genus" &
+                        jobs_final$sub_sp %in% 
+                        traits$scientificNameStd[traits$CL_pref == "Yes"]] = "preferred"
+# bottom-ups
+jobs_final$preference[jobs_final$sub_sp == "Panthera_tigris" &
+                        jobs_final$dom_sp %in% 
+                        traits$scientificNameStd[traits$tiger_pref == "Yes"]] = "preferred"
+jobs_final$preference[jobs_final$sub_sp == "Panthera_pardus" &
+                        jobs_final$dom_sp %in% 
+                        traits$scientificNameStd[traits$leopard_pref == "Yes"]] = "preferred"
+jobs_final$preference[jobs_final$sub_sp == "Cuon_alpinus" &
+                        jobs_final$dom_sp %in% 
+                        traits$scientificNameStd[traits$dhole_pref == "Yes"]] = "preferred"
+jobs_final$preference[jobs_final$sub_sp == "Neofelis_genus" &
+                        jobs_final$dom_sp %in% 
+                        traits$scientificNameStd[traits$CL_pref == "Yes"]] = "preferred"
+## how many do we have?
+table(jobs_final$preference) # 66 preferred, 196 not. 66 + 194 = 262, all accounted for! 
+
+## clean up
+rm(inspect, jobs, sp)
+
+```
+
+After splitting and organizing the data bundles, we have a total of **`r length(jobs_final$Species_Pair[jobs_final$preference == "preferred"])` preferred co-abundance models** and a total of **`r length(jobs_final$Species_Pair[jobs_final$preference == "community"])` co-abundance models across the larger community**. 
+
+## Save the final list of bundled data
+
+Now that all species pairs are established, the data is properly formatted, and everything is clean, its time to save the data! We will send it to the HPC to run on the R script called: data/HPC_code/HPC_co-abundance_model_final.R
+
+Alternatively, I could save the list as a single object rather than splitting it up. 
+
+```{r save bundled data!, echo=FALSE}
+
+## grab today's date
+day<-str_sub(Sys.Date(),-2)
+month<-str_sub(Sys.Date(),-5,-4)
+year<-str_sub(Sys.Date(),-10,-7)
+date = paste(year,month,day, sep = "")
+rm(day,month,year)
+
+## specify where the data will be saved
+wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step2_output_CoA_bundles/"
+
+
+# Save data per preference AND GB requirements!
+# pref 100 GB
+save = bdata_list[names(bdata_list) %in%
+                    jobs_final$Species_Pair[jobs_final$RAM == "100GB"] &
+                    names(bdata_list) %in%
+                            jobs_final$Species_Pair[jobs_final$preference == "preferred"]]
+saveRDS(save,(paste(wd, "/Bundled_data_for_Bayes_co-abundance_mods_preferred_100GB_", length(save), "_species_pairs_", scale, "_", date, ".RDS", sep = "")))
+
+# pref 250 GB
+save = bdata_list[names(bdata_list) %in%
+                    jobs_final$Species_Pair[jobs_final$RAM == "250GB"] &
+                    names(bdata_list) %in%
+                            jobs_final$Species_Pair[jobs_final$preference == "preferred"]]
+saveRDS(save, (paste(wd, "/Bundled_data_for_Bayes_co-abundance_mods_preferred_250GB_", length(save), "_species_pairs_", scale, "_", date, ".RDS", sep = "")))
+# pref 500 GB
+save = bdata_list[names(bdata_list) %in%
+                    jobs_final$Species_Pair[jobs_final$RAM == "500GB"] &
+                    names(bdata_list) %in%
+                            jobs_final$Species_Pair[jobs_final$preference == "preferred"]]
+saveRDS(save, (paste(wd, "/Bundled_data_for_Bayes_co-abundance_mods_preferred_500GB_", length(save), "_species_pairs_", scale, "_", date, ".RDS", sep = "")))
+# NON-pref 100 GB
+save = bdata_list[names(bdata_list) %in%
+                    jobs_final$Species_Pair[jobs_final$RAM == "100GB"] &
+                    names(bdata_list) %in%
+                            jobs_final$Species_Pair[jobs_final$preference == "community"]]
+saveRDS(save, (paste(wd, "/Bundled_data_for_Bayes_co-abundance_mods_community_100GB_", length(save), "_species_pairs_", scale, "_", date, ".RDS", sep = "")))
+# NON-pref 250 GB
+save = bdata_list[names(bdata_list) %in%
+                    jobs_final$Species_Pair[jobs_final$RAM == "250GB"] &
+                    names(bdata_list) %in%
+                            jobs_final$Species_Pair[jobs_final$preference == "community"]]
+saveRDS(save, (paste(wd, "/Bundled_data_for_Bayes_co-abundance_mods_community_250GB_", length(save), "_species_pairs_", scale, "_", date, ".RDS", sep = "")))
+# NON-pref 500 GB
+save = bdata_list[names(bdata_list) %in%
+                    jobs_final$Species_Pair[jobs_final$RAM == "500GB"] &
+                    names(bdata_list) %in%
+                            jobs_final$Species_Pair[jobs_final$preference == "community"]]
+saveRDS(save, (paste(wd, "/Bundled_data_for_Bayes_co-abundance_mods_community_500GB_", length(save), "_species_pairs_", scale, "_", date, ".RDS", sep = "")))
+
+
+### However, if you are just going for testing (MIDDLE settings) with preferred models, 
+## we can save all preferred models as one list. 
+# sp_pairs = names(bdata_list)[names(bdata_list) %in% jobs_final$Species_Pair[jobs_final$preference == "preferred"]]
+# save = bdata_list[names(bdata_list) %in% sp_pairs]
+# saveRDS(save, here::here(paste("data_GitHub_CoA_bundles/Bundled_data_for_Bayes_co-abundance_mods_preferred_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
+
+rm(sp_pairs, jobs_final, date)
+
+
+```
+
+
+## Generate counterfactual data bundles 
+
+After submitting the manuscript and analysis to Science and receving reviews from 3 expert reviewers, 2 reviewers revealed an appetite for causation that was lacking from the current analysis. Moreover, when presenting my findings at conferences and to collegues, similar sentiments were voiced. Structural Equation Models (SEM) was a logical starting place, but the limitations of the data (ie lacking key variables like hunting pressure or resource availability) and inability to include a count history matrix as the response variable (and therefore propagate uncertainty) left me unsatisfied. 
+
+Instead, the new goal here is to examine the counter-factual to understand if prey abundance increases would not have happened if not for large carnivore decline/extirpation (top-down test), AND if predator abundance increases would not have happened if not for prey abundance increases (bottom-up test). Additionally, we can run more variations of the same co-abundance model by sub-setting the co-occuring species data into locations that match in their measured covariates to help control for unmeasured variables. All counter-factual testing will occurr only with the 33 preferred prey species-pairs. 
+
+This approach builds towards the top of the 'ladder of causation' proposed by Judea Pearl's Book of Why. The first rung, association/observation, can be represented simply with a non-directional association between two species (e.g. correlation between RAI of two species). The second run, intervention, typically involves a manipulation, but can also be expressed through causal diagrams, where one variable directionally affects another variable, such as predators suppress prey or prey bolster predators. Finally, the third rung, counter-factual, forces the researcher to imagine an alternative reality where causal forces are reversed or eliminated, such as testing if prey abundance increases in a world with no large carnivore extirpation. 
+
+I will be running several counter-factual tests, listed here:
+1) Would prey abundance increase in landscapes where large carnivores remain abundant (top-down test), AND would predator abundance increase in landscapes where preferred prey remain scarce (bottom-up test). This isolates the effect of declines while being present rather than species extirpations, and is tested by selecting landscapes where predators remain common (upper 3rd quartile of site-level abundance) and prey remain scarce (bottom 1st quartile of site-level abundance). 
+2) What if prey abundance increases would not have happened if not for large carnivore extirpation (top-down test), AND if predator abundance decreases would not have happened if not for prey abundance extirpations (bottom-up test). This isolates the effect of species extirpations rather than declines, and is tested by only selecting landscapes where species co-occur w/ sufficient detections.
+3) Would we observe trophic release in prey or bottom-up bolstering in predators when controlling for landscape variation that may be driving observed trends. This is tested by implementing good and clear site-matching, but in this test, just the Thai Eastern Forest Complex (for now). 
+
+4:6) Would we observe trophic release in prey and bottom-up bolstering in predators when controlling for our observed site covariates? This is tested by running three different counterfactual tests where we let one of the three covariates (HFP, FLII, elev) vary while holding the other two around their mean (mean plus and minus 1/2 SD). 
+
+```{r prepare data for counterfactual test 1}
+
+###### NOTE, THIS WILL PROBABLY GET DETELETED! 
+## leaving #hashed# out for now. 
+# 
+# ##### Null abundance estiamtes were creareated for all species to test SEMs
+# #### in this R script: HPC_N-mixture_mod_abundance_generation_for_SEM.R
+# ### Estimates were made from pcount(num_active_cams + (1|source) ~ (1|Landscape) + (1|year), umf) 
+# ## using count data from landscapes where species was detected.  
+# 
+# # import null abundance
+# abund = read.csv("/Users/zachary_amir/Dropbox/SEM of wildlife communities/MetaSEMs/SEM_estimates_abundamce_per_SU_dataframe_20240524.csv")
+# head(abund) # currentlty long format, but should convert to wide and merge w/ meta 
+# abund$X = NULL # damn row names
+# 
+# ## do this via loop, cant figure out pivot
+# abund_wide = distinct(data.frame(cell_id = abund$cell_id, Landscape = abund$Landscape))
+# 
+# for(i in 1:length(unique(abund$species))){
+#   
+#   # grab data from one species 
+#   sp_dat = abund[abund$species == unique(abund$species)[i], ]
+#   
+#   # Extract the relevant info abundance
+#   sp_abund = select(sp_dat, cell_id, Landscape, abundance)
+#   
+#   ## rename last col 
+#   names(sp_abund)[3] = paste(unique(abund$species)[i], "abundance", sep = "_")
+#   
+#   # and merge w/ abund_wide
+#   abund_wide = merge(abund_wide, sp_abund, by = c("cell_id", "Landscape"))
+#   
+# } # end per species
+# rm(sp_dat, sp_abund, i)
+# 
+# ## inspect
+# head(abund_wide)
+# anyNA(abund_wide) # MUST BE F, will be zero where species does not occurr.
+# 
+# ## Now that we have calculated abundance at 3 km and testing new models @ 5km 
+# 
+# 
+# 
+# ## prep to merge w/ the meta 
+# names(abund_wide)[1] = "cell_id" # rename for easier merging
+# setdiff(abund_wide$cell_id, meta$cell_id)
+# setdiff(meta$cell_id, abund_wide$cell_id) # all good
+# setdiff(abund_wide$Landscape, meta$Landscape)
+# setdiff(meta$Landscape, abund_wide$Landscape) # all good!
+# # merge
+# meta_abund = merge(meta, abund_wide, by= c("cell_id", "Landscape"))
+# # quick exploration below 
+# {
+#   ## Now that were all here, just check a few quick correlations/tests
+#   cor(meta_abund$Panthera_tigris_abundance, meta_abund$Muntiacus_genus_abundance) # weak and negative
+#   t.test(meta_abund$Panthera_tigris_abundance, meta_abund$Muntiacus_genus_abundance) # significant and negative
+#   
+#   cor(meta_abund$Panthera_pardus_abundance, meta_abund$Macaca_nemestrina_abundance) # weak and negative
+#   t.test(meta_abund$Panthera_pardus_abundance, meta_abund$Macaca_nemestrina_abundance) # significant and negative
+#   
+#   cor(meta_abund$Panthera_pardus_abundance, meta_abund$Macaca_fascicularis_abundance) # strong(ish) and positive 
+#   t.test(meta_abund$Panthera_pardus_abundance, meta_abund$Macaca_fascicularis_abundance) # significant and negative ???
+#   
+#   cor(meta_abund$Panthera_tigris_abundance, meta_abund$Rusa_unicolor_abundance) # weakish and positive 
+#   t.test(meta_abund$Panthera_tigris_abundance, meta_abund$Rusa_unicolor_abundance) # significant and negative ???
+#   ### Ignore these, theyre silly
+# }
+# 
+# 
+# ## Want to run two tests, predator abundant and prey scarce
+# cols = names(meta_abund)[grepl("abundance", names(meta_abund))] # grab all species abundance
+# predators = c("Panthera_tigris", "Panthera_pardus", "Neofelis_genus", "Cuon_alpinus") # specify predators
+# res = data.frame("test" = NA, "Landscape" = NA,  "dom_sp" = NA)
+# res = res[0,] # empty DF for results
+# 
+# # run the loop
+# for(l in 1:length(cols)){
+#   
+#   # choose a species
+#   c = cols[l]
+#   sp = paste(strsplit(c, "_")[[1]][1:2], collapse = "_")
+#   
+#   # select relevant data 
+#   m = select(meta_abund, cell_id, Landscape, all_of(c))
+#   
+#   # rename col for ddply
+#   names(m)[3] = "abundance"
+#   
+#   # run the ddply 
+#   d = ddply(m, .(Landscape), summarize,
+#             mean_abund = mean(abundance[abundance > 0], na.rm = T))
+#   
+#   
+#   ## fill in res
+#   if(sp %in% predators){
+#     
+#     # grab 3rd quartile of abundance
+#     a = summary(d$mean_abund)[5]
+#     
+#     # and the landscapes where they are equal or above that abundance
+#     lands = paste0(na.omit(unique(d$Landscape[d$mean_abund >= a])), collapse = " & ")
+#     
+#     # and save this info! 
+#     res[l,"test"] = "predator_abundant" # specify the test (top-down)
+#     res[l,"Landscape"] = lands
+#     res[l, "dom_sp"] = sp
+#     
+#   }else{
+#     
+#     # grab 1st quartile of abundance
+#     a = summary(d$mean_abund)[2]
+#     
+#     # and the landscapes where they are equal or less than abundance
+#     lands = paste0(na.omit(unique(d$Landscape[d$mean_abund <= a])), collapse = " & ")
+#     
+#     # and save this info! 
+#     res[l,"test"] = "prey_scarce" # specify the test (bottom-up)
+#     res[l,"Landscape"] = lands
+#     res[l, "dom_sp"] = sp
+#     
+#   } # end test conditional 
+#     
+# } # end per species
+# rm(l,c,sp,m,d,lands,a,cols, predators)
+# 
+# ## should have 4 predator abundant and the rest prey_scarce
+# table(res$test) # good! 
+
+```
+
+```{r Ultra loop to generate data bundles for counterfactual test 1} 
+# 
+# ## remember, ony making bundles for preferred species pairs here, not the full monty
+# 
+# #create a list to store results
+# counterf1_bdata_list = list()
+# 
+# for(i in 1:length(umfs)){ # repeat for each first speices
+#   
+#   ## select a single species and thier data 
+#   # 1st species is the dominant! 
+#   sp_dom = names(umfs)[i]
+#   sp_dom_dat = umfs[[i]]
+#   
+#   ## subset all other species
+#   all_else = names(umfs)
+#   all_else = all_else[all_else != sp_dom] # remove first species
+#   
+#   ## if the dominant species is a prey,
+#   if(sp_dom %in% res$dom_sp[res$test == "prey_scarce"]){
+#     
+#     ## Then sub_species should only be large carnivores
+#     all_else = all_else[all_else %in%
+#                           traits$scientificNameStd[traits$TrophicGuild == "Large_Carnivore"]]
+#     ## and grab the relevant landscapes, saved as a vector of multiple values
+#     lands = res$Landscape[res$test == "prey_scarce" & res$dom_sp == sp_dom]
+#     lands = strsplit(lands, " & ")[[1]]
+#     
+#   } # end bottom-up counterfactual condition
+#   
+#   ## if the dominant species is a predator 
+#   if(sp_dom %in% res$dom_sp[res$test == "predator_abundant"]){
+#     
+#     ## then sub_species should only be preferred prey
+#     if(sp_dom == "Cuon_alpinus"){ 
+#       all_else = all_else[all_else %in%
+#                             traits$scientificNameStd[traits$dhole_pref == "Yes"]]
+#       ## and grab the relevant landscapes, saved as a vector of multiple values
+#       lands = res$Landscape[res$test == "predator_abundant" & res$dom_sp == sp_dom]
+#       lands = strsplit(lands, " & ")[[1]]
+#     }
+#     ## then sub_species should only be preferred prey
+#     if(sp_dom == "Panthera_tigris"){ 
+#       all_else = all_else[all_else %in%
+#                             traits$scientificNameStd[traits$tiger_pref == "Yes"]]
+#       ## and grab the relevant landscapes, saved as a vector of multiple values
+#       lands = res$Landscape[res$test == "predator_abundant" & res$dom_sp == sp_dom]
+#       lands = strsplit(lands, " & ")[[1]]
+#       }
+#     ## then sub_species should only be preferred prey
+#     if(sp_dom == "Panthera_pardus"){ 
+#       all_else = all_else[all_else %in%
+#                             traits$scientificNameStd[traits$leopard_pref == "Yes"]]
+#       
+#       ## and grab the relevant landscapes, saved as a vector of multiple values
+#       lands = res$Landscape[res$test == "predator_abundant" & res$dom_sp == sp_dom]
+#       lands = strsplit(lands, " & ")[[1]]
+#       }
+#     ## then sub_species should only be preferred prey
+#     if(sp_dom == "Neofelis_genus"){ 
+#       all_else = all_else[all_else %in%
+#                             traits$scientificNameStd[traits$CL_pref == "Yes"]]
+#       ## and grab the relevant landscapes, saved as a vector of multiple values
+#       lands = res$Landscape[res$test == "predator_abundant" & res$dom_sp == sp_dom]
+#       lands = strsplit(lands, " & ")[[1]]}
+#     
+#   } # end top-down counterfactial condition 
+#   
+#   temp = list() # store results per sp1 here 
+#   for(l in 1:length(all_else)){ # repeat for each second species
+#     
+#     ## select a second species and their data
+#     # 2nd species is the subordinate! 
+#     sp_sub = all_else[l]
+#     sp_sub_dat = umfs[[sp_sub]]
+#     
+#     ### Thin both species data to only include sites from key landscapes 
+#     # frist grab relevant SUs
+#     su = meta$cell_id[meta$Landscape %in% lands]
+#     # then thin
+#     dom_y = sp_dom_dat$y;dom_obs = sp_dom_dat$ObsCovs;dom_site = sp_dom_dat$siteCovs
+#     dom_y = dom_y[dom_y$SU %in% su, ];dom_obs = dom_obs[dom_obs$SU %in% su,];dom_site = dom_site[dom_site$cell_id %in% su,]
+#     # and update
+#     sp_dom_dat$y = dom_y;sp_dom_dat$ObsCovs = dom_obs;sp_dom_dat$siteCovs = dom_site
+#     ### repeat for subordinate
+#     # thin first 
+#     sub_y = sp_sub_dat$y;sub_obs = sp_sub_dat$ObsCovs;sub_site = sp_sub_dat$siteCovs
+#     sub_y = sub_y[sub_y$SU %in% su, ];sub_obs = sub_obs[sub_obs$SU %in% su,];sub_site = sub_site[sub_site$cell_id %in% su,]
+#     # and update
+#     sp_sub_dat$y = sub_y;sp_sub_dat$ObsCovs = sub_obs;sp_sub_dat$siteCovs = sub_site
+#     rm(sub_y,sub_obs,sub_site, dom_y, dom_obs,dom_site)
+#     
+#     ##### Add a conditional to verify there are a combined total of 100 detections
+#     ##### shared across the landscapes where BOTH species were detected. 
+#     
+#     ## Grab landscapes present for each species
+#     dom_land = unique(caps$Landscape[caps$Species == sp_dom & caps$Landscape %in% lands])
+#     sub_land = unique(caps$Landscape[caps$Species == sp_sub & caps$Landscape %in% lands])
+#     ## and only save the ones where they intersect 
+#     lands = intersect(dom_land, sub_land)
+#     rm(dom_land, sub_land)
+#     
+#     ## gather number of detections at shared landscapes for both species
+#     dom_det = nrow(caps[caps$Species == sp_dom &
+#                           caps$Landscape %in% lands,])
+#     sub_det = nrow(caps[caps$Species == sp_sub &
+#                           caps$Landscape %in% lands,])
+#     
+#     ## if there are less than 100 detections of both species from shared landscapes, 
+#     if(dom_det + sub_det < 100){
+#       # let us know
+#       print(paste("The species combo of", sp_sub, "~", sp_dom, 
+#                   "have less than 100 detections in shared landscapes! This pair was skipped."))
+#       # and skip the probelmatic pair
+#       next
+#       
+#     } # end 100 detection conditional 
+#     rm(dom_det, sub_det)
+#     ## this conditional will also catch species pairs that dont spatially overlap, 
+#     ## where a conditonal does that below and isnt needed anymore, but leaving for saftey. 
+#     
+#     #
+#     ##
+#     ###
+#     #### Remove landscapes where neither species was detected and convert to matrix
+#     ###
+#     ##
+#     #
+#     
+#     ## First, determine which landscapes species are extirpated in
+#     exp = distinct(select(caps[caps$Species %in% c(sp_sub, sp_dom) & caps$Landscape %in% lands,], Landscape, Species))
+#     exp$presence = "yes"
+#     
+#     ## need to add landscapes where Species was NOT detected via loop 
+#     exp2 = list()
+#     # e = unique(exp$Species)[1]
+#     for(e in unique(exp$Species)){ # repeat for each species
+#       
+#       # select the relevant landscapes
+#       b = unique(caps$Landscape[caps$Species == e & caps$Landscape %in% lands])
+#       #and make it a dataframe
+#       a = data.frame("Landscape" = unique(caps$Landscape[!caps$Landscape %in% b & caps$Landscape %in% lands]))
+#       
+#       ## if there are no extirpations
+#       if(nrow(a) == 0){
+#         next
+#       }
+#       
+#       # save species name and make it a no
+#       a$Species = e
+#       a$presence = "no"
+#       
+#       exp2[[e]] = a
+#       
+#     }
+#     rm(a, b, e)
+#     
+#     # combine list into a df
+#     exp2 = do.call(rbind, exp2)
+#     rownames(exp2)= NULL
+#     
+#     # rbind presence w/ absences
+#     exp = rbind(exp, exp2)
+#     rm(exp2)
+#     
+#     ## grab all landscapes where neither species was detected
+#     non_det_land <- exp %>%
+#       group_by(Landscape) %>%
+#       filter(all(presence == "no"))
+#     
+#     ## extract all the sampling unit names from these landscapes
+#     non_det_SU = meta$cell_id[meta$Landscape %in% unique(non_det_land$Landscape)]
+#     
+#     ## extract both count matricies
+#     data.dom<- sp_dom_dat$y #dominant
+#     data.sub<- sp_sub_dat$y #subordinate
+#     
+#     ## and thin both to remove empty SUs
+#     data.dom = data.dom[!data.dom$SU %in% non_det_SU,]
+#     data.sub = data.sub[!data.sub$SU %in% non_det_SU,]
+#     
+#     ## make sure we match! 
+#     if(nrow(data.dom) != nrow(data.sub)){
+#       
+#       # if we dont, let us know
+#       print(paste("The species combo of", sp_sub, "~", sp_dom, 
+#                   "have different sized matricies! This pair was skipped."))
+#       # and skip the probelmatic one
+#       next
+#       
+#     } # end exact matrix size validation
+#     
+#     ### Now verify that both species are detected together in at least one landscape
+#     pres = unique(exp$Landscape[exp$presence == "yes" & exp$Species == unique(exp$Species)[1] &
+#                                   exp$Landscape %in% exp$Landscape[exp$presence == "yes" & 
+#                                                                      exp$Species ==  unique(exp$Species)[2]]])
+#     ## if there are no landscapes where both are detected,
+#     if(length(pres) == 0){
+#       
+#       ## let us know 
+#       print(paste("The species combo of", sp_sub, "~", sp_dom, 
+#                   "do not spatially overlap! This pair was skipped."))
+#       ## and skip the problematic one
+#       next
+#       
+#     }
+# 
+#     
+#     ## convert matrix dataframes back to matrix 
+#     rownames(data.dom)=data.dom[,1] #set rownames as sampling units
+#     data.dom=data.dom[,-1] #remove sampling unit col
+#     data.dom=as.matrix(data.dom) #turn into a matrix
+#     # repeat for spp 2
+#     rownames(data.sub)=data.sub[,1]
+#     data.sub=data.sub[,-1]
+#     data.sub=as.matrix(data.sub)
+#     
+#     #
+#     ##
+#     ###
+#     #### Site-level covairtes
+#     ###
+#     ##
+#     #
+# 
+#     # Make sure we have the same number of sampling units
+#     if(dim(sp_dom_dat$siteCovs)[1] != dim(sp_sub_dat$siteCovs)[1]){
+#       
+#        # if we dont, let us know
+#       print(paste("The species combo of", sp_sub, "~", sp_dom, 
+#                   "have a different number of sampling units! This pair was skipped."))
+#       # and skip the probelmatic one
+#       next
+#      
+#     }else{
+#       
+#       # thin to match relevant sampling units
+#       covs = sp_dom_dat$siteCovs[sp_dom_dat$siteCovs$cell_id %in% rownames(data.dom),]
+#       
+#     } # end cov size conditional 
+# 
+#     
+#     ### Add conditional if no sites match each other
+#     if(dim(covs)[1] == 0){
+#       print(paste0(sp_dom, " & ", sp_sub, " dont spatially overlap, no combo created."))
+#       next
+#     }# end lack of spatial overlap bypass  
+#     
+#     
+#     #Extract Landscape for random effect, stored as a number
+#     d = data.frame("Landscape"= sort(unique(covs$Landscape)),
+#                    "land.num" = seq(from = 1, to = length(unique(covs$Landscape))))
+#     covs = merge(covs, d, by = "Landscape")
+# 
+#     #Extract years for random effect, stored as a number
+#     d = data.frame("year"= sort(unique(covs$year)),
+#                    "year.num" = seq(from = 1, to = length(unique(covs$year))))
+#     covs = merge(covs, d, by = "year")
+# 
+#      #Extract data source for random effect, stored as a number
+#     d = data.frame("source"= sort(unique(covs$source)),
+#                    "source.num" = seq(from = 1, to = length(unique(covs$source))))
+#     covs = merge(covs, d, by = "source")
+#     rm(d)
+#     
+#     
+#     ## Make sure covs match order of matrix
+#     covs = covs[order(match(covs$cell_id, rownames(data.dom))),]
+#     
+#     #verify
+#     # match(covs$cell_id, rownames(data.dom))
+#     
+#     #
+#     ##
+#     ###
+#     #### Observation-level covariates
+#     ###
+#     ##
+#     #
+#     
+#     # Make sure we have the same sampling units!
+#     if(length(setdiff(sp_dom_dat$ObsCovs$SU, sp_sub_dat$ObsCovs$SU)) == 0 &
+#        length(setdiff(sp_sub_dat$ObsCovs$SU, sp_dom_dat$ObsCovs$SU)) == 0){
+#       
+#       ## thin obs down to relevant SUs
+#       obs = sp_dom_dat$ObsCovs[sp_dom_dat$ObsCovs$SU %in% rownames(data.dom),]
+#       
+#       ## and convert to a matrix 
+#       rownames(obs)=obs[,1] #set rownames as sampling units
+#       obs=obs[,-1] #remove sampling unit col
+#       obs=as.matrix(obs) #turn into a matrix, but only keep one 
+#       
+#     }else{
+#       
+#       ## if obs SUs dont match, let us know! 
+#       print(paste("The species combo of", sp_sub, "~", sp_dom, 
+#                 "have a different number of sampling units in ObsCovs! This pair was skipped."))
+#       # and skip the probelmatic one
+#       next
+#     }
+#     
+#     ## Ensure obs matches the order of matrix 
+#     obs = obs[order(match(rownames(obs), rownames(data.dom))),]
+#     # #verify
+#     # match(rownames(obs), rownames(data.dom))
+#     
+#     #
+#     ##
+#     ###
+#     ####
+#     ##### Prepare the informed ZIP parameters
+#     ####
+#     ###
+#     ##
+#     #
+#     
+#     ## Establish which sites have extirpated dominant species
+#     
+#     # first get max number of counts per row
+#     p.dom = apply(data.dom, 1, max, na.rm = TRUE)
+# 
+#     # subset for only sampling units with detections
+#     p.dom = names(p.dom[p.dom >= 1])
+#     
+#     ### Add conditional if no sites match each other
+#     if(length(p.dom) == 0){
+#       print(paste0(sp1, " & ", sp2, " may spatially overlap, but were never detected in the same landscape"))
+#       next
+#     }# end lack of spatial overlap bypass  
+#     
+#     # gather all sampling units in the Landscapes where species was detected
+#     d.dom = select(covs[covs$Landscape %in% unique(meta$Landscape[meta$cell_id %in% p.dom]), ], 
+#                    cell_id, Landscape) # only need cell_id and landscape
+#     
+#     # gather all sites in landscapes without ANY detections
+#     e.dom = select(covs[! covs$Landscape %in% unique(meta$Landscape[meta$cell_id %in% p.dom]), ], 
+#                    cell_id, Landscape)
+#     
+#     # this should match number of rows in matrix 
+#     if((length(e.dom$cell_id) + length(d.dom$cell_id)) != dim(data.dom)[1] &
+#       (length(e.dom$cell_id) + length(d.dom$cell_id)) != dim(data.sub)[1]){
+#       
+#       print(paste0("problem with ", sp_dom, " & ", sp_sub))
+#       
+#     } # end data check 
+#     
+#     
+#     ## Add if-else statement for dominant species not extirpated anywhere. 
+#     if(length(e.dom$cell_id) > 0){
+#       
+#       # combine, where 0 = extirpated, and 1 = present. 
+#       z.dom = rbind(data.frame("occu" = 0, "cell_id" = e.dom$cell_id),
+#                     data.frame("occu" = 1, "cell_id" = d.dom$cell_id))
+#       
+#     }else{
+#       
+#       z.dom = data.frame("occu" = 1, "cell_id" = d.dom$cell_id)
+#       
+#     } # end no extirpation conditional 
+#     
+#     # make sure its in the same order as the matrix
+#     z.dom = z.dom[order(match(z.dom$cell_id, rownames(data.dom))),]
+#     
+# 
+#     ## Establish which sites have extirpated subordianate species-
+#     
+#     # first get max number of counts per row
+#     p.sub = apply(data.sub, 1, max, na.rm = TRUE)
+#     
+#     # subset for only sites with detections
+#     p.sub = names(p.sub[p.sub >= 1])
+#     
+#     ### Add conditional if no sites match each other
+#     if(length(p.sub) == 0){
+#       print(paste0(sp1, " & ", sp2, " may spatially overlap, but were never detected in the same landscape"))
+#       next
+#     }# end lack of spatial overlap bypass  
+#     
+#     # gather all sampling units in the Landscapes where species was detected
+#     d.sub = select(covs[covs$Landscape %in% unique(meta$Landscape[meta$cell_id %in% p.sub]), ], 
+#                    cell_id, Landscape) # only need cell_id and landscape
+#     
+#     # gather all sites in landscapes without ANY detections
+#     e.sub = select(covs[! covs$Landscape %in% unique(meta$Landscape[meta$cell_id %in% p.sub]), ], 
+#                    cell_id, Landscape)
+#     
+#     
+#     # this should match number of rows in matrix 
+#     if((length(e.sub$cell_id) + length(d.sub$cell_id)) != dim(data.dom)[1] &
+#        (length(e.sub$cell_id) + length(d.sub$cell_id)) != dim(data.sub)[1]){
+#       
+#       print(paste0("problem with ", sp1, " & ", sp2))
+#       
+#     } # end data check 
+#    
+#     # combine, where 0 = extirpated, and 1 = present. 
+#     ## Add if-else statement for subordinate species not extirpated anywhere. 
+#     if(length(e.sub$cell_id) > 0){
+#       
+#       z.sub = rbind(data.frame("occu" = 0, "cell_id" = e.sub$cell_id),
+#                     data.frame("occu" = 1, "cell_id" = d.sub$cell_id))
+#       
+#     }else{
+#       
+#       z.sub = data.frame("occu" = 1, "cell_id" = d.sub$cell_id)
+#     } # end no extirpation conditional 
+#     
+#     # make sure its in the same order as the matrix
+#     z.sub = z.sub[order(match(z.sub$cell_id, rownames(data.sub))),]
+#     
+#     ## verify z.dom and z.sub have the same number of sampling units
+#     if(nrow(z.sub) != nrow(z.dom)){
+#       print(paste0(sp1, " & ", sp2, " have differing rows in their iZIP parameter! Inspect here!"))
+#       
+#       ## and end the loop, this is critical! 
+#       break
+#     }
+#     
+#     ####### BUNDLE all the data for the bayesian model 
+#     
+#     #these are the variable names used in the bayes mod! 
+#     bdata = list(y.dom = data.dom,                           # Count history matrix for dominant spp
+#                  y.sub = data.sub,                           # Count history matrix for subordinate spp
+#                  Z.dom = z.dom$occu,                         # Dominant presence/absence for all sites
+#                  Z.sub = z.sub$occu,                         # Subordinate presence/absence for all sites 
+#                  nsites = dim(data.dom)[1],                  # Number of sampling locations (i.e. rows in matrix)
+#                  nreps = dim(data.dom)[2],                   # Number of sampling occasions (i.e. cols in matrix)
+#                  flii = covs$Avg_FLLI_3km,                   # Site covaraite 1
+#                  hfp = covs$Avg_human_footprint_3km,         # Site covaraite 2
+#                  elev = covs$Avg_altitude_3km,               # Site covaraite 3
+#                  cams = obs,                                 # Observation covaraite 1
+#                  narea = length(unique(covs$land.num)),      # number of levels in landscape RE
+#                  area = covs$land.num,                       # Landscape random effect (as.num)
+#                  nsource = length(unique(covs$source)),      # number of levels in source RE 
+#                  source = covs$source.num,                   # Data source random effect (as.num)
+#                  nyear = length(unique(covs$year.num)),      # number of levels in year RE
+#                  year = covs$year.num)                       # year random effect (as.num)
+#     
+#     ## save the bundle 
+#     temp[[l]] = bdata
+#     names(temp)[l] = paste("SUB-", sp_sub, "~DOM-",sp_dom, sep = "" )
+#     
+#   } # end 2nd species
+#   
+#   if(length(temp) > 0){
+#     ## remove null values in list for species combos that dont overlap 
+#     temp[sapply(temp, is.null)] <- NULL
+#     
+#     ## save all results for all species
+#     counterf1_bdata_list[[i]] = temp
+#   }else{
+#     next
+#   }
+#   
+# } # end 1st species
+# rm(i,l,sp_dom,sp_sub, sp_dom_dat, sp_sub_dat, obs, temp, z.dom, z.sub,
+#    bdata, all_else, data.dom, data.sub, covs, exp, non_det_SU, 
+#    non_det_land, lands, pres, t, su)
+# 
+# ## flatten the list of lists into a single list
+# counterf1_bdata_list = unlist(counterf1_bdata_list, recursive = FALSE)
+# length(counterf1_bdata_list) #46 combos of preferred pred and prey after removing species that have less than 100 detections in shared SPECIAL landscapes 
+# sort(names(counterf1_bdata_list)) # looks good!
+# ## not a lot of prey options tho! 
+# ## how many bottom-up tests
+# bu = names(counterf1_bdata_list)[grepl("SUB-Panthera_tigis|SUB-Panthera_pardus|SUB-Neofelis_genus|SUB-Cuon_alpinus", names(counterf1_bdata_list))]
+# length(bu) # 33 bottom-up 
+# length(names(counterf1_bdata_list)[!names(counterf1_bdata_list) %in% bu]) # 13 top-down 
+
+
+```
+
+```{r Save bundled data for counterfactual test 1}
+# 
+# ## grab today's date 
+# day<-str_sub(Sys.Date(),-2)
+# month<-str_sub(Sys.Date(),-5,-4)
+# year<-str_sub(Sys.Date(),-10,-7)
+# date = paste(year,month,day, sep = "")
+# rm(day,month,year)
+ 
+# Save data 
+# saveRDS(counterf1_bdata_list, paste("data_GitHub_CoA_bundles/counterfactual_testing/Bundled_data_for_Bayes_co-abundance_mods_counterfactual1_isolate_abundance_", length(counterf1_bdata_list), "_species_pairs_", date, ".RDS", sep = ""))
+
+
+```
+
+```{r Ultra loop to generate data bundles for counterfactual test 2}
+
+## this one is much more simple, only select landscapes where both species are present! 
+## therefore, iZIP parameter will all be one and essentially pointless in the model 
+
+## store results here
+counterf2_bdata_list = list()
+
+for(i in 1:length(umfs)){ # repeat for each first speices
+  
+  ## select a single species and thier data 
+  # 1st species is the dominant! 
+  sp_dom = names(umfs)[i]
+  sp_dom_dat = umfs[[i]]
+  
+  ### Thin all_else based upon predator or not
+  if(!sp_dom %in% c("Panthera_tigris", "Panthera_pardus", "Neofelis_genus", "Cuon_alpinus")){
+    
+    # if its not a predator, then make all_else the predators
+    all_else = c("Panthera_tigris", "Panthera_pardus", "Neofelis_genus", "Cuon_alpinus")
+    
+  } # end non-predator condition
+  
+  ## if the dominant species is a predator 
+  if(sp_dom %in% c("Panthera_tigris", "Panthera_pardus", "Neofelis_genus", "Cuon_alpinus")){
+    
+    ## then sub_species should only be preferred prey
+    if(sp_dom == "Cuon_alpinus"){ 
+      all_else = traits$scientificNameStd[traits$dhole_pref == "Yes"]
+    }
+    ## then sub_species should only be preferred prey
+    if(sp_dom == "Panthera_tigris"){ 
+      all_else = traits$scientificNameStd[traits$tiger_pref == "Yes"]
+      }
+    ## then sub_species should only be preferred prey
+    if(sp_dom == "Panthera_pardus"){ 
+      all_else = traits$scientificNameStd[traits$leopard_pref == "Yes"]
+      }
+    ## then sub_species should only be preferred prey
+    if(sp_dom == "Neofelis_genus"){ 
+      all_else = traits$scientificNameStd[traits$CL_pref == "Yes"]
+      }
+    
+  } # end dominant predator condition
+  
+  temp = list() # store results per sp1 here 
+  for(l in 1:length(all_else)){ # repeat for each second species
+    
+    ## select a second species and their data
+    # 2nd species is the subordinate! 
+    sp_sub = all_else[l]
+    sp_sub_dat = umfs[[sp_sub]]
+    
+    ## but verify if this is a preferred prey of one of these predators! 
+    if(sp_sub %in% c("Panthera_tigris", "Panthera_pardus", "Neofelis_genus", "Cuon_alpinus")){
+      
+      ## then sub_species should only be preferred prey
+      if(sp_sub == "Cuon_alpinus" & sp_dom %in% traits$scientificNameStd[traits$dhole_pref != "Yes"]){ 
+        # skip to the next iterations
+        next
+      }
+      ## then sub_species should only be preferred prey
+      if(sp_sub == "Panthera_tigris" & sp_dom %in% traits$scientificNameStd[traits$tiger_pref != "Yes"]){ 
+        # skip to the next iterations
+        next
+      }
+      ## then sub_species should only be preferred prey
+      if(sp_sub == "Panthera_pardus" & sp_dom %in% traits$scientificNameStd[traits$leopard_pref != "Yes"]){ 
+        # skip to the next iterations
+        next
+      }
+      ## then sub_species should only be preferred prey
+      if(sp_sub == "Neofelis_genus" & sp_dom %in% traits$scientificNameStd[traits$CL_pref != "Yes"]){ 
+        # skip to the next iterations
+        next
+      }
+      
+    } # end preferred prey conditional 
+    
+    ##### Add a conditional to verify there are a combined total of 100 detections
+    ##### shared across the landscapes where BOTH species were detected. 
+    
+    ## Grab landscapes present for each species
+    dom_land = unique(caps$Landscape[caps$Species == sp_dom])
+    sub_land = unique(caps$Landscape[caps$Species == sp_sub])
+    ## and only save the ones where they intersect 
+    lands = intersect(dom_land, sub_land)
+    # lands = unique(dom_land, sub_land)
+    rm(dom_land, sub_land)
+    
+    ## gather number of detections at shared landscapes for both species
+    dom_det = nrow(caps[caps$Species == sp_dom &
+                          caps$Landscape %in% lands,])
+    sub_det = nrow(caps[caps$Species == sp_sub &
+                          caps$Landscape %in% lands,])
+    
+    ## if there are less than 100 detections of both species from shared landscapes, 
+    if(dom_det + sub_det < 100){
+      # let us know
+      print(paste("The species combo of", sp_sub, "~", sp_dom, 
+                  "have less than 100 detections in shared landscapes! This pair was skipped."))
+      # and skip the probelmatic pair
+      next
+      
+    } # end 100 detection conditional 
+    rm(dom_det, sub_det)
+    ## this conditional will also catch species pairs that dont spatially overlap, 
+    ## where a conditonal does that below and isnt needed anymore, but leaving for saftey. 
+    
+    #
+    ##
+    ###
+    #### Thin data to landscapes where both species were detected and convert to matrix
+    ###
+    ##
+    #
+    
+    ## grab all sampling units from shared landscapes
+    su = meta$cell_id[meta$Landscape %in% lands]
+    
+    ## extract both count matricies
+    data.dom<- sp_dom_dat$y #dominant
+    data.sub<- sp_sub_dat$y #subordinate
+    
+    ## and thin both to present SUs
+    data.dom = data.dom[data.dom$SU %in% su,]
+    data.sub = data.sub[data.sub$SU %in% su,]
+    
+    ## make sure we match! 
+    if(nrow(data.dom) != nrow(data.sub)){
+      
+      # if we dont, let us know
+      print(paste("The species combo of", sp_sub, "~", sp_dom, 
+                  "have different sized matricies! This pair was skipped."))
+      # and skip the probelmatic one
+      next
+      
+    } # end exact matrix size validation
+    
+    ## convert matrix dataframes back to matrix 
+    rownames(data.dom)=data.dom[,1] #set rownames as sampling units
+    data.dom=data.dom[,-1] #remove sampling unit col
+    data.dom=as.matrix(data.dom) #turn into a matrix
+    # repeat for spp 2
+    rownames(data.sub)=data.sub[,1]
+    data.sub=data.sub[,-1]
+    data.sub=as.matrix(data.sub)
+    
+    #
+    ##
+    ###
+    #### Site-level covairtes
+    ###
+    ##
+    #
+
+    # Make sure we have the same number of sampling units
+    if(dim(sp_dom_dat$siteCovs)[1] != dim(sp_sub_dat$siteCovs)[1]){
+      
+       # if we dont, let us know
+      print(paste("The species combo of", sp_sub, "~", sp_dom, 
+                  "have a different number of sampling units! This pair was skipped."))
+      # and skip the probelmatic one
+      next
+     
+    }else{
+      
+      # thin to match relevant sampling units
+      covs = sp_dom_dat$siteCovs[sp_dom_dat$siteCovs$cell_id %in% rownames(data.dom),]
+      
+    } # end cov size conditional 
+
+    
+    ### Add conditional if no sites match each other
+    if(dim(covs)[1] == 0){
+      print(paste0(sp_dom, " & ", sp_sub, " dont spatially overlap, no combo created."))
+      next
+    }# end lack of spatial overlap bypass  
+    
+    
+    #Extract Landscape for random effect, stored as a number
+    d = data.frame("Landscape"= sort(unique(covs$Landscape)),
+                   "land.num" = seq(from = 1, to = length(unique(covs$Landscape))))
+    covs = merge(covs, d, by = "Landscape")
+
+    #Extract years for random effect, stored as a number
+    d = data.frame("year"= sort(unique(covs$year)),
+                   "year.num" = seq(from = 1, to = length(unique(covs$year))))
+    covs = merge(covs, d, by = "year")
+
+    #Extract data source for random effect, stored as a number
+    d = data.frame("source"= sort(unique(covs$source)),
+                   "source.num" = seq(from = 1, to = length(unique(covs$source))))
+    covs = merge(covs, d, by = "source")
+    rm(d)
+    
+    
+    ## Make sure covs match order of matrix
+    covs = covs[order(match(covs$cell_id, rownames(data.dom))),]
+    
+    #verify
+    # match(covs$cell_id, rownames(data.dom))
+    
+    #
+    ##
+    ###
+    #### Observation-level covariates
+    ###
+    ##
+    #
+    
+    # Make sure we have the same sampling units!
+    if(length(setdiff(sp_dom_dat$ObsCovs$SU, sp_sub_dat$ObsCovs$SU)) == 0 &
+       length(setdiff(sp_sub_dat$ObsCovs$SU, sp_dom_dat$ObsCovs$SU)) == 0){
+      
+      ## thin obs down to relevant SUs
+      obs = sp_dom_dat$ObsCovs[sp_dom_dat$ObsCovs$SU %in% rownames(data.dom),]
+      
+      ## and convert to a matrix 
+      rownames(obs)=obs[,1] #set rownames as sampling units
+      obs=obs[,-1] #remove sampling unit col
+      obs=as.matrix(obs) #turn into a matrix, but only keep one 
+      
+    }else{
+      
+      ## if obs SUs dont match, let us know! 
+      print(paste("The species combo of", sp_sub, "~", sp_dom, 
+                "have a different number of sampling units in ObsCovs! This pair was skipped."))
+      # and skip the probelmatic one
+      next
+    }
+    
+    ## Ensure obs matches the order of matrix 
+    obs = obs[order(match(rownames(obs), rownames(data.dom))),]
+    # #verify
+    # match(rownames(obs), rownames(data.dom))
+    
+    #
+    ##
+    ###
+    ####
+    ##### Prepare the informed ZIP parameters
+    ####
+    ###
+    ##
+    #
+    
+    ### But there should be no need, since we've already subetted for relevant landscapes 
+    z.dom = data.frame("occu" = 1, "cell_id" = covs$cell_id)
+      
+
+    # make sure its in the same order as the matrix
+    z.dom = z.dom[order(match(z.dom$cell_id, rownames(data.dom))),]
+    
+    ## same for sub 
+    z.sub = data.frame("occu" = 1, "cell_id" = covs$cell_id)
+    
+    # make sure its in the same order as the matrix
+    z.sub = z.sub[order(match(z.sub$cell_id, rownames(data.sub))),]
+    
+    # rm(c,d,e,p)
+    
+    ####### BUNDLE all the data for the bayesian model 
+    
+    #these are the variable names used in the bayes mod! 
+    bdata = list(y.dom = data.dom,                           # Count history matrix for dominant spp
+                 y.sub = data.sub,                           # Count history matrix for subordinate spp
+                 Z.dom = z.dom$occu,                         # Dominant presence/absence for all sites
+                 Z.sub = z.sub$occu,                         # Subordinate presence/absence for all sites 
+                 nsites = dim(data.dom)[1],                  # Number of sampling locations (i.e. rows in matrix)
+                 nreps = dim(data.dom)[2],                   # Number of sampling occasions (i.e. cols in matrix)
+                 # flii = covs$Avg_FLLI_3km,                   # Site covaraite 1
+                 # hfp = covs$Avg_human_footprint_3km,         # Site covaraite 2
+                 # elev = covs$Avg_altitude_3km,               # Site covaraite 3
+                 flii = covs$Avg_FLLI_5km,                   # Site covaraite 1 @ 5km 
+                 hfp = covs$Avg_human_footprint_5km,         # Site covaraite 2 @ 5km 
+                 elev = covs$Avg_altitude_5km,               # Site covaraite 3 @ 5km 
+                 cams = obs,                                 # Observation covaraite 1
+                 narea = length(unique(covs$land.num)),      # number of levels in landscape RE
+                 area = covs$land.num,                       # Landscape random effect (as.num)
+                 nsource = length(unique(covs$source)),      # number of levels in source RE 
+                 source = covs$source.num,                   # Data source random effect (as.num)
+                 nyear = length(unique(covs$year.num)),      # number of levels in year RE
+                 year = covs$year.num)                       # year random effect (as.num)
+    
+    ## save the bundle 
+    temp[[l]] = bdata
+    names(temp)[l] = paste("SUB-", sp_sub, "~DOM-",sp_dom, sep = "" )
+    
+  } # end 2nd species
+  
+  if(length(temp) > 0){
+    
+    ## remove null values in list for species combos that dont overlap 
+    temp[sapply(temp, is.null)] <- NULL
+    
+    ## save all results for all species
+    counterf2_bdata_list[[i]] = temp
+    
+  }else{
+    next
+    
+  } # end empty temp condition
+  
+} # end 1st species
+rm(i,l,sp_dom,sp_sub, sp_dom_dat, sp_sub_dat, obs, temp, z.dom, z.sub,
+   bdata, all_else, data.dom, data.sub, covs, su,lands)
+
+## flatten the list of lists into a single list
+counterf2_bdata_list = unlist(counterf2_bdata_list, recursive = FALSE)
+length(counterf2_bdata_list) #66 combos of preferred pred and prey --> perfect match! 
+sort(names(counterf2_bdata_list)) # looks correct! 
+
+## verify iZIP is 1 for everyone
+for(i in 1:length(counterf2_bdata_list)){
+  # grab one bundle 
+  c = counterf2_bdata_list[[i]]
+  # check iZIP 
+  if(unique(c$Z.dom) == 1 & unique(c$Z.sub) == 1){
+    next
+  }else{
+    #let us know if it doesnt match! 
+    print(names(counterf2_bdata_list)[i], "has iZIP values of zero when its supposed to be one. Inspect!! ")
+  }
+}
+## no problems! 
+
+## how many dhole dom mods?
+names(counterf2_bdata_list)[grepl("DOM-Cuon_alpinus", names(counterf2_bdata_list))] # 5 
+## how many sub?
+names(counterf2_bdata_list)[grepl("SUB-Cuon_alpinus", names(counterf2_bdata_list))] # Also 5, good! 
+
+
+## how many bottom-up tests
+bu = names(counterf2_bdata_list)[grepl("SUB-Panthera_tigis|SUB-Panthera_pardus|SUB-Neofelis_genus|SUB-Cuon_alpinus", names(counterf2_bdata_list))]
+length(bu) # 24 bottom-up 
+length(names(counterf2_bdata_list)[!names(counterf2_bdata_list) %in% bu]) # 42 top-down 
+## not 33 and 33??
+rm(bu)
+
+```
+
+```{r Save bundled data for counterfactual test 2}
+
+## grab today's date 
+day<-str_sub(Sys.Date(),-2)
+month<-str_sub(Sys.Date(),-5,-4)
+year<-str_sub(Sys.Date(),-10,-7)
+date = paste(year,month,day, sep = "")
+rm(day,month,year)
+ 
+## specify where the data lives
+wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step2_output_CoA_bundles/counterfactual_testing/"
+
+# Save data 
+saveRDS(counterf2_bdata_list, paste(wd, "/Bundled_data_for_Bayes_co-abundance_mods_counterfactual2_isolate_extirpation_", length(counterf2_bdata_list), "_species_pairs_", scale, "_", date, ".RDS", sep = ""))
+
+```
+
+Ideally, there would be a chunk here that implements some nifty site-matching formulas or at least examines various covariate relationships. However, I am running out of time atm and just want to get a test running. Therefore, I will examine relationships ONLY at the Thai E Forest complex and the three landscapes it is composed of. 
+
+```{r Ultra loop to generate data bundles for counterfactual test 3}
+
+## only examining 3 connected landscapes here! 
+# "Thailand_Thai_E_FC_Center","Thailand_Thai_E_FC_East","Thailand_Thai_E_FC_West"     
+
+#create a list to store results
+counterf3_bdata_list = list()
+
+for(i in 1:length(umfs)){ # repeat for each first speices
+  
+  ## select a single species and thier data 
+  # 1st species is the dominant! 
+  sp_dom = names(umfs)[i]
+  sp_dom_dat = umfs[[i]]
+  
+  ### Thin all_else based upon predator or not
+  if(!sp_dom %in% c("Panthera_tigris", "Panthera_pardus", "Neofelis_genus", "Cuon_alpinus")){
+    
+    # if its not a predator, then make all_else the predators
+    all_else = c("Panthera_tigris", "Panthera_pardus", "Neofelis_genus", "Cuon_alpinus")
+    
+  } # end non-predator condition
+  
+  ## if the dominant species is a predator 
+  if(sp_dom %in% c("Panthera_tigris", "Panthera_pardus", "Neofelis_genus", "Cuon_alpinus")){
+    
+    ## then sub_species should only be preferred prey
+    if(sp_dom == "Cuon_alpinus"){ 
+      all_else = traits$scientificNameStd[traits$dhole_pref == "Yes"]
+    }
+    ## then sub_species should only be preferred prey
+    if(sp_dom == "Panthera_tigris"){ 
+      all_else = traits$scientificNameStd[traits$tiger_pref == "Yes"]
+      }
+    ## then sub_species should only be preferred prey
+    if(sp_dom == "Panthera_pardus"){ 
+      all_else = traits$scientificNameStd[traits$leopard_pref == "Yes"]
+      }
+    ## then sub_species should only be preferred prey
+    if(sp_dom == "Neofelis_genus"){ 
+      all_else = traits$scientificNameStd[traits$CL_pref == "Yes"]
+      }
+    
+  } # end dominant predator condition
+  
+  temp = list() # store results per sp1 here 
+  for(l in 1:length(all_else)){ # repeat for each second species
+    
+    ## select a second species and their data
+    # 2nd species is the subordinate! 
+    sp_sub = all_else[l]
+    sp_sub_dat = umfs[[sp_sub]]
+    
+     ## but verify if this is a preferred prey of one of these predators! 
+    if(sp_sub %in% c("Panthera_tigris", "Panthera_pardus", "Neofelis_genus", "Cuon_alpinus")){
+      
+      ## then sub_species should only be preferred prey
+      if(sp_sub == "Cuon_alpinus" & sp_dom %in% traits$scientificNameStd[traits$dhole_pref != "Yes"]){ 
+        # skip to the next iterations
+        next
+      }
+      ## then sub_species should only be preferred prey
+      if(sp_sub == "Panthera_tigris" & sp_dom %in% traits$scientificNameStd[traits$tiger_pref != "Yes"]){ 
+        # skip to the next iterations
+        next
+      }
+      ## then sub_species should only be preferred prey
+      if(sp_sub == "Panthera_pardus" & sp_dom %in% traits$scientificNameStd[traits$leopard_pref != "Yes"]){ 
+        # skip to the next iterations
+        next
+      }
+      ## then sub_species should only be preferred prey
+      if(sp_sub == "Neofelis_genus" & sp_dom %in% traits$scientificNameStd[traits$CL_pref != "Yes"]){ 
+        # skip to the next iterations
+        next
+      }
+    } # end preferred prey condition
+      
+    
+    ##### Add a conditional to verify there are a combined total of 100 detections
+    ##### shared across the landscapes where BOTH species were detected. 
+    ## but this counterfactual test is limiting us to only three landscapes! 
+    
+    lands = c("Thailand_Thai_E_FC_Center","Thailand_Thai_E_FC_East","Thailand_Thai_E_FC_West" )
+
+    
+    ## gather number of detections at shared landscapes for both species
+    dom_det = nrow(caps[caps$Species == sp_dom &
+                          caps$Landscape %in% lands,])
+    sub_det = nrow(caps[caps$Species == sp_sub &
+                          caps$Landscape %in% lands,])
+    
+    ## if there are less than 100 detections of both species from shared landscapes, 
+    if(dom_det + sub_det < 100){
+      # let us know
+      print(paste("The species combo of", sp_sub, "~", sp_dom, 
+                  "have less than 100 detections in shared landscapes! This pair was skipped."))
+      # and skip the probelmatic pair
+      next
+      
+    } # end 100 detection conditional 
+    rm(dom_det, sub_det, lands)
+    ## this conditional will also catch species pairs that dont spatially overlap, 
+    ## where a conditonal does that below and isnt needed anymore, but leaving for saftey. 
+    
+    #
+    ##
+    ###
+    #### Remove landscapes where neither species was detected and convert to matrix
+    ###
+    ##
+    #
+    
+    ## First, determine which landscapes species are extirpated in
+    exp = distinct(select(caps[caps$Species %in% c(sp_sub, sp_dom),], Landscape, Species))
+    exp$presence = "yes"
+    
+    ## need to add landscapes where Species was NOT detected via loop 
+    exp2 = list()
+    # e = unique(exp$Species)[1]
+    for(e in unique(exp$Species)){ # repeat for each species
+      
+      # select the relevant landscapes
+      b = unique(caps$Landscape[caps$Species == e])
+      #and make it a dataframe
+      a = data.frame("Landscape" = unique(caps$Landscape[!caps$Landscape %in% b]))
+      
+      # save species name and make it a no
+      a$Species = e
+      a$presence = "no"
+      
+      exp2[[e]] = a
+      
+    }
+    rm(a, b, e)
+    
+    # combine list into a df
+    exp2 = do.call(rbind, exp2)
+    rownames(exp2)= NULL
+    
+    # rbind presence w/ absences
+    exp = rbind(exp, exp2)
+    rm(exp2)
+    
+    ## Thin exp to only include relevant landscapes for this test! 
+    exp = exp[exp$Landscape %in% c("Thailand_Thai_E_FC_Center","Thailand_Thai_E_FC_East","Thailand_Thai_E_FC_West"),]
+    
+    ## grab all landscapes where neither species was detected
+    non_det_land <- exp %>%
+      group_by(Landscape) %>%
+      filter(all(presence == "no"))
+    
+    ## extract all the sampling unit names from these landscapes
+    non_det_SU = meta$cell_id[meta$Landscape %in% unique(non_det_land$Landscape)]
+    
+    ## extract both count matricies
+    data.dom<- sp_dom_dat$y #dominant
+    data.sub<- sp_sub_dat$y #subordinate
+    
+    ## and thin both to remove empty SUs
+    data.dom = data.dom[!data.dom$SU %in% non_det_SU,]
+    data.sub = data.sub[!data.sub$SU %in% non_det_SU,]
+    
+    ## but also grab the relevant sampling units for our test! 
+    su = meta$cell_id[meta$Landscape %in% c("Thailand_Thai_E_FC_Center","Thailand_Thai_E_FC_East","Thailand_Thai_E_FC_West")]
+    
+    ## and thin both to the relevant SUs
+    data.dom = data.dom[data.dom$SU %in% su, ]
+    data.sub = data.sub[data.sub$SU %in% su, ]
+    
+    if(is.null(data.dom)){
+      ## let us know 
+      # print("Dominant species:", sp_dom, "is not present in counterfactual3 landscapes, pairing with subordinate species:", sp_sub, "is getting skipped!")
+      next
+    }
+    if(is.null(data.sub)){
+      ## let us know 
+      # print("Subordinate species:", sp_sub, "is not present in counterfactual3 landscapes, pairing with dominant species:", sp_dom, "is getting skipped!")
+      next
+    }
+
+    
+    ## make sure we match! 
+    if(nrow(data.dom) != nrow(data.sub)){
+      
+      # if we dont, let us know
+      print(paste("The species combo of", sp_sub, "~", sp_dom, 
+                  "have different sized matricies! This pair was skipped."))
+      # and skip the probelmatic one
+      next
+      
+    } # end exact matrix size validation
+    
+    ### Now verify that both species are detected together in at least one landscape
+    pres = unique(exp$Landscape[exp$presence == "yes" & exp$Species == unique(exp$Species)[1] &
+                                  exp$Landscape %in% exp$Landscape[exp$presence == "yes" & 
+                                                                     exp$Species ==  unique(exp$Species)[2]]])
+    ## if there are no landscapes where both are detected,
+    if(length(pres) == 0){
+      
+      ## let us know 
+      print(paste("The species combo of", sp_sub, "~", sp_dom, 
+                  "do not spatially overlap! This pair was skipped."))
+      ## and skip the problematic one
+      next
+      
+    }
+
+    
+    ## convert matrix dataframes back to matrix 
+    rownames(data.dom)=data.dom[,1] #set rownames as sampling units
+    data.dom=data.dom[,-1] #remove sampling unit col
+    data.dom=as.matrix(data.dom) #turn into a matrix
+    # repeat for spp 2
+    rownames(data.sub)=data.sub[,1]
+    data.sub=data.sub[,-1]
+    data.sub=as.matrix(data.sub)
+    
+    #
+    ##
+    ###
+    #### Site-level covairtes
+    ###
+    ##
+    #
+
+    # Make sure we have the same number of sampling units
+    if(dim(sp_dom_dat$siteCovs)[1] != dim(sp_sub_dat$siteCovs)[1]){
+      
+       # if we dont, let us know
+      print(paste("The species combo of", sp_sub, "~", sp_dom, 
+                  "have a different number of sampling units! This pair was skipped."))
+      # and skip the probelmatic one
+      next
+     
+    }else{
+      
+      # thin to match relevant sampling units
+      covs = sp_dom_dat$siteCovs[sp_dom_dat$siteCovs$cell_id %in% rownames(data.dom),]
+      
+    } # end cov size conditional 
+
+    
+    ### Add conditional if no sites match each other
+    if(dim(covs)[1] == 0){
+      print(paste0(sp_dom, " & ", sp_sub, " dont spatially overlap, no combo created."))
+      next
+    }# end lack of spatial overlap bypass  
+    
+    
+    #Extract Landscape for random effect, stored as a number
+    d = data.frame("Landscape"= sort(unique(covs$Landscape)),
+                   "land.num" = seq(from = 1, to = length(unique(covs$Landscape))))
+    covs = merge(covs, d, by = "Landscape")
+
+    #Extract years for random effect, stored as a number
+    d = data.frame("year"= sort(unique(covs$year)),
+                   "year.num" = seq(from = 1, to = length(unique(covs$year))))
+    covs = merge(covs, d, by = "year")
+
+     #Extract data source for random effect, stored as a number
+    d = data.frame("source"= sort(unique(covs$source)),
+                   "source.num" = seq(from = 1, to = length(unique(covs$source))))
+    covs = merge(covs, d, by = "source")
+    rm(d)
+    
+    
+    ## Make sure covs match order of matrix
+    covs = covs[order(match(covs$cell_id, rownames(data.dom))),]
+    
+    #verify
+    # match(covs$cell_id, rownames(data.dom))
+    
+    #
+    ##
+    ###
+    #### Observation-level covariates
+    ###
+    ##
+    #
+    
+    # Make sure we have the same sampling units!
+    if(length(setdiff(sp_dom_dat$ObsCovs$SU, sp_sub_dat$ObsCovs$SU)) == 0 &
+       length(setdiff(sp_sub_dat$ObsCovs$SU, sp_dom_dat$ObsCovs$SU)) == 0){
+      
+      ## thin obs down to relevant SUs
+      obs = sp_dom_dat$ObsCovs[sp_dom_dat$ObsCovs$SU %in% rownames(data.dom),]
+      
+      ## and convert to a matrix 
+      rownames(obs)=obs[,1] #set rownames as sampling units
+      obs=obs[,-1] #remove sampling unit col
+      obs=as.matrix(obs) #turn into a matrix, but only keep one 
+      
+    }else{
+      
+      ## if obs SUs dont match, let us know! 
+      print(paste("The species combo of", sp_sub, "~", sp_dom, 
+                "have a different number of sampling units in ObsCovs! This pair was skipped."))
+      # and skip the probelmatic one
+      next
+    }
+    
+    ## Ensure obs matches the order of matrix 
+    obs = obs[order(match(rownames(obs), rownames(data.dom))),]
+    # #verify
+    # match(rownames(obs), rownames(data.dom))
+    
+    #
+    ##
+    ###
+    ####
+    ##### Prepare the informed ZIP parameters
+    ####
+    ###
+    ##
+    #
+    
+    ## Establish which sites have extirpated dominant species
+    
+    # first get max number of counts per row
+    p.dom = apply(data.dom, 1, max, na.rm = TRUE)
+
+    # subset for only sampling units with detections
+    p.dom = names(p.dom[p.dom >= 1])
+    
+    ### Add conditional if no sites match each other
+    if(length(p.dom) == 0){
+      print(paste0(sp1, " & ", sp2, " may spatially overlap, but were never detected in the same landscape"))
+      next
+    }# end lack of spatial overlap bypass  
+    
+    # gather all sampling units in the Landscapes where species was detected
+    d.dom = select(covs[covs$Landscape %in% unique(meta$Landscape[meta$cell_id %in% p.dom]), ], 
+                   cell_id, Landscape) # only need cell_id and landscape
+    
+    # gather all sites in landscapes without ANY detections
+    e.dom = select(covs[! covs$Landscape %in% unique(meta$Landscape[meta$cell_id %in% p.dom]), ], 
+                   cell_id, Landscape)
+    
+    # this should match number of rows in matrix 
+    if((length(e.dom$cell_id) + length(d.dom$cell_id)) != dim(data.dom)[1] &
+      (length(e.dom$cell_id) + length(d.dom$cell_id)) != dim(data.sub)[1]){
+      
+      print(paste0("problem with ", sp_dom, " & ", sp_sub))
+      
+    } # end data check 
+    
+    
+    ## Add if-else statement for dominant species not extirpated anywhere. 
+    if(length(e.dom$cell_id) > 0){
+      
+      # combine, where 0 = extirpated, and 1 = present. 
+      z.dom = rbind(data.frame("occu" = 0, "cell_id" = e.dom$cell_id),
+                    data.frame("occu" = 1, "cell_id" = d.dom$cell_id))
+      
+    }else{
+      
+      z.dom = data.frame("occu" = 1, "cell_id" = d.dom$cell_id)
+      
+    } # end no extirpation conditional 
+    
+    # make sure its in the same order as the matrix
+    z.dom = z.dom[order(match(z.dom$cell_id, rownames(data.dom))),]
+    
+
+    ## Establish which sites have extirpated subordianate species-
+    
+    # first get max number of counts per row
+    p.sub = apply(data.sub, 1, max, na.rm = TRUE)
+    
+    # subset for only sites with detections
+    p.sub = names(p.sub[p.sub >= 1])
+    
+    ### Add conditional if no sites match each other
+    if(length(p.sub) == 0){
+      print(paste0(sp1, " & ", sp2, " may spatially overlap, but were never detected in the same landscape"))
+      next
+    }# end lack of spatial overlap bypass  
+    
+    # gather all sampling units in the Landscapes where species was detected
+    d.sub = select(covs[covs$Landscape %in% unique(meta$Landscape[meta$cell_id %in% p.sub]), ], 
+                   cell_id, Landscape) # only need cell_id and landscape
+    
+    # gather all sites in landscapes without ANY detections
+    e.sub = select(covs[! covs$Landscape %in% unique(meta$Landscape[meta$cell_id %in% p.sub]), ], 
+                   cell_id, Landscape)
+    
+    
+    # this should match number of rows in matrix 
+    if((length(e.sub$cell_id) + length(d.sub$cell_id)) != dim(data.dom)[1] &
+       (length(e.sub$cell_id) + length(d.sub$cell_id)) != dim(data.sub)[1]){
+      
+      print(paste0("problem with ", sp1, " & ", sp2))
+      
+    } # end data check 
+   
+    # combine, where 0 = extirpated, and 1 = present. 
+    ## Add if-else statement for subordinate species not extirpated anywhere. 
+    if(length(e.sub$cell_id) > 0){
+      
+      z.sub = rbind(data.frame("occu" = 0, "cell_id" = e.sub$cell_id),
+                    data.frame("occu" = 1, "cell_id" = d.sub$cell_id))
+      
+    }else{
+      
+      z.sub = data.frame("occu" = 1, "cell_id" = d.sub$cell_id)
+    } # end no extirpation conditional 
+    
+    # make sure its in the same order as the matrix
+    z.sub = z.sub[order(match(z.sub$cell_id, rownames(data.sub))),]
+    
+    ## verify z.dom and z.sub have the same number of sampling units
+    if(nrow(z.sub) != nrow(z.dom)){
+      print(paste0(sp1, " & ", sp2, " have differing rows in their iZIP parameter! Inspect here!"))
+      
+      ## and end the loop, this is critical! 
+      break
+    }
+    
+    ####### BUNDLE all the data for the bayesian model 
+    
+    #these are the variable names used in the bayes mod! 
+    bdata = list(y.dom = data.dom,                           # Count history matrix for dominant spp
+                 y.sub = data.sub,                           # Count history matrix for subordinate spp
+                 Z.dom = z.dom$occu,                         # Dominant presence/absence for all sites
+                 Z.sub = z.sub$occu,                         # Subordinate presence/absence for all sites 
+                 nsites = dim(data.dom)[1],                  # Number of sampling locations (i.e. rows in matrix)
+                 nreps = dim(data.dom)[2],                   # Number of sampling occasions (i.e. cols in matrix)
+                 # flii = covs$Avg_FLLI_3km,                   # Site covaraite 1
+                 # hfp = covs$Avg_human_footprint_3km,         # Site covaraite 2
+                 # elev = covs$Avg_altitude_3km,               # Site covaraite 3
+                 flii = covs$Avg_FLLI_5km,                   # Site covaraite 1 @ 5km
+                 hfp = covs$Avg_human_footprint_5km,         # Site covaraite 2 @ 5km 
+                 elev = covs$Avg_altitude_5km,               # Site covaraite 3 @ 5km 
+                 cams = obs,                                 # Observation covaraite 1
+                 narea = length(unique(covs$land.num)),      # number of levels in landscape RE
+                 area = covs$land.num,                       # Landscape random effect (as.num)
+                 nsource = length(unique(covs$source)),      # number of levels in source RE 
+                 source = covs$source.num,                   # Data source random effect (as.num)
+                 nyear = length(unique(covs$year.num)),      # number of levels in year RE
+                 year = covs$year.num)                       # year random effect (as.num)
+    
+    ## save the bundle 
+    temp[[l]] = bdata
+    names(temp)[l] = paste("SUB-", sp_sub, "~DOM-",sp_dom, sep = "" )
+    
+  } # end 2nd species
+  
+  if(length(temp) > 0){
+  
+  ## remove null values in list for species combos that dont overlap 
+  temp[sapply(temp, is.null)] <- NULL
+  
+  ## save all results for all species
+  counterf3_bdata_list[[i]] = temp  
+  } # end temp length condition
+  
+} # end 1st species
+rm(i,l,sp_dom,sp_sub, sp_dom_dat, sp_sub_dat, obs, temp, z.dom, z.sub,
+   bdata, all_else, data.dom, data.sub, covs, exp, non_det_SU, 
+   non_det_land, pres)
+
+
+## flatten the list of lists into a single list
+counterf3_bdata_list = unlist(counterf3_bdata_list, recursive = FALSE)
+length(counterf3_bdata_list) #40 combos! thats so few! 
+names(counterf3_bdata_list) # Wont get to test leopards here, but that is ok. 
+unique(counterf3_bdata_list$`SUB-Muntiacus_genus~DOM-Panthera_tigris`$Z.dom) # tigers present and absent! Very good! 
+
+
+```
+
+```{r Save bundled data for counterfactual test 3}
+
+## grab today's date 
+day<-str_sub(Sys.Date(),-2)
+month<-str_sub(Sys.Date(),-5,-4)
+year<-str_sub(Sys.Date(),-10,-7)
+date = paste(year,month,day, sep = "")
+rm(day,month,year)
+ 
+# Save data 
+saveRDS(counterf3_bdata_list, paste(wd, "/Bundled_data_for_Bayes_co-abundance_mods_counterfactual3_site_matching_", length(counterf3_bdata_list), "_species_pairs_", scale, "_", date, ".RDS", sep = ""))
+
+```
+
+```{r Ultra loop to generate data bundles for counterfactual test 4:6}
+
+## first save the three covairates of interest that we will be varying/holding constant
+vars = c("Avg_altitude_5km","Avg_FLLI_5km","Avg_human_footprint_5km")
+
+## also calculate landscape averages for these variables 
+land_avg = ddply(meta[, c("Landscape", vars)], .(Landscape), summarize, 
+                 Avg_altitude_5km = mean(Avg_altitude_5km),
+                 Avg_FLLI_5km = mean(Avg_FLLI_5km),
+                 Avg_human_footprint_5km = mean(Avg_human_footprint_5km))
+
+## make a list to store all results
+counterf_vars_bdata_list = list()
+
+for(v in 1:length(vars)){
+  
+  # single out the variable 
+  var = vars[v]
+  # and examine the two other vars
+  va = vars[vars != var]
+  
+  ## Grab the mean and SD of variable of interest 
+  mean_var1 = mean(meta[, va[1]])
+  mean_var2 = mean(meta[, va[2]])
+  sd_var1 = sd(meta[, va[1]])
+  sd_var2 = sd(meta[, va[2]])
+  
+  ## grab landscapes w/ average values for the first variables
+  l1 = land_avg[, c("Landscape", va[1])]
+  lands_var1 = l1$Landscape[l1[,va[1]] >= (mean_var1 - sd_var1) & l1[,va[1]] <= (mean_var1 + sd_var1)]
+  
+  ## and repeat for the second variable 
+  l2 = land_avg[, c("Landscape", va[2])]
+  lands_var2 = l1$Landscape[l2[,va[2]] >= (mean_var2 - sd_var2) & l2[,va[2]] <= (mean_var2 + sd_var2)]
+  
+  ## and only save the ones that intersect
+  lands_var = intersect(lands_var1, lands_var2)
+  
+  ## but let me know if something went wrong! 
+  if(length(lands_var) == 0){
+    print(paste("There were no landscape combinations when controlling for", var, 
+                "so we are stopping the loop now. Inspect!!"))
+    break
+  } # end data check condition. 
+  
+  temp_var = list() # store results per sp1 here
+  for(i in 1:length(umfs)){ # repeat for each first species
+    
+    ## select a single species and thier data 
+    # 1st species is the dominant! 
+    sp_dom = names(umfs)[i]
+    sp_dom_dat = umfs[[i]]
+    
+    ### Thin all_else based upon predator or not
+    if(!sp_dom %in% c("Panthera_tigris", "Panthera_pardus", "Neofelis_genus", "Cuon_alpinus")){
+      
+      # if its not a predator, then make all_else the predators
+      all_else = c("Panthera_tigris", "Panthera_pardus", "Neofelis_genus", "Cuon_alpinus")
+      
+    } # end non-predator condition
+    
+    ## if the dominant species is a predator 
+    if(sp_dom %in% c("Panthera_tigris", "Panthera_pardus", "Neofelis_genus", "Cuon_alpinus")){
+      
+      ## then sub_species should only be preferred prey
+      if(sp_dom == "Cuon_alpinus"){ 
+        all_else = traits$scientificNameStd[traits$dhole_pref == "Yes"]
+      }
+      ## then sub_species should only be preferred prey
+      if(sp_dom == "Panthera_tigris"){ 
+        all_else = traits$scientificNameStd[traits$tiger_pref == "Yes"]
+      }
+      ## then sub_species should only be preferred prey
+      if(sp_dom == "Panthera_pardus"){ 
+        all_else = traits$scientificNameStd[traits$leopard_pref == "Yes"]
+      }
+      ## then sub_species should only be preferred prey
+      if(sp_dom == "Neofelis_genus"){ 
+        all_else = traits$scientificNameStd[traits$CL_pref == "Yes"]
+      }
+      
+    } # end dominant predator condition
+    
+    temp = list() # store results per sp1 here 
+    for(l in 1:length(all_else)){ # repeat for each second species
+      
+      ## select a second species and their data
+      # 2nd species is the subordinate! 
+      sp_sub = all_else[l]
+      sp_sub_dat = umfs[[sp_sub]]
+      
+       ## but verify if this is a preferred prey of one of these predators! 
+    if(sp_sub %in% c("Panthera_tigris", "Panthera_pardus", "Neofelis_genus", "Cuon_alpinus")){
+      
+      ## then sub_species should only be preferred prey
+      if(sp_sub == "Cuon_alpinus" & sp_dom %in% traits$scientificNameStd[traits$dhole_pref != "Yes"]){ 
+        # skip to the next iterations
+        next
+      }
+      ## then sub_species should only be preferred prey
+      if(sp_sub == "Panthera_tigris" & sp_dom %in% traits$scientificNameStd[traits$tiger_pref != "Yes"]){ 
+        # skip to the next iterations
+        next
+      }
+      ## then sub_species should only be preferred prey
+      if(sp_sub == "Panthera_pardus" & sp_dom %in% traits$scientificNameStd[traits$leopard_pref != "Yes"]){ 
+        # skip to the next iterations
+        next
+      }
+      ## then sub_species should only be preferred prey
+      if(sp_sub == "Neofelis_genus" & sp_dom %in% traits$scientificNameStd[traits$CL_pref != "Yes"]){ 
+        # skip to the next iterations
+        next
+      }
+      
+    } # end preferred prey conditional 
+      
+      ## First grab relevant SUs from our averaged landscapes above
+      su = meta$cell_id[meta$Landscape %in% lands_var]
+      
+      # then thin
+      dom_y = sp_dom_dat$y;dom_obs = sp_dom_dat$ObsCovs;dom_site = sp_dom_dat$siteCovs
+      dom_y = dom_y[dom_y$SU %in% su, ];dom_obs = dom_obs[dom_obs$SU %in% su,];dom_site = dom_site[dom_site$cell_id %in% su,]
+      # and update
+      sp_dom_dat$y = dom_y;sp_dom_dat$ObsCovs = dom_obs;sp_dom_dat$siteCovs = dom_site
+      
+      ### repeat for subordinate
+      # thin first 
+      sub_y = sp_sub_dat$y;sub_obs = sp_sub_dat$ObsCovs;sub_site = sp_sub_dat$siteCovs
+      sub_y = sub_y[sub_y$SU %in% su, ];sub_obs = sub_obs[sub_obs$SU %in% su,];sub_site = sub_site[sub_site$cell_id %in% su,]
+      # and update
+      sp_sub_dat$y = sub_y;sp_sub_dat$ObsCovs = sub_obs;sp_sub_dat$siteCovs = sub_site
+      rm(sub_y,sub_obs,sub_site, dom_y, dom_obs,dom_site)
+      
+      ##### Add a conditional to verify there are a combined total of 100 detections
+      ##### shared across the landscapes where BOTH species were detected. 
+      
+      ## Grab landscapes present for each species
+      dom_land = unique(caps$Landscape[caps$Species == sp_dom & caps$Landscape %in% lands_var])
+      sub_land = unique(caps$Landscape[caps$Species == sp_sub & caps$Landscape %in% lands_var])
+      ## and only save the ones where they intersect 
+      lands = intersect(dom_land, sub_land)
+      rm(dom_land, sub_land)
+      
+      ## gather number of detections at shared landscapes for both species
+      dom_det = nrow(caps[caps$Species == sp_dom &
+                            caps$Landscape %in% lands,])
+      sub_det = nrow(caps[caps$Species == sp_sub &
+                            caps$Landscape %in% lands,])
+      
+      ## if there are less than 100 detections of both species from shared landscapes, 
+      if(dom_det + sub_det < 100){
+        # let us know
+        print(paste("The species combo of", sp_sub, "~", sp_dom, 
+                    "have less than 100 detections in shared landscapes! This pair was skipped."))
+        # and skip the probelmatic pair
+        next
+        
+      } # end 100 detection conditional 
+      rm(dom_det, sub_det)
+      ## this conditional will also catch species pairs that dont spatially overlap, 
+      ## where a conditonal does that below and isnt needed anymore, but leaving for saftey. 
+      
+      #
+      ##
+      ###
+      #### Remove landscapes where neither species was detected and convert to matrix
+      ###
+      ##
+      #
+      
+      ## First, determine which landscapes species are extirpated in
+      exp = distinct(select(caps[caps$Species %in% c(sp_sub, sp_dom) & caps$Landscape %in% lands,], Landscape, Species))
+      exp$presence = "yes"
+      
+      ## need to add landscapes where Species was NOT detected via loop 
+      exp2 = list()
+      # e = unique(exp$Species)[1]
+      for(e in unique(exp$Species)){ # repeat for each species
+        
+        # select the relevant landscapes
+        b = unique(caps$Landscape[caps$Species == e & caps$Landscape %in% lands])
+        #and make it a dataframe
+        a = data.frame("Landscape" = unique(caps$Landscape[!caps$Landscape %in% b & caps$Landscape %in% lands]))
+        
+        ## if there are no extirpations
+        if(nrow(a) == 0){
+          next
+        }
+        
+        # save species name and make it a no
+        a$Species = e
+        a$presence = "no"
+        
+        exp2[[e]] = a
+        
+      }
+      rm(a, b, e)
+      
+      # combine list into a df
+      exp2 = do.call(rbind, exp2)
+      rownames(exp2)= NULL
+      
+      # rbind presence w/ absences
+      exp = rbind(exp, exp2)
+      rm(exp2)
+      
+      ## grab all landscapes where neither species was detected
+      non_det_land <- exp %>%
+        group_by(Landscape) %>%
+        filter(all(presence == "no"))
+      
+      ## extract all the sampling unit names from these landscapes
+      non_det_SU = meta$cell_id[meta$Landscape %in% unique(non_det_land$Landscape)]
+      
+      ## extract both count matricies
+      data.dom<- sp_dom_dat$y #dominant
+      data.sub<- sp_sub_dat$y #subordinate
+      
+      ## and thin both to remove empty SUs
+      data.dom = data.dom[!data.dom$SU %in% non_det_SU,]
+      data.sub = data.sub[!data.sub$SU %in% non_det_SU,]
+      
+      ## make sure we match! 
+      if(nrow(data.dom) != nrow(data.sub)){
+        
+        # if we dont, let us know
+        print(paste("The species combo of", sp_sub, "~", sp_dom, 
+                    "have different sized matricies! This pair was skipped."))
+        # and skip the probelmatic one
+        next
+        
+      } # end exact matrix size validation
+      
+      ### Now verify that both species are detected together in at least one landscape
+      pres = unique(exp$Landscape[exp$presence == "yes" & exp$Species == unique(exp$Species)[1] &
+                                    exp$Landscape %in% exp$Landscape[exp$presence == "yes" & 
+                                                                       exp$Species ==  unique(exp$Species)[2]]])
+      ## if there are no landscapes where both are detected,
+      if(length(pres) == 0){
+        
+        ## let us know 
+        print(paste("The species combo of", sp_sub, "~", sp_dom, 
+                    "do not spatially overlap! This pair was skipped."))
+        ## and skip the problematic one
+        next
+        
+      }
+      
+      
+      ## convert matrix dataframes back to matrix 
+      rownames(data.dom)=data.dom[,1] #set rownames as sampling units
+      data.dom=data.dom[,-1] #remove sampling unit col
+      data.dom=as.matrix(data.dom) #turn into a matrix
+      # repeat for spp 2
+      rownames(data.sub)=data.sub[,1]
+      data.sub=data.sub[,-1]
+      data.sub=as.matrix(data.sub)
+      
+      #
+      ##
+      ###
+      #### Site-level covairtes
+      ###
+      ##
+      #
+      
+      # Make sure we have the same number of sampling units
+      if(dim(sp_dom_dat$siteCovs)[1] != dim(sp_sub_dat$siteCovs)[1]){
+        
+        # if we dont, let us know
+        print(paste("The species combo of", sp_sub, "~", sp_dom, 
+                    "have a different number of sampling units! This pair was skipped."))
+        # and skip the probelmatic one
+        next
+        
+      }else{
+        
+        # thin to match relevant sampling units
+        covs = sp_dom_dat$siteCovs[sp_dom_dat$siteCovs$cell_id %in% rownames(data.dom),]
+        
+      } # end cov size conditional 
+      
+      
+      ### Add conditional if no sites match each other
+      if(dim(covs)[1] == 0){
+        print(paste0(sp_dom, " & ", sp_sub, " dont spatially overlap, no combo created."))
+        next
+      }# end lack of spatial overlap bypass  
+      
+      
+      #Extract Landscape for random effect, stored as a number
+      d = data.frame("Landscape"= sort(unique(covs$Landscape)),
+                     "land.num" = seq(from = 1, to = length(unique(covs$Landscape))))
+      covs = merge(covs, d, by = "Landscape")
+      
+      #Extract years for random effect, stored as a number
+      d = data.frame("year"= sort(unique(covs$year)),
+                     "year.num" = seq(from = 1, to = length(unique(covs$year))))
+      covs = merge(covs, d, by = "year")
+      
+      #Extract data source for random effect, stored as a number
+      d = data.frame("source"= sort(unique(covs$source)),
+                     "source.num" = seq(from = 1, to = length(unique(covs$source))))
+      covs = merge(covs, d, by = "source")
+      rm(d)
+      
+      
+      ## Make sure covs match order of matrix
+      covs = covs[order(match(covs$cell_id, rownames(data.dom))),]
+      
+      #verify
+      # match(covs$cell_id, rownames(data.dom))
+      
+      #
+      ##
+      ###
+      #### Observation-level covariates
+      ###
+      ##
+      #
+      
+      # Make sure we have the same sampling units!
+      if(length(setdiff(sp_dom_dat$ObsCovs$SU, sp_sub_dat$ObsCovs$SU)) == 0 &
+         length(setdiff(sp_sub_dat$ObsCovs$SU, sp_dom_dat$ObsCovs$SU)) == 0){
+        
+        ## thin obs down to relevant SUs
+        obs = sp_dom_dat$ObsCovs[sp_dom_dat$ObsCovs$SU %in% rownames(data.dom),]
+        
+        ## and convert to a matrix 
+        rownames(obs)=obs[,1] #set rownames as sampling units
+        obs=obs[,-1] #remove sampling unit col
+        obs=as.matrix(obs) #turn into a matrix, but only keep one 
+        
+      }else{
+        
+        ## if obs SUs dont match, let us know! 
+        print(paste("The species combo of", sp_sub, "~", sp_dom, 
+                    "have a different number of sampling units in ObsCovs! This pair was skipped."))
+        # and skip the probelmatic one
+        next
+      }
+      
+      ## Ensure obs matches the order of matrix 
+      obs = obs[order(match(rownames(obs), rownames(data.dom))),]
+      # #verify
+      # match(rownames(obs), rownames(data.dom))
+      
+      #
+      ##
+      ###
+      ####
+      ##### Prepare the informed ZIP parameters
+      ####
+      ###
+      ##
+      #
+      
+      ## Establish which sites have extirpated dominant species
+      
+      # first get max number of counts per row
+      p.dom = apply(data.dom, 1, max, na.rm = TRUE)
+      
+      # subset for only sampling units with detections
+      p.dom = names(p.dom[p.dom >= 1])
+      
+      ### Add conditional if no sites match each other
+      if(length(p.dom) == 0){
+        print(paste0(sp1, " & ", sp2, " may spatially overlap, but were never detected in the same landscape"))
+        next
+      }# end lack of spatial overlap bypass  
+      
+      # gather all sampling units in the Landscapes where species was detected
+      d.dom = select(covs[covs$Landscape %in% unique(meta$Landscape[meta$cell_id %in% p.dom]), ], 
+                     cell_id, Landscape) # only need cell_id and landscape
+      
+      # gather all sites in landscapes without ANY detections
+      e.dom = select(covs[! covs$Landscape %in% unique(meta$Landscape[meta$cell_id %in% p.dom]), ], 
+                     cell_id, Landscape)
+      
+      # this should match number of rows in matrix 
+      if((length(e.dom$cell_id) + length(d.dom$cell_id)) != dim(data.dom)[1] &
+         (length(e.dom$cell_id) + length(d.dom$cell_id)) != dim(data.sub)[1]){
+        
+        print(paste0("problem with ", sp_dom, " & ", sp_sub))
+        
+      } # end data check 
+      
+      
+      ## Add if-else statement for dominant species not extirpated anywhere. 
+      if(length(e.dom$cell_id) > 0){
+        
+        # combine, where 0 = extirpated, and 1 = present. 
+        z.dom = rbind(data.frame("occu" = 0, "cell_id" = e.dom$cell_id),
+                      data.frame("occu" = 1, "cell_id" = d.dom$cell_id))
+        
+      }else{
+        
+        z.dom = data.frame("occu" = 1, "cell_id" = d.dom$cell_id)
+        
+      } # end no extirpation conditional 
+      
+      # make sure its in the same order as the matrix
+      z.dom = z.dom[order(match(z.dom$cell_id, rownames(data.dom))),]
+      
+      
+      ## Establish which sites have extirpated subordianate species-
+      
+      # first get max number of counts per row
+      p.sub = apply(data.sub, 1, max, na.rm = TRUE)
+      
+      # subset for only sites with detections
+      p.sub = names(p.sub[p.sub >= 1])
+      
+      ### Add conditional if no sites match each other
+      if(length(p.sub) == 0){
+        print(paste0(sp1, " & ", sp2, " may spatially overlap, but were never detected in the same landscape"))
+        next
+      }# end lack of spatial overlap bypass  
+      
+      # gather all sampling units in the Landscapes where species was detected
+      d.sub = select(covs[covs$Landscape %in% unique(meta$Landscape[meta$cell_id %in% p.sub]), ], 
+                     cell_id, Landscape) # only need cell_id and landscape
+      
+      # gather all sites in landscapes without ANY detections
+      e.sub = select(covs[! covs$Landscape %in% unique(meta$Landscape[meta$cell_id %in% p.sub]), ], 
+                     cell_id, Landscape)
+      
+      
+      # this should match number of rows in matrix 
+      if((length(e.sub$cell_id) + length(d.sub$cell_id)) != dim(data.dom)[1] &
+         (length(e.sub$cell_id) + length(d.sub$cell_id)) != dim(data.sub)[1]){
+        
+        print(paste0("problem with ", sp1, " & ", sp2))
+        
+      } # end data check 
+      
+      # combine, where 0 = extirpated, and 1 = present. 
+      ## Add if-else statement for subordinate species not extirpated anywhere. 
+      if(length(e.sub$cell_id) > 0){
+        
+        z.sub = rbind(data.frame("occu" = 0, "cell_id" = e.sub$cell_id),
+                      data.frame("occu" = 1, "cell_id" = d.sub$cell_id))
+        
+      }else{
+        
+        z.sub = data.frame("occu" = 1, "cell_id" = d.sub$cell_id)
+      } # end no extirpation conditional 
+      
+      # make sure its in the same order as the matrix
+      z.sub = z.sub[order(match(z.sub$cell_id, rownames(data.sub))),]
+      
+      ## verify z.dom and z.sub have the same number of sampling units
+      if(nrow(z.sub) != nrow(z.dom)){
+        print(paste0(sp1, " & ", sp2, " have differing rows in their iZIP parameter! Inspect here!"))
+        
+        ## and end the loop, this is critical! 
+        break
+      }
+      
+      ####### BUNDLE all the data for the bayesian model 
+      
+      #these are the variable names used in the bayes mod! 
+      bdata = list(y.dom = data.dom,                           # Count history matrix for dominant spp
+                   y.sub = data.sub,                           # Count history matrix for subordinate spp
+                   Z.dom = z.dom$occu,                         # Dominant presence/absence for all sites
+                   Z.sub = z.sub$occu,                         # Subordinate presence/absence for all sites 
+                   nsites = dim(data.dom)[1],                  # Number of sampling locations (i.e. rows in matrix)
+                   nreps = dim(data.dom)[2],                   # Number of sampling occasions (i.e. cols in matrix)
+                   flii = covs$Avg_FLLI_5km,                   # Site covaraite 1 @ 5km res! 
+                   hfp = covs$Avg_human_footprint_5km,         # Site covaraite 2 @ 5km res!
+                   elev = covs$Avg_altitude_5km,               # Site covaraite 3 @ 5km res!
+                   cams = obs,                                 # Observation covaraite 1
+                   narea = length(unique(covs$land.num)),      # number of levels in landscape RE
+                   area = covs$land.num,                       # Landscape random effect (as.num)
+                   nsource = length(unique(covs$source)),      # number of levels in source RE 
+                   source = covs$source.num,                   # Data source random effect (as.num)
+                   nyear = length(unique(covs$year.num)),      # number of levels in year RE
+                   year = covs$year.num)                       # year random effect (as.num)
+      
+      ## save the bundle 
+      temp[[l]] = bdata
+      names(temp)[l] = paste("SUB-", sp_sub, "~DOM-",sp_dom, sep = "" )
+      
+    } # end 2nd species
+    
+    if(length(temp) > 0){
+      ## remove null values in list for species combos that dont overlap 
+      temp[sapply(temp, is.null)] <- NULL
+      
+      # ## flatten the list of lists into a single list
+      # temp = unlist(temp, recursive = FALSE)
+      
+      ## save all results for sp1
+      temp_var[[i]] = temp
+      # # and save the name too!
+      # names(temp_var)[v] = var
+      
+    }else{
+      next
+    }
+    
+  } # end per first species 
+  
+  ## flatten the list of lists into a single list
+  temp_var = unlist(temp_var, recursive = FALSE)
+  
+  ## so we can save it in another list 
+  counterf_vars_bdata_list[[v]] = temp_var
+  names(counterf_vars_bdata_list)[v] = var
+  
+} # end per variable
+rm(i,l,sp_dom,sp_sub, sp_dom_dat, sp_sub_dat, obs, temp, z.dom, z.sub,
+   bdata, all_else, data.dom, data.sub, covs, exp, non_det_SU, 
+   non_det_land, lands, pres, t, su, d.dom, d.sub, e.dom, e.sub, l1, l2, 
+   land_avg, temp_var, lands_var, lands_var1, lands_var2, mean_var1, mean_var2, 
+   p.dom, p.sub, sd_var1, sd_var2, v, va, var, vars)
+
+## inspect! 
+length(counterf_vars_bdata_list$Avg_altitude_5km) # 66 mods here
+length(counterf_vars_bdata_list$Avg_FLLI_5km) # 66 mods here
+length(counterf_vars_bdata_list$Avg_human_footprint_5km) # 66 mods here
+
+## check one key species pair and make sure it has different number of landscapes per list
+counterf_vars_bdata_list$Avg_altitude_5km$`SUB-Panthera_tigris~DOM-Rusa_unicolor`$narea #32 for altitude
+counterf_vars_bdata_list$Avg_FLLI_5km$`SUB-Panthera_tigris~DOM-Rusa_unicolor`$narea # 23 for FLII
+counterf_vars_bdata_list$Avg_human_footprint_5km$`SUB-Panthera_tigris~DOM-Rusa_unicolor`$narea #20 for HFP
+## I think that checks out alright! 
+
+
+```
+
+```{r Save bundled data for coutnerfactual tests 4:6}
+
+## grab today's date 
+day<-str_sub(Sys.Date(),-2)
+month<-str_sub(Sys.Date(),-5,-4)
+year<-str_sub(Sys.Date(),-10,-7)
+date = paste(year,month,day, sep = "")
+rm(day,month,year)
+ 
+# Save altitude
+saveRDS(counterf_vars_bdata_list$Avg_altitude_5km, paste(wd, "/Bundled_data_for_Bayes_co-abundance_mods_counterfactual4_isolate_altitude_", length(counterf_vars_bdata_list$Avg_altitude_5km), "_species_pairs_", scale, "_", date, ".RDS", sep = ""))
+
+# Save FLII
+saveRDS(counterf_vars_bdata_list$Avg_FLLI_5km, paste(wd, "/Bundled_data_for_Bayes_co-abundance_mods_counterfactual5_isolate_FLII_", length(counterf_vars_bdata_list$Avg_FLLI_5km), "_species_pairs_", scale, "_", date, ".RDS", sep = ""))
+
+# Save HFP
+saveRDS(counterf_vars_bdata_list$Avg_human_footprint_5km, paste(wd, "/Bundled_data_for_Bayes_co-abundance_mods_counterfactual6_isolate_HFP_", length(counterf_vars_bdata_list$Avg_human_footprint_5km), scale, "_", "_species_pairs_", date, ".RDS", sep = ""))
+
+
+
+
+
+```
+

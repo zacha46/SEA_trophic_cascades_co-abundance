@@ -61,9 +61,8 @@ data/species_traits/*~
 
 
 # and OE files from HPC
-scripts/
-*.err
-*.out
+scripts/*.err
+scripts/*.out
 
 
 # Ignore figures

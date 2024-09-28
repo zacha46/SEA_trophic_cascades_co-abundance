@@ -80,3 +80,15 @@ figures/
 .DS_Store?
 **/.DS_Store
 data/.DS_Store
+
+# Ignore data files
+*.csv
+*.tif
+*.xlsx
+*.rds
+*.rdata
+*.nc
+
+# Ignore the Dropbox directory (if linked to the repo)
+/Dropbox/
+

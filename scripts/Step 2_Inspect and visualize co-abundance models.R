@@ -44,7 +44,7 @@ og_resamp_meta = read.csv("data_GitHub/clean_metadata_to_make_UMFs_5km_scale_202
 
 ## first, I will import the bundled data to generate a vector of relevant species pairs 
 # but since I split the bundled data into multiple files, I must import them all. 
-files = list.files("data_GitHub_CoA_bundles/")
+files = list.files("data/step2_output_CoA_bundles//")
 files = files[grepl("Bundled", files)]
 files = files[!grepl("MISSING", files)] # avoid reading in repeated data 
 
@@ -53,10 +53,24 @@ res = list()
 for(i in 1:length(files)){
   
   # import
-  b = readRDS(paste("data_GitHub_CoA_bundles/", files[i], sep = ""))
+  b = readRDS(paste("data/step2_output_CoA_bundles/", files[i], sep = ""))
   
   # and save
   res[[i]] = b
+  
+  #### CHECKING FOR FAILED MODS ###
+  # check = preform$Species_Pair[is.na(preform$Interaction_Estimate) & preform$preference == "preferred"]
+  if(any(names(b) %in% check)){
+    ## grab the match 
+    sp = check[check %in% names(b)]
+    ## print the message
+    print(paste("The species pairs:", paste(sp, collapse = " & "), "are in file name:", files[i]))
+    for(s in 1:length(sp)){
+      p = sp[s]
+      pos = which(names(b) %in% p)
+      print(paste("Specifically, species pair:", p, "is located in this bundle at position:", pos))
+    }
+  }
   
 }
 rm(b,i)
@@ -74,14 +88,16 @@ all_combos = names(bdata)
 
 # list all files
 # files = list.files("results_final/coefficent_dataframes/")
-files = list.files("results/MIDDLE_5km_final_and_counterfactual_testing_Sep_2024/coefficent_dataframes/")
+# files = list.files("results/MIDDLE_5km_final_and_counterfactual_testing_Sep_2024/coefficent_dataframes/")
+files = list.files("results/LONG_5km_final_and_counterfactual_Oct2024/coefficent_dataframes/")
+
 files = files[!grepl("OLD", files)] # remove any old data 
 files = files[!grepl("counterfactual", files)] # remove any counterfactuals data 
 
 
 ## Have a few long and all middle files in this directory, subset for one
-# files = files[grepl("HALF_LONG", files)]
-files = files[grepl("MIDDLE", files)]
+files = files[grepl("LONG", files)]
+# files = files[grepl("MIDDLE", files)]
 # files = files[grepl("SHORT", files)]
 
 
@@ -93,7 +109,7 @@ for(i in 1:length(files)){
   
   # import 
   # d = read.csv(paste("results_final/coefficent_dataframes/", files[i], sep = ""))
-  d = read.csv(paste("results/MIDDLE_5km_final_and_counterfactual_testing_Sep_2024/coefficent_dataframes/", files[i], sep = ""))
+  d = read.csv(paste("results/LONG_5km_final_and_counterfactual_Oct2024/coefficent_dataframes/", files[i], sep = ""))
   
   ## if there are pesky row.names, remove em!
   d$X = NULL
@@ -204,15 +220,17 @@ table(preform$mod_completion) # 260 completed!
 
 # list all files
 # files = list.files("results_final/PPC_dataframes/")
-files = list.files("results/MIDDLE_5km_final_and_counterfactual_testing_Sep_2024/PPC_dataframes/")
+# files = list.files("results/MIDDLE_5km_final_and_counterfactual_testing_Sep_2024/PPC_dataframes/")
+files = list.files("results/LONG_5km_final_and_counterfactual_Oct2024/PPC_dataframes/")
+
 files = files[!grepl("OLD", files)] # remove any old data 
 files = files[!grepl("counterfactual", files)] # remove any counterfactual testing data 
 # and dont want plottind data 
 files = files[!grepl("plotdata", files)] 
 
 ## Subset files for one setting, especially if multiple are in the mix. 
-# files = files[grepl("HALF_LONG", files)]
-files = files[grepl("MIDDLE", files)]
+files = files[grepl("LONG", files)]
+# files = files[grepl("MIDDLE", files)]
 # files = files[grepl("SHORT", files)]
 
 # store results here
@@ -223,7 +241,7 @@ for(i in 1:length(files)){
   
   ## read the file 
   # d = read.csv(paste("results_final/PPC_dataframes/", files[i], sep = ""))
-  d = read.csv(paste("results/MIDDLE_5km_final_and_counterfactual_testing_Sep_2024/PPC_dataframes/", files[i], sep = ""))
+  d = read.csv(paste("results/LONG_5km_final_and_counterfactual_Oct2024/PPC_dataframes/", files[i], sep = ""))
   
   
   ## save plotdata vs values in nested list. 
@@ -368,13 +386,13 @@ rm(ppc_res)#, ppc_plotdat)
 ######## Import guild data and dietary preferences of large carnivores #####
 
 #load guild data
-guilds = read.csv(("data_GitHub/clean_44_species_trait_data_20240820.csv"))
+guilds = read.csv("data/step1_output/clean_44_species_trait_data_20240928.csv")
 head(guilds)
 str(guilds)
 ## looks good, dietary preferences are ready to go! 
 
 ## Address two NA typo made in step 1
-guilds$tiger_pref[grepl("Panthera", guilds$scientificNameStd)] = "No" # tigers dont preferentially prey upon other big cats
+# guilds$tiger_pref[grepl("Panthera", guilds$scientificNameStd)] = "No" # tigers dont preferentially prey upon other big cats
 
 #
 ##

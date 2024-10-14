@@ -35,7 +35,7 @@ gb = Sys.getenv("GB")            # RAM
 files = list.files("data/co-abundance")[grepl("Bundled_data", list.files("data/co-abundance/"))]
 
 # #for local testing
-# files = list.files("data_GitHub_CoA_bundles/")[grepl("Bundled_data", list.files("data_GitHub_CoA_bundles/"))]
+# files = list.files("data/step2_output_CoA_bundles/")[grepl("Bundled_data", list.files("data/step2_output_CoA_bundles/"))]
 
 
 ## Subset files for proper pref setting
@@ -47,7 +47,7 @@ f = files[grepl(gb, files)]
 dat = readRDS(paste("data/co-abundance/", f ,sep = ""))
 
 # #for local testing
-# dat = readRDS(paste("data_GitHub_CoA_bundles/", f ,sep = ""))
+# dat = readRDS(paste("data/step2_output_CoA_bundles/", f ,sep = ""))
 
 
 
@@ -57,22 +57,29 @@ bdata = dat[[slurm]]
 ## and save the name of the species pair 
 n = names(dat)[slurm]
 
-# ### Verify that this species pair at this setting has not already been completed-
-# # First, create file name that mimics results to check if already present
-# res =  paste(setting, "_co-abundance_coefficents_", n, sep = "")
-# 
-# # Second, list all completed results
-# res_search = list.files("results/co-abundance/coefficent_dataframes/")
-# 
-# # If the newly constructed file name matches ANY values already present in results,
-# if(any(grepl(res, res_search))){
-# 
-#   ## Print a message stating so
-#   print(paste("The species pair:", n, "run with MCMC settings:", setting, "is already present in the results folder. This R script is terminating now."))
-# 
-#   ## and terminate the R script fully
-#   stop("The script was terminated.")
-# }
+### Verify that this species pair at this setting has not already been completed-
+# First, create file name that mimics results to check if already present
+res =  paste(setting, "_co-abundance_coefficents_", n, sep = "")
+
+# Second, list all completed results
+res_search = list.files("results/co-abundance/coefficent_dataframes/")
+# # local testing
+# res_search = list.files("results/LONG_5km_final_and_counterfactual_Oct2024/coefficent_dataframes/")
+
+# Third, make sure no counterfactual results are present! 
+res_search = res_search[!grepl("counterfactual", res_search)]
+
+# If the newly constructed file name matches ANY values already present in results,
+if(any(grepl(res, res_search))){
+
+  ## Print a message stating so
+  print(paste("The species pair:", n, 
+              "run with MCMC settings:", setting, 
+              "is already present in the results folder. This R script is terminating now."))
+
+  ## and terminate the R script fully
+  stop("The script was terminated.")
+}
 
 ## matricies saved as char but need to be numeric 
 bdata$y.dom = apply(bdata$y.dom, 2, as.numeric)

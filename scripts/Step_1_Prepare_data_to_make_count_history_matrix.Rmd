@@ -198,12 +198,48 @@ meta = meta[meta$survey_id %in% caps$survey_id,]
 
 ```
 
+```{r Import non-resampled data for referencing}
+
+### this will be important for determining the number of deployments used total and per survey 
+
+## specify the workind diretory where og data lives
+og_wd = "/Users/zachary_amir/Dropbox/CT capture histories database/Asian ECL raw CT data/Step4_output_pre-resampling/"
+
+# list all relevant files 
+files = list.files(og_wd, recursive = T)
+# remove TEAM and OLD data 
+files = files[!grepl("TEAM", files)]
+files = files[!grepl("OLD", files)]
+
+## import captures
+og_caps = read.csv(paste(og_wd, files[grepl("cap", files)], sep = ""))
+## import metadata
+og_meta = read.csv(paste(og_wd, files[grepl("meta", files)], sep = ""))
+
+## verify surveys match
+og_meta = og_meta[og_meta$survey_id %in% meta$survey_id, ]
+og_caps = og_caps[og_caps$survey_id %in% caps$survey_id, ]
+
+## clean up! 
+rm(files, og_wd)
+
+
+## Also need SU per landscape
+land_sum = ddply(meta, .(Landscape), summarize,
+                 num_su = (length(unique(cell_id))))
+
+
+
+```
+
+
 ## Camera trap data included for analysis  
 
-The camera trap data used in this analysis comes from **`r length(unique(meta$source))` data providers** that sampled **`r length(unique(meta$Landscape))` spatially distinct landscapes** from a total of **`r length(unique(meta$survey_id))` temporally distinct survey_ids** that have been defined to be a maximum of 100 days long. 
-We have spatially re-sampled the camera trap captures and covariates to the **`r scale` spatial scale**, meaning that any cameras within a `r scale` hexagon had their captures aggregated. There are a total of **`r paste(length(unique(meta$cell_id)), scale, "sampling units")`** available for analysis. 
+The camera trap data used in this analysis comes from **`r length(unique(meta$source))` data providers** that sampled **`r length(unique(meta$Landscape))` spatially distinct landscapes** from a total of **`r length(unique(meta$survey_id))` temporally distinct survey_ids** that have been defined to be a maximum of 100 days long. This data is comprised of **`r length(unique(og_meta$deployment_id))` single-season camera deployments**. The single-season surveys ranged in duration from `r as.numeric(min(surv_summary$dur[!surv_summary$survey_id %in% rm]))` to `r as.numeric(max(surv_summary$dur[!surv_summary$survey_id %in% rm]))` days, with an average of `r round(as.numeric(mean(surv_summary$dur[!surv_summary$survey_id %in% rm])),2)` and SD of `r round(as.numeric(sd(surv_summary$dur[!surv_summary$survey_id %in% rm])),2)` days. In terms of trap-nights (*i.e.*, number of deployments multiplied by duration), the average sampling effort per survey had `r as.numeric(min(surv_summary$trap_nights[!surv_summary$survey_id %in% rm]))` to `r as.numeric(max(surv_summary$trap_nights[!surv_summary$survey_id %in% rm]))` trap-nights, with an average of `r round(as.numeric(mean(surv_summary$trap_nights[!surv_summary$survey_id %in% rm])),2)` and SD of `r round(as.numeric(sd(surv_summary$trap_nights[!surv_summary$survey_id %in% rm])),2)` trap-nights. 
 
-As part of ensuring we are using robust data, a landscape needs be at least 9 km2 to provide spatial variation and a survey needs to contain at least 100 trap-nights. Therefore, a total of __`r length(rm)` surveys have been removed__ that do not meet these standards, and this represents __`r paste(round(dat_rm,1), "%", sep = "")` of the captures__. For the remaining `r length(unique(meta$survey_id))` valid surveys, the __median number of `r scale` sampling units is `r median(surv_summary$num_SU[!surv_summary$survey_id %in% rm])` with a range from `r paste(min(surv_summary$num_SU[!surv_summary$survey_id %in% rm]), max(surv_summary$num_SU[!surv_summary$survey_id %in% rm]), sep = " - ")`__, and the __median sampling effort is `r as.numeric(median(surv_summary$trap_nights[!surv_summary$survey_id %in% rm]))` trap-nights, with a range from `r paste(as.numeric(min(surv_summary$trap_nights[!surv_summary$survey_id %in% rm])), as.numeric(max(surv_summary$trap_nights[!surv_summary$survey_id %in% rm])), sep = " - ")`__.
+We have spatially re-sampled the camera trap captures and covariates to the **`r scale` spatial scale**, meaning that any cameras within a `r scale` hexagon had their captures aggregated. There are a total of **`r paste(length(unique(meta$cell_id)), scale, "sampling units")`** available for analysis, and each **landscape contains between `r min(land_sum$num_su)` to `r max(land_sum$num_su)`** sampling units, with an average of `r round(mean(land_sum$num_su),2)` and SD of `r round(sd(land_sum$num_su),2)` per landscape.
+
+As part of ensuring we are using robust data, a landscape needs be at least 9 km2 to provide spatial variation and a survey needs to contain at least 100 trap-nights. Therefore, a total of __`r length(rm)` surveys have been removed__ that do not meet these standards, and this represents __`r paste(round(dat_rm,1), "%", sep = "")` of the captures__. For the remaining `r length(unique(meta$survey_id))` valid surveys, the __median number of `r scale` sampling units is `r median(surv_summary$num_SU[!surv_summary$survey_id %in% rm])` with a range from `r paste(min(surv_summary$num_SU[!surv_summary$survey_id %in% rm]), max(surv_summary$num_SU[!surv_summary$survey_id %in% rm]), sep = " - ")`__, and the __median sampling effort per survey is `r as.numeric(median(surv_summary$trap_nights[!surv_summary$survey_id %in% rm]))` trap-nights, with a range from `r paste(as.numeric(min(surv_summary$trap_nights[!surv_summary$survey_id %in% rm])), as.numeric(max(surv_summary$trap_nights[!surv_summary$survey_id %in% rm])), sep = " - ")`__.
 
 ## Determine which species to analyze
 
@@ -214,7 +250,7 @@ I will also gather species traits from the `library(speciestraits)` databases. E
 ```{r select and standardize species to include}
 
 ## clean up environment from previous reporting text
-rm(dat_rm, rm, rm2, surv_summary)
+rm(dat_rm, rm, rm2, surv_summary, land_sum)
 
 ##### Which species will be included and how to standardize species?
 
@@ -702,9 +738,12 @@ summary(traits$HomeRange_km2[traits$scientificNameStd %in% c("Panthera_tigris", 
 sd(traits$HomeRange_km2[traits$scientificNameStd %in% c("Panthera_tigris", "Panthera_pardus", "Neofelis_genus", "Cuon_alpinus")], na.rm = T) #SD is 23.5
 
 
+## quickly replace space with dash in og caps for reporting
+og_caps$Species = gsub(" ", "_", og_caps$Species)
+
 ```
 
-Before any standardization there are a total of `r full_length` 'species' with 100 captures ready for analysis, but after removing domestic species (*e.g.*, *Canis lupus familiaris* & *Bos taurus*), primarily arboreal species (*e.g.*, *Pongo pygmaeus* & *Presbytis rubicunda*), species less than 1kg or greater than 1000 kg, or species lacking any trait data, we are left with a __total of `r length(keep)` species ready for analysis__. 
+Before any standardization there are a total of `r full_length` 'species' with 100 captures ready for analysis, but after removing domestic species (*e.g.*, *Canis lupus familiaris* & *Bos taurus*), primarily arboreal species (*e.g.*, *Pongo pygmaeus* & *Presbytis rubicunda*), species less than 1kg or greater than 1000 kg, or species lacking any trait data, we are left with a __total of `r length(keep)` species ready for analysis__. Therefore, the total number of independent captures for these species is `r nrow(og_caps[og_caps$Species %in% keep,])`.
 
 A total of `r length(unique(traits$TrophicGuild))` trophic guilds were constructed based on trophic level and body mass. Unfortunately, __home-range data was lacking for `r length(traits$scientificNameStd[is.na(traits$HomeRange_km2)])` species__, but for the known home-range values. For the remaining values, the median value is `r median(traits$HomeRange_km2, na.rm = T)` with a range of `r paste(min(traits$HomeRange_km2, na.rm = T), max(traits$HomeRange_km2, na.rm = T), sep = " - " )` square kilometers. 
 
@@ -714,13 +753,13 @@ There are a **total of `r length(traits$scientificNameStd[traits$TrophicLevel ==
 
 There are a **total of `r length(traits$scientificNameStd[traits$TrophicLevel == "Carnivore"])` carnivores**, split between **`r length(traits$scientificNameStd[traits$TrophicGuild == "Small_Carnivore"])` small carnivores** and **`r length(traits$scientificNameStd[traits$TrophicGuild == "Large_Carnivore"])` large carnivores** using a 15 kg cut-off. 
 
-__Tigers (*Panthera tigris*)__ were deemed to prefer any other species that is not a large carnivore and above 17 kg. This includes a total of **`r length(traits$scientificNameStd[traits$tiger_pref == "Yes"])` species composed of `r paste(traits$scientificNameStd[traits$tiger_pref == "Yes"], collapse = ", ")`**. 
+__Tigers (*Panthera tigris*)__ were generated `r nrow(og_caps[og_caps$Species == "Panthera tigris",])` independent detections from `r length(unique((og_caps$Landscape[og_caps$Species == "Panthera tigris"])))` landscapes. They were deemed to prefer any other species that is not a large carnivore and above 17 kg. This includes a total of **`r length(traits$scientificNameStd[traits$tiger_pref == "Yes"])` species composed of `r paste(traits$scientificNameStd[traits$tiger_pref == "Yes"], collapse = ", ")`**. 
 
-__Leopards (*Panthera pardus*)__ were deemed to prefer any other species that is not a large carnivore and with a weight range of 10-40 kg. Also, all primates were included as preferred prey. This includes a total of **`r length(traits$scientificNameStd[traits$leopard_pref == "Yes"])` species composed of `r paste(traits$scientificNameStd[traits$leopard_pref == "Yes"], collapse = ", ")`**. 
+__Leopards (*Panthera pardus*)__ were generated `r nrow(og_caps[og_caps$Species == "Panthera pardus",])` independent detections from `r length(unique((og_caps$Landscape[og_caps$Species == "Panthera pardus"])))` landscapes. They were deemed to prefer any other species that is not a large carnivore and with a weight range of 10-40 kg. Also, all primates were included as preferred prey. This includes a total of **`r length(traits$scientificNameStd[traits$leopard_pref == "Yes"])` species composed of `r paste(traits$scientificNameStd[traits$leopard_pref == "Yes"], collapse = ", ")`**. 
 
-__Dholes (*Cuon alpinus*)__ were deemed to prefer any other species that is not a large carnivore and with a weight range of 40-190 kg. Also, all bear species were removed as preferred prey and muntjac deer were included. This includes a total of **`r length(traits$scientificNameStd[traits$dhole_pref == "Yes"])` species composed of `r paste(traits$scientificNameStd[traits$dhole_pref == "Yes"], collapse = ", ")`**. 
+__Dholes (*Cuon alpinus*)__ were generated `r nrow(og_caps[og_caps$Species == "Cuon alpinus",])` independent detections from `r length(unique((og_caps$Landscape[og_caps$Species == "Cuon alpinus"])))` landscapes. They were deemed to prefer any other species that is not a large carnivore and with a weight range of 40-190 kg. Also, all bear species were removed as preferred prey and muntjac deer were included. This includes a total of **`r length(traits$scientificNameStd[traits$dhole_pref == "Yes"])` species composed of `r paste(traits$scientificNameStd[traits$dhole_pref == "Yes"], collapse = ", ")`**. 
 
-__Clouded leopards (*Neofelis* genus)__ were deemed to prefer any other species that is not a large carnivore and with a weight range of 7-190 kg. Also, all bear species and golden cats were removed as preferred prey. This includes a total of **`r length(traits$scientificNameStd[traits$CL_pref == "Yes"])` species composed of `r paste(traits$scientificNameStd[traits$CL_pref == "Yes"], collapse = ", ")`**. 
+__Clouded leopards (*Neofelis* genus)__ were generated `r nrow(og_caps[grepl("Neofelis", og_caps$Species),])` independent detections from `r length(unique((og_caps$Landscape[grepl("Neofelis", og_caps$Species)])))` landscapes. They were deemed to prefer any other species that is not a large carnivore and with a weight range of 7-190 kg. Also, all bear species and golden cats were removed as preferred prey. This includes a total of **`r length(traits$scientificNameStd[traits$CL_pref == "Yes"])` species composed of `r paste(traits$scientificNameStd[traits$CL_pref == "Yes"], collapse = ", ")`**. 
 
 
 ## Prepare data to be saved
@@ -879,17 +918,17 @@ date = paste(year,month,day, sep = "")
 wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step1_output/"
 
 
-### Save all relevant files
-saveRDS(keep, paste(wd, "/species_vector_", length(keep), "_species_", scale, "_scale_", date, ".RDS", sep = ""))
-
-saveRDS(group_sp, paste(wd, "/group_living_", length(group_sp), "_species_", scale, "_scale_",  date, ".RDS", sep = ""))
-
-write.csv(caps, paste(wd, "/clean_captures_to_make_UMFs_", scale, "_scale_",  date,".csv", sep = ""), row.names = F)
-
-write.csv(meta, paste(wd, "/clean_metadata_to_make_UMFs_", scale, "_scale_",  date,".csv", sep = ""), row.names = F)
-
-## Also save trait data so I dont have to remake it later
-write.csv(traits, paste(wd, "/clean_", nrow(traits), "_species_trait_data_", date, ".csv", sep = ""), row.names = F)
+# ### Save all relevant files
+# saveRDS(keep, paste(wd, "/species_vector_", length(keep), "_species_", scale, "_scale_", date, ".RDS", sep = ""))
+# 
+# saveRDS(group_sp, paste(wd, "/group_living_", length(group_sp), "_species_", scale, "_scale_",  date, ".RDS", sep = ""))
+# 
+# write.csv(caps, paste(wd, "/clean_captures_to_make_UMFs_", scale, "_scale_",  date,".csv", sep = ""), row.names = F)
+# 
+# write.csv(meta, paste(wd, "/clean_metadata_to_make_UMFs_", scale, "_scale_",  date,".csv", sep = ""), row.names = F)
+# 
+# ## Also save trait data so I dont have to remake it later
+# write.csv(traits, paste(wd, "/clean_", nrow(traits), "_species_trait_data_", date, ".csv", sep = ""), row.names = F)
 
 
 

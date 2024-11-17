@@ -676,7 +676,7 @@ After splitting and organizing the data bundles, we have a total of **`r length(
 
 ## Save the final list of bundled data
 
-Now that all species pairs are established, the data is properly formatted, and everything is clean, its time to save the data! We will send it to the HPC to run on the R script called: data/HPC_code/HPC_co-abundance_model_final.R
+Now that all species pairs are established, the data is properly formatted, and everything is clean, its time to save the data! We will send it to the HPC to run on the R script called: **data/HPC_code/HPC_co-abundance_model_final.R**
 
 Alternatively, I could save the list as a single object rather than splitting it up. 
 
@@ -747,18 +747,13 @@ rm(sp_pairs, jobs_final, date)
 
 ## Generate counterfactual data bundles 
 
-After submitting the manuscript and analysis to Science and receving reviews from 3 expert reviewers, 2 reviewers revealed an appetite for causation that was lacking from the current analysis. Moreover, when presenting my findings at conferences and to collegues, similar sentiments were voiced. Structural Equation Models (SEM) was a logical starting place, but the limitations of the data (ie lacking key variables like hunting pressure or resource availability) and inability to include a count history matrix as the response variable (and therefore propagate uncertainty) left me unsatisfied. 
+After submitting the manuscript and analysis to Science and receiving reviews from 3 expert reviewers, 2 reviewers revealed an appetite for causation that was lacking from the current analysis. Moreover, when presenting my findings at conferences and to colleagues, similar sentiments were voiced. __Structural Equation Models (SEM)__ was a logical starting place, but the limitations of the data (*i.e.,* lacking key variables like hunting pressure or resource availability) and inability to include a count history matrix as the response variable (and therefore propagate uncertainty) left me unsatisfied. 
 
-Instead, the new goal here is to examine the counter-factual to understand if prey abundance increases would not have happened if not for large carnivore decline/extirpation (top-down test), AND if predator abundance increases would not have happened if not for prey abundance increases (bottom-up test). Additionally, we can run more variations of the same co-abundance model by sub-setting the co-occuring species data into locations that match in their measured covariates to help control for unmeasured variables. All counter-factual testing will occurr only with the 33 preferred prey species-pairs. 
+Instead, the new goal here is to examine counter-factual realities to understand if prey abundance increases would not have happened if not for large carnivore extirpation (top-down test), __AND__ if predator abundance increases would not have happened if not for prey abundance increases (bottom-up test). Additionally, we can run more variations of the same co-abundance model by sub-setting the co-occuring species data into locations that match in their measured covariates to help control for unmeasured variables. All counter-factual testing will occurr only with the 33 preferred prey species-pairs. 
 
-This approach builds towards the top of the 'ladder of causation' proposed by Judea Pearl's Book of Why. The first rung, association/observation, can be represented simply with a non-directional association between two species (e.g. correlation between RAI of two species). The second run, intervention, typically involves a manipulation, but can also be expressed through causal diagrams, where one variable directionally affects another variable, such as predators suppress prey or prey bolster predators. Finally, the third rung, counter-factual, forces the researcher to imagine an alternative reality where causal forces are reversed or eliminated, such as testing if prey abundance increases in a world with no large carnivore extirpation. 
+This approach builds towards the top of the **'ladder of causation'** proposed by __Judea Pearl's Book of Why__. The first rung, associations from data, can be represented simply with a non-directional association between two species (*e.g.,* correlation between RAI of two species). The second run, conceptual causal diagrams, can be used to visualize the researchers hypotheses, assumptions, and biases where one variable directionally affects another variable, such as predators suppress prey or prey bolster predators. Finally, the third rung, testing counter-factual realities, forces the researcher to imagine an alternative reality where the assumed causal forces are reversed or eliminated, such as testing if prey abundance increases in a world with no large carnivore extirpation. 
 
-I will be running several counter-factual tests, listed here:
-1) Would prey abundance increase in landscapes where large carnivores remain abundant (top-down test), AND would predator abundance increase in landscapes where preferred prey remain scarce (bottom-up test). This isolates the effect of declines while being present rather than species extirpations, and is tested by selecting landscapes where predators remain common (upper 3rd quartile of site-level abundance) and prey remain scarce (bottom 1st quartile of site-level abundance). 
-2) What if prey abundance increases would not have happened if not for large carnivore extirpation (top-down test), AND if predator abundance decreases would not have happened if not for prey abundance extirpations (bottom-up test). This isolates the effect of species extirpations rather than declines, and is tested by only selecting landscapes where species co-occur w/ sufficient detections.
-3) Would we observe trophic release in prey or bottom-up bolstering in predators when controlling for landscape variation that may be driving observed trends. This is tested by implementing good and clear site-matching, but in this test, just the Thai Eastern Forest Complex (for now). 
-
-4:6) Would we observe trophic release in prey and bottom-up bolstering in predators when controlling for our observed site covariates? This is tested by running three different counterfactual tests where we let one of the three covariates (HFP, FLII, elev) vary while holding the other two around their mean (mean plus and minus 1/2 SD). 
+I will be running several counter-factual tests from the **66 preferred predator-prey models** to examine the causal forces driving observed relationships. The tests include:
 
 ```{r prepare data for counterfactual test 1}
 
@@ -1199,9 +1194,9 @@ I will be running several counter-factual tests, listed here:
 #     #
 #     ##
 #     ###
-#     ####
+#     ##
 #     ##### Prepare the informed ZIP parameters
-#     ####
+#     ##
 #     ###
 #     ##
 #     #
@@ -1376,6 +1371,8 @@ I will be running several counter-factual tests, listed here:
 
 
 ```
+
+1) **NOTE: This test is complicated to interpret and is currently omitted from analysis!** Would prey abundance increase in landscapes where large carnivores remain abundant (top-down test), AND would predator abundance increase in landscapes where preferred prey remain scarce (bottom-up test). This isolates the effect of declines while being present rather than species extirpations, and is tested by selecting landscapes where predators remain common (upper 3rd quartile of site-level abundance) and prey remain scarce (bottom 1st quartile of site-level abundance). 
 
 ```{r Ultra loop to generate data bundles for counterfactual test 2}
 
@@ -1714,10 +1711,11 @@ names(counterf2_bdata_list)[grepl("SUB-Cuon_alpinus", names(counterf2_bdata_list
 bu = names(counterf2_bdata_list)[grepl("SUB-Panthera_tigis|SUB-Panthera_pardus|SUB-Neofelis_genus|SUB-Cuon_alpinus", names(counterf2_bdata_list))]
 length(bu) # 24 bottom-up 
 length(names(counterf2_bdata_list)[!names(counterf2_bdata_list) %in% bu]) # 42 top-down 
-## not 33 and 33??
 rm(bu)
 
 ```
+
+2) *What if* prey abundance increases would not have happened if not for large carnivore extirpation (top-down test), AND *what if* predator abundance decreases would not have happened if not for prey abundance extirpations (bottom-up test). This isolates the effect of species extirpations rather than declines, and is tested by only selecting landscapes where species co-occur w/ sufficient detections. By thinning the data to only include sites where species co-occur, **we have a total of `r length(counterf2_bdata_list)` co-abundance models for this counter-factual test**.
 
 ```{r Save bundled data for counterfactual test 2}
 
@@ -1732,11 +1730,10 @@ rm(day,month,year)
 wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step2_output_CoA_bundles/counterfactual_testing/"
 
 # Save data 
-saveRDS(counterf2_bdata_list, paste(wd, "/Bundled_data_for_Bayes_co-abundance_mods_counterfactual2_isolate_extirpation_", length(counterf2_bdata_list), "_species_pairs_", scale, "_", date, ".RDS", sep = ""))
+# saveRDS(counterf2_bdata_list, paste(wd, "/Bundled_data_for_Bayes_co-abundance_mods_counterfactual2_isolate_extirpation_", length(counterf2_bdata_list), "_species_pairs_", scale, "_", date, ".RDS", sep = ""))
 
 ```
 
-Ideally, there would be a chunk here that implements some nifty site-matching formulas or at least examines various covariate relationships. However, I am running out of time atm and just want to get a test running. Therefore, I will examine relationships ONLY at the Thai E Forest complex and the three landscapes it is composed of. 
 
 ```{r Ultra loop to generate data bundles for counterfactual test 3}
 
@@ -2210,6 +2207,9 @@ unique(counterf3_bdata_list$`SUB-Muntiacus_genus~DOM-Panthera_tigris`$Z.dom) # t
 
 ```
 
+3) Would we observe trophic release in prey or bottom-up bolstering in predators when controlling for landscape variation that may be driving observed trends. This is tested by **examining co-abundance relationships from `r length(unique(meta$Landscape[grepl("Thai_E_", meta$Landscape)]))` contiguous landscapes that comprise the Thai Eastern Forest Complex**. By thinning the data to only include the Thai Eastern Forest Complex and maintaining regular rules for making pair-wise co-abundance models (*i.e.,* >100 detections of both species from one landscape), **we have a total of `r length(counterf3_bdata_list)` co-abundance models for this counter-factual test**.
+
+
 ```{r Save bundled data for counterfactual test 3}
 
 ## grab today's date 
@@ -2220,7 +2220,7 @@ date = paste(year,month,day, sep = "")
 rm(day,month,year)
  
 # Save data 
-saveRDS(counterf3_bdata_list, paste(wd, "/Bundled_data_for_Bayes_co-abundance_mods_counterfactual3_site_matching_", length(counterf3_bdata_list), "_species_pairs_", scale, "_", date, ".RDS", sep = ""))
+# saveRDS(counterf3_bdata_list, paste(wd, "/Bundled_data_for_Bayes_co-abundance_mods_counterfactual3_site_matching_", length(counterf3_bdata_list), "_species_pairs_", scale, "_", date, ".RDS", sep = ""))
 
 ```
 
@@ -2756,6 +2756,12 @@ counterf_vars_bdata_list$Avg_human_footprint_5km$`SUB-Panthera_tigris~DOM-Rusa_u
 
 ```
 
+4) Would we observe trophic release in prey and bottom-up bolstering in predators when controlling for observed elevation? This is tested by creating pairwise co-abundance bundles where we let this variable vary across its observed range: mean = `r round(mean(meta$Avg_altitude_5km), 2)`, min = `r round(min(meta$Avg_altitude_5km), 2)`, max = `r round(max(meta$Avg_altitude_5km), 2)`, and holding the other two variables around their mean, allowing for 1/2 standard deviation of wiggle room. For Forest Landscape Integrity Index, this ranges from values between `r round(mean(meta$Avg_FLLI_5km) - (.5 * sd(meta$Avg_FLLI_5km)), 2)` to `r round(mean(meta$Avg_FLLI_5km) + (.5 * sd(meta$Avg_FLLI_5km)), 2)`. For Human Footprint Index, this ranges from values between `r round(mean(meta$Avg_human_footprint_5km) - (.5 * sd(meta$Avg_human_footprint_5km)), 2)` to `r round(mean(meta$Avg_human_footprint_5km) + (.5 * sd(meta$Avg_human_footprint_5km)), 2)`. **For the counter-factual co-abundance models examining the effect of `r names(counterf_vars_bdata_list)[1]`, we have `r length(counterf_vars_bdata_list[[1]])` models.**
+
+5) Would we observe trophic release in prey and bottom-up bolstering in predators when controlling for observed Forest Landscape Integrity Index? This is tested by creating pairwise co-abundance bundles where we let this variable vary across its observed range: mean = `r round(mean(meta$Avg_FLLI_5km),2)`, min = `r round(min(meta$Avg_FLLI_5km),2)`, max = `r round(max(meta$Avg_FLLI_5km),2)`, and holding the other two variables around their mean, allowing for 1/2 standard deviation of wiggle room. For elevation, this ranges from values between `r round(mean(meta$Avg_altitude_5km) - (.5 * sd(meta$Avg_altitude_5km)),2)` to `r round(mean(meta$Avg_altitude_5km) + (.5 * sd(meta$Avg_altitude_5km)),2)`. For Human Footprint Index, this ranges from values between `r round(mean(meta$Avg_human_footprint_5km) - (.5 * sd(meta$Avg_human_footprint_5km)),2)` to `r round(mean(meta$Avg_human_footprint_5km) + (.5 * sd(meta$Avg_human_footprint_5km)),2)`. **For the counter-factual co-abundance models examining the effect of `r names(counterf_vars_bdata_list)[2]`, we have `r length(counterf_vars_bdata_list[[2]])` models.**
+
+6) Would we observe trophic release in prey and bottom-up bolstering in predators when controlling for observed Human Footprint Index? This is tested by creating pairwise co-abundance bundles where we let this variable vary across its observed range: mean = `r round(mean(meta$Avg_human_footprint_5km),2)`, min = `r round(min(meta$Avg_human_footprint_5km),2)`, max = `r round(max(meta$Avg_human_footprint_5km),2)`, and holding the other two variables around their mean, allowing for 1/2 standard deviation of wiggle room. For elevation, this ranges from values between `r round(mean(meta$Avg_altitude_5km) - (.5 * sd(meta$Avg_altitude_5km)),2)` to `r round(mean(meta$Avg_altitude_5km) + (.5 * sd(meta$Avg_altitude_5km)),2)`. For Forest Landscape Integrity Index, this ranges from values between `r round(mean(meta$Avg_FLLI_5km) - (.5 * sd(meta$Avg_FLLI_5km)),2)` to `r round(mean(meta$Avg_FLLI_5km) + (.5 * sd(meta$Avg_FLLI_5km)),2)`. **For the counter-factual co-abundance models examining the effect of `r names(counterf_vars_bdata_list)[3]`, we have `r length(counterf_vars_bdata_list[[3]])` models.**
+
 ```{r Save bundled data for coutnerfactual tests 4:6}
 
 ## grab today's date 
@@ -2764,18 +2770,15 @@ month<-str_sub(Sys.Date(),-5,-4)
 year<-str_sub(Sys.Date(),-10,-7)
 date = paste(year,month,day, sep = "")
 rm(day,month,year)
- 
-# Save altitude
-saveRDS(counterf_vars_bdata_list$Avg_altitude_5km, paste(wd, "/Bundled_data_for_Bayes_co-abundance_mods_counterfactual4_isolate_altitude_", length(counterf_vars_bdata_list$Avg_altitude_5km), "_species_pairs_", scale, "_", date, ".RDS", sep = ""))
-
-# Save FLII
-saveRDS(counterf_vars_bdata_list$Avg_FLLI_5km, paste(wd, "/Bundled_data_for_Bayes_co-abundance_mods_counterfactual5_isolate_FLII_", length(counterf_vars_bdata_list$Avg_FLLI_5km), "_species_pairs_", scale, "_", date, ".RDS", sep = ""))
-
-# Save HFP
-saveRDS(counterf_vars_bdata_list$Avg_human_footprint_5km, paste(wd, "/Bundled_data_for_Bayes_co-abundance_mods_counterfactual6_isolate_HFP_", length(counterf_vars_bdata_list$Avg_human_footprint_5km), scale, "_", "_species_pairs_", date, ".RDS", sep = ""))
-
-
-
+#  
+# # Save altitude
+# saveRDS(counterf_vars_bdata_list$Avg_altitude_5km, paste(wd, "/Bundled_data_for_Bayes_co-abundance_mods_counterfactual4_isolate_altitude_", length(counterf_vars_bdata_list$Avg_altitude_5km), "_species_pairs_", scale, "_", date, ".RDS", sep = ""))
+# 
+# # Save FLII
+# saveRDS(counterf_vars_bdata_list$Avg_FLLI_5km, paste(wd, "/Bundled_data_for_Bayes_co-abundance_mods_counterfactual5_isolate_FLII_", length(counterf_vars_bdata_list$Avg_FLLI_5km), "_species_pairs_", scale, "_", date, ".RDS", sep = ""))
+# 
+# # Save HFP
+# saveRDS(counterf_vars_bdata_list$Avg_human_footprint_5km, paste(wd, "/Bundled_data_for_Bayes_co-abundance_mods_counterfactual6_isolate_HFP_", length(counterf_vars_bdata_list$Avg_human_footprint_5km), scale, "_", "_species_pairs_", date, ".RDS", sep = ""))
 
 
 ```

@@ -1,0 +1,371 @@
+---
+title: "step 5 meta-regression and visualization"
+author: "Zachary Amir"
+date: "`r Sys.time()`"
+output: html_document
+---
+
+```{r global-options, include=FALSE, warning=FALSE, error=FALSE}
+## We can knit this into a nice document! but dont include all the code unless otherwise specified (i.e. include=TRUE)
+knitr::opts_chunk$set(include=FALSE, warning=FALSE, error = FALSE)
+
+## start fresh
+rm(list = ls())
+
+## load libraries
+library(tidyverse)        ## For basic data wrangling
+# library(plyr)             ## For ddply
+library(lmerTest)         ## For meta-regressions (w/ p-values) of model coefficents
+
+```
+
+## Introduction
+
+This RMarkdown file will be used to implement a meta-regression on the coefficients of preferred predator-prey co-abundance models. The goal of this exercise is to examine the effect of observed variables mediating predator-prey relationships and deepen our understanding of possible unmeasured variables mediating observed relationships. 
+
+```{r Import model coefficents and preformance data}
+## Remember, this data was collated in step3!
+
+## Set the working directory where the data lives
+wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step3_output_combined_results/"
+
+## list all relevant files
+files = list.files(wd)
+
+## dont want counter-factual results (yet)
+files = files[! grepl("counter-factual", files)]
+
+### Import coefficients
+c_file = files[grepl("coefficients", files)]
+coeff = read.csv(paste(wd, c_file, sep = ""))
+coeff$X = NULL # damn row names!
+
+### Import preformance results
+p_file = files[grepl("preform", files)]
+preform = read.csv(paste(wd, p_file, sep = ""))
+preform$X = NULL # damn row names! 
+
+## keep enviro clean
+rm(p_file, files, c_file)
+```
+
+```{r Prepare data for meta-regression}
+
+## We are only interested in preferred models, so grab these pairs
+pairs = unique(preform$Species_Pair[preform$preference == "preferred"])
+
+## thin coeff and preform to match 
+coeff = coeff[coeff$Species_Pair %in% pairs,]
+preform = preform[preform$Species_Pair %in% pairs, ]
+
+## Inspect coeff
+str(coeff)
+
+## need relevant information from preform
+str(preform)
+add = select(preform, Species_Pair, direction, preference, guild_pair, support_conserv, support )
+
+## merge them together
+setdiff(coeff$Species_Pair, add$Species_Pair)
+setdiff(add$Species_Pair, coeff$Species_Pair) # no diff, safe to merge
+coeff = merge(coeff, add, by = "Species_Pair")
+rm(add)
+
+## should have a total of 66 preferred mods 
+table(coeff$preference[coeff$var == "Species_Interaction"]) 
+table(preform$preference) # these are the same, good! 
+
+## Create a new column for simple support into three levels: top-down, bottom-up, and unsupported
+coeff$support_simple = coeff$direction
+coeff$support_simple[grepl("Unsupported", coeff$support)] = "unsupported"
+table(coeff$support_simple[coeff$var == "Species_Interaction"]) # looks good! 
+
+## grab the key variables we are interested in 
+vars = c("HFP","FLII","Elevation","Species_Interaction","Active_cams") # will remove effort later
+
+
+```
+
+Before we begin the meta-regressions, it will be important to examine the summary statistics of the posterior effect sizes from our key variables: `r paste(vars, collapse = " & ")` from all `r length(pairs)` preferred predator-prey co-abundance models. 
+
+* For `r vars[1]`, the mean effect size is `r round(mean(coeff$mean[coeff$var == vars[1]]), 2)` with a standard deviation of `r round(sd(coeff$mean[coeff$var == vars[1]]), 2)`, and the values range from `r round(min(coeff$mean[coeff$var == vars[1]]), 2)` to `r round(max(coeff$mean[coeff$var == vars[1]]), 2)` with a variance of `r round(var(coeff$mean[coeff$var == vars[1]]), 2)`. 
+    * For supported top-down models, the mean effect size is `r round(mean(coeff$mean[coeff$var == vars[1] & coeff$support_simple == "top-down"]), 2)` with a standard deviation of `r round(sd(coeff$mean[coeff$var == vars[1] & coeff$support_simple == "top-down"]), 2)`
+    * For supported bottom-up models, the mean effect size is `r round(mean(coeff$mean[coeff$var == vars[1] & coeff$support_simple == "bottom-up"]), 2)` with a standard deviation of `r round(sd(coeff$mean[coeff$var == vars[1] & coeff$support_simple == "bottom-up"]), 2)`
+    * For unsupported models, the mean effect size is `r round(mean(coeff$mean[coeff$var == vars[1] & coeff$support_simple == "unsupported"]), 2)` with a standard deviation of `r round(sd(coeff$mean[coeff$var == vars[1] & coeff$support_simple == "unsupported"]), 2)`
+
+* For `r vars[2]`, the mean effect size is `r round(mean(coeff$mean[coeff$var == vars[2]]), 2)` with a standard deviation of `r round(sd(coeff$mean[coeff$var == vars[2]]), 2)`, and the values range from `r round(min(coeff$mean[coeff$var == vars[2]]), 2)` to `r round(max(coeff$mean[coeff$var == vars[2]]), 2)` with a variance of `r round(var(coeff$mean[coeff$var == vars[2]]), 2)`. 
+    * For supported top-down models, the mean effect size is `r round(mean(coeff$mean[coeff$var == vars[2] & coeff$support_simple == "top-down"]), 2)` with a standard deviation of `r round(sd(coeff$mean[coeff$var == vars[2] & coeff$support_simple == "top-down"]), 2)`
+    * For supported bottom-up models, the mean effect size is `r round(mean(coeff$mean[coeff$var == vars[2] & coeff$support_simple == "bottom-up"]), 2)` with a standard deviation of `r round(sd(coeff$mean[coeff$var == vars[2] & coeff$support_simple == "bottom-up"]), 2)`
+    * For unsupported models, the mean effect size is `r round(mean(coeff$mean[coeff$var == vars[2] & coeff$support_simple == "unsupported"]), 2)` with a standard deviation of `r round(sd(coeff$mean[coeff$var == vars[2] & coeff$support_simple == "unsupported"]), 2)`
+
+* For `r vars[3]`, the mean effect size is `r round(mean(coeff$mean[coeff$var == vars[3]]), 2)` with a standard deviation of `r round(sd(coeff$mean[coeff$var == vars[3]]), 2)`, and the values range from `r round(min(coeff$mean[coeff$var == vars[3]]), 2)` to `r round(max(coeff$mean[coeff$var == vars[3]]), 2)` with a variance of `r round(var(coeff$mean[coeff$var == vars[3]]), 2)`. 
+    * For supported top-down models, the mean effect size is `r round(mean(coeff$mean[coeff$var == vars[3] & coeff$support_simple == "top-down"]), 2)` with a standard deviation of `r round(sd(coeff$mean[coeff$var == vars[3] & coeff$support_simple == "top-down"]), 2)`
+    * For supported bottom-up models, the mean effect size is `r round(mean(coeff$mean[coeff$var == vars[3] & coeff$support_simple == "bottom-up"]), 2)` with a standard deviation of `r round(sd(coeff$mean[coeff$var == vars[3] & coeff$support_simple == "bottom-up"]), 2)`
+    * For unsupported models, the mean effect size is `r round(mean(coeff$mean[coeff$var == vars[3] & coeff$support_simple == "unsupported"]), 2)` with a standard deviation of `r round(sd(coeff$mean[coeff$var == vars[3] & coeff$support_simple == "unsupported"]), 2)`
+
+* For `r vars[4]`, the mean effect size is `r round(mean(coeff$mean[coeff$var == vars[4]]), 2)` with a standard deviation of `r round(sd(coeff$mean[coeff$var == vars[4]]), 2)`, and the values range from `r round(min(coeff$mean[coeff$var == vars[4]]), 2)` to `r round(max(coeff$mean[coeff$var == vars[4]]), 2)` with a variance of `r round(var(coeff$mean[coeff$var == vars[4]]), 2)`. 
+    * For supported top-down models, the mean effect size is `r round(mean(coeff$mean[coeff$var == vars[4] & coeff$support_simple == "top-down"]), 2)` with a standard deviation of `r round(sd(coeff$mean[coeff$var == vars[4] & coeff$support_simple == "top-down"]), 2)`
+    * For supported bottom-up models, the mean effect size is `r round(mean(coeff$mean[coeff$var == vars[4] & coeff$support_simple == "bottom-up"]), 2)` with a standard deviation of `r round(sd(coeff$mean[coeff$var == vars[4] & coeff$support_simple == "bottom-up"]), 2)`
+    * For unsupported models, the mean effect size is `r round(mean(coeff$mean[coeff$var == vars[4] & coeff$support_simple == "unsupported"]), 2)` with a standard deviation of `r round(sd(coeff$mean[coeff$var == vars[4] & coeff$support_simple == "unsupported"]), 2)`
+
+* For `r vars[5]`, the mean effect size is `r round(mean(coeff$mean[coeff$var == vars[5]]), 2)` with a standard deviation of `r round(sd(coeff$mean[coeff$var == vars[5]]), 2)`, and the values range from `r round(min(coeff$mean[coeff$var == vars[5]]), 2)` to `r round(max(coeff$mean[coeff$var == vars[5]]), 2)` with a variance of `r round(var(coeff$mean[coeff$var == vars[5]]), 2)`. 
+    * For supported top-down models, the mean effect size is `r round(mean(coeff$mean[coeff$var == vars[5] & coeff$support_simple == "top-down"]), 2)` with a standard deviation of `r round(sd(coeff$mean[coeff$var == vars[5] & coeff$support_simple == "top-down"]), 2)`
+    * For supported bottom-up models, the mean effect size is `r round(mean(coeff$mean[coeff$var == vars[5] & coeff$support_simple == "bottom-up"]), 2)` with a standard deviation of `r round(sd(coeff$mean[coeff$var == vars[5] & coeff$support_simple == "bottom-up"]), 2)`
+    * For unsupported models, the mean effect size is `r round(mean(coeff$mean[coeff$var == vars[5] & coeff$support_simple == "unsupported"]), 2)` with a standard deviation of `r round(sd(coeff$mean[coeff$var == vars[5] & coeff$support_simple == "unsupported"]), 2)`
+
+## Regressions
+
+```{r implement regressions}
+
+## update vars to NOT include effort
+vars = vars[!grepl("cams", vars)]
+
+### first grab the relevant subset of data 
+dat = coeff[coeff$preference == "preferred"  & ## only preferred models 
+              grepl("SUB", coeff$species) &    ## only interested in effect in subordinate species 
+              coeff$var %in% vars, ]
+
+## Create a new column to denote if the subordinate species is a predator or prey 
+dat$pred_prey = "prey" # assume prey 
+dat$pred_prey[dat$sub_sp %in% c("Panthera_pardus","Panthera_tigris",
+                                "Cuon_alpinus", "Neofelis_genus")] = "predator"
+
+
+### UNDECIDED ABOUT OMITTING OR INCLUDING SOME VS ALL UNSUPPORTED RESULTS
+## Currently including all results rather than omitting a subset. 
+# but leaving old code that removes it, and text for final html, hashed out here. 
+{
+  # ### How about we fully omit unsupported_3 b/c its a bad model w/ no inferences
+  # ## and combine unsupported_2 and 1 to reduce lines on the graph
+  # # but first grab how many rows this is! 
+  # rm_dat = dat[grepl("Unsupported_3", dat$support), ]
+  # dat = dat[! grepl("Unsupported_3", dat$support), ]
+  # These regressions include the posterior effect size from the coefficients described above for all `r nrow(preform)` preferred predator-prey co-abundance models. However, we removed all 'unsupported_3' results, which are models that had unsuitable parameter convergence, Bayes p-values, and/or remaining over-dispersion. This includes `r nrow(rm_dat)` effect sizes, with `r nrow(rm_dat[rm_dat$var == vars[1],])` values from `r vars[1]`, `r nrow(rm_dat[rm_dat$var == vars[2],])` values from `r vars[2]`, `r nrow(rm_dat[rm_dat$var == vars[3],])` values from `r vars[3]`, and finally `r nrow(rm_dat[rm_dat$var == vars[4],])` values from `r vars[4]`.  
+}
+
+
+# create a new column that incorporates predator vs prey and top-down vs bottom up 
+dat$support_pred_prey[dat$support == "Supported" & dat$direction == "top-down"] = "supported_top-down"      # this is auto prey
+dat$support_pred_prey[dat$support == "Supported" & dat$direction == "bottom-up"] = "supported_bottom-up"    # this is auto predators
+dat$support_pred_prey[grepl("Unsupport", dat$support) & dat$direction == "top-down"] = "unsupported_top-down"   # this is auto prey
+dat$support_pred_prey[grepl("Unsupport", dat$support) & dat$direction == "bottom-up"] = "unsupported_bottom-up" # this is auto predators
+table(dat$support_pred_prey) # divide each by 4 for total number of mods (b/c 4 covs per mod)
+
+
+### Will run regressions where the effect size is the response variable
+## and the different covariates are the factorial predictors. 
+# looped through each subset of data based on support_pred_prey
+
+## loop through so we dont have to code them all out 
+support_pred_prey = unique(dat$support_pred_prey)
+# store results here
+res = list()
+# loopin' 
+for(i in 1:length(support_pred_prey)){
+ 
+  # select a pred or prey
+  p = support_pred_prey[i]
+    
+    ## make the mod w/ the RE 
+  m = lmerTest::lmer(mean ~ var-1 + (1 | sub_sp), weights = 1/sd, #REML = FALSE, 
+                     data = dat[dat$support_pred_prey == p, ])
+  
+  ## extract values
+  m1 = as.data.frame(summary(m)$coefficients)
+  
+  ## clean up the df
+  m1$var = rownames(m1)
+  m1$var = gsub("var", "", m1$var)
+  names(m1) = c("estimate", "SE", "df", "t value", "p value", "var")
+  rownames(m1) = NULL
+  
+  ## let us know if the model converged or not.
+  if(is.null(m@optinfo$conv$lme4$messages)){
+    m1$warning = "none"
+  }else{
+    m1$warning = m@optinfo$conv$lme4$messages
+  }
+
+  ## explicitly note which model this was
+  m1$support_pred_prey = p
+
+  ## and save it 
+  res[[i]] = m1
+  
+} # end per pred prey 
+rm(i,p,m,m1,weights,
+   support_pred_prey)
+## check results 
+es_final = do.call(rbind, res)
+str(es_final)
+tail(es_final)
+summary(es_final)
+unique(es_final$support_pred_prey[es_final$warning != "none"]) # When we remove REML in lmerTest, there are no more warnings! 
+
+#need to split support and direction
+es_final = separate(es_final, support_pred_prey, c("support", "direction"), sep = "_", remove = F)
+str(es_final) # good! 
+
+# inspect
+summary(es_final$estimate) # narrow range is good! 
+summary(es_final$SE) # even smaller, great. 
+
+## update var to say SIV!
+vars[grepl("Species", vars)] = "SIV"
+# and make sure we match in ES! 
+es_final$var[grepl("Species", es_final$var)] = "SIV"
+
+# rename p value
+names(es_final)[grepl("p value", names(es_final))] = "p_value"
+
+```
+
+These regressions are using all posterior effect sizes from the `r nrow(preform)` for the key covariates described above. Only the results from the subordinate species are included in these regressions to ensure a fair comparison with SIV because it is only present in the subordinate species' co-abundance model. The co-abundance model results have been split into four groupings: `r paste(sort(unique(es_final$support_pred_prey)), collapse = ", ")` for a total of four linear (i.e. Gaussian distribution) mixed effect models with a random effect per subordinate species. Each regression's response variable is the posterior effect size, and each effect size is weighted by 1/standard deviation of the posterior effect size. The predictor variable is a categorical variable denoting the variable of interest: `r paste(sort(vars), collapse = ", ")`.
+
+Before we create the graph, we can display the values produced in the regression for each of the variables.
+
+* For `r vars[1]`, the average effect size across the four groupings used in the meta-regression is `r round(mean(es_final$estimate[es_final$var == vars[1]]), 2)` with a standard deviation of `r round(sd(es_final$estimate[es_final$var == vars[1]]), 2)`.
+    * For supported top-down models, the overall effect size is `r round((es_final$estimate[es_final$var == vars[1] & es_final$support_pred_prey == "supported_top-down"]), 2)` with a standard error of `r round((es_final$SE[es_final$var == vars[1] & es_final$support_pred_prey == "supported_top-down"]), 2)` and a p-value of `r round(es_final$p_value[es_final$var == vars[1] & es_final$support_pred_prey == "supported_top-down"], 3)`.
+    * For unsupported top-down models, the overall effect size is `r round((es_final$estimate[es_final$var == vars[1] & es_final$support_pred_prey == "unsupported_top-down"]), 2)` with a standard error of `r round((es_final$SE[es_final$var == vars[1] & es_final$support_pred_prey == "unsupported_top-down"]), 2)` and a p-value of `r round(es_final$p_value[es_final$var == vars[1] & es_final$support_pred_prey == "unsupported_top-down"], 3)`.
+    * For supported bottom-up models, the overall effect size is `r round((es_final$estimate[es_final$var == vars[1] & es_final$support_pred_prey == "supported_bottom-up"]), 2)` with a standard error of `r round((es_final$SE[es_final$var == vars[1] & es_final$support_pred_prey == "supported_bottom-up"]), 2)` and a p-value of `r round(es_final$p_value[es_final$var == vars[1] & es_final$support_pred_prey == "supported_bottom-up"], 3)`.
+    * For unsupported bottom-up models, the overall effect size is `r round((es_final$estimate[es_final$var == vars[1] & es_final$support_pred_prey == "unsupported_bottom-up"]), 2)` with a standard error of `r round((es_final$SE[es_final$var == vars[1] & es_final$support_pred_prey == "unsupported_bottom-up"]), 2)` and a p-value of `r round(es_final$p_value[es_final$var == vars[1] & es_final$support_pred_prey == "unsupported_bottom-up"], 3)`.
+
+* For `r vars[2]`, the average effect size from the meta-regression is `r round(mean(es_final$estimate[es_final$var == vars[2]]), 2)` with a standard deviation of `r round(sd(es_final$estimate[es_final$var == vars[2]]), 2)`. 
+    * For supported top-down models, the overall effect size is `r round((es_final$estimate[es_final$var == vars[2] & es_final$support_pred_prey == "supported_top-down"]), 2)` with a standard error of `r round((es_final$SE[es_final$var == vars[2] & es_final$support_pred_prey == "supported_top-down"]), 2)`  and a p-value of `r round(es_final$p_value[es_final$var == vars[2] & es_final$support_pred_prey == "supported_top-down"], 3)`.
+    * For unsupported top-down models, the overall effect size is `r round((es_final$estimate[es_final$var == vars[2] & es_final$support_pred_prey == "unsupported_top-down"]), 2)` with a standard error of `r round((es_final$SE[es_final$var == vars[2] & es_final$support_pred_prey == "unsupported_top-down"]), 2)` and a p-value of `r round(es_final$p_value[es_final$var == vars[2] & es_final$support_pred_prey == "unsupported_top-down"], 3)`.
+    * For supported bottom-up models, the overall effect size is `r round((es_final$estimate[es_final$var == vars[2] & es_final$support_pred_prey == "supported_bottom-up"]), 2)` with a standard error of `r round((es_final$SE[es_final$var == vars[2] & es_final$support_pred_prey == "supported_bottom-up"]), 2)` and a p-value of `r round(es_final$p_value[es_final$var == vars[2] & es_final$support_pred_prey == "unsupported_bottom-up"], 3)`.
+    * For unsupported bottom-up models, the overall effect size is `r round((es_final$estimate[es_final$var == vars[2] & es_final$support_pred_prey == "unsupported_bottom-up"]), 2)` with a standard error of `r round((es_final$SE[es_final$var == vars[2] & es_final$support_pred_prey == "unsupported_bottom-up"]), 2)` and a p-value of `r round(es_final$p_value[es_final$var == vars[2] & es_final$support_pred_prey == "unsupported_bottom-up"], 3)`.
+
+* For `r vars[3]`, the average effect size from the meta-regression is `r round(mean(es_final$estimate[es_final$var == vars[3]]), 2)` with a standard deviation of `r round(sd(es_final$estimate[es_final$var == vars[3]]), 2)`. 
+    * For supported top-down models, the overall effect size is `r round((es_final$estimate[es_final$var == vars[3] & es_final$support_pred_prey == "supported_top-down"]), 2)` with a standard error of `r round((es_final$SE[es_final$var == vars[3] & es_final$support_pred_prey == "supported_top-down"]), 2)` and a p-value of `r round(es_final$p_value[es_final$var == vars[3] & es_final$support_pred_prey == "supported_top-down"], 3)`.
+    * For unsupported top-down models, the overall effect size is `r round((es_final$estimate[es_final$var == vars[3] & es_final$support_pred_prey == "unsupported_top-down"]), 2)` with a standard error of `r round((es_final$SE[es_final$var == vars[3] & es_final$support_pred_prey == "unsupported_top-down"]), 2)` and a p-value of `r round(es_final$p_value[es_final$var == vars[3] & es_final$support_pred_prey == "unsupported_top-down"], 3)`.
+    * For supported bottom-up models, the overall effect size is `r round((es_final$estimate[es_final$var == vars[3] & es_final$support_pred_prey == "supported_bottom-up"]), 2)` with a standard error of `r round((es_final$SE[es_final$var == vars[3] & es_final$support_pred_prey == "supported_bottom-up"]), 2)` and a p-value of `r round(es_final$p_value[es_final$var == vars[3] & es_final$support_pred_prey == "supported_bottom-up"], 3)`.
+    * For unsupported bottom-up models, the overall effect size is `r round((es_final$estimate[es_final$var == vars[3] & es_final$support_pred_prey == "unsupported_bottom-up"]), 2)` with a standard error of `r round((es_final$SE[es_final$var == vars[3] & es_final$support_pred_prey == "unsupported_bottom-up"]), 2)` and a p-value of `r round(es_final$p_value[es_final$var == vars[3] & es_final$support_pred_prey == "unsupported_bottom-up"], 3)`.
+
+* For `r vars[4]`, the average effect size from the meta-regression is `r round(mean(es_final$estimate[es_final$var == vars[4]]), 2)` with a standard deviation of `r round(sd(es_final$estimate[es_final$var == vars[4]]), 2)`. 
+    * For supported top-down models, the overall effect size is `r round((es_final$estimate[es_final$var == vars[4] & es_final$support_pred_prey == "supported_top-down"]), 2)` with a standard error of `r round((es_final$SE[es_final$var == vars[4] & es_final$support_pred_prey == "supported_top-down"]), 2)` and a p-value of `r round(es_final$p_value[es_final$var == vars[4] & es_final$support_pred_prey == "supported_top-down"], 3)`.
+    * For unsupported top-down models, the overall effect size is `r round((es_final$estimate[es_final$var == vars[4] & es_final$support_pred_prey == "unsupported_top-down"]), 2)` with a standard error of `r round((es_final$SE[es_final$var == vars[4] & es_final$support_pred_prey == "unsupported_top-down"]), 2)` and a p-value of `r round(es_final$p_value[es_final$var == vars[4] & es_final$support_pred_prey == "unsupported_top-down"], 3)`.
+    * For supported bottom-up models, the overall effect size is `r round((es_final$estimate[es_final$var == vars[4] & es_final$support_pred_prey == "supported_bottom-up"]), 2)` with a standard error of `r round((es_final$SE[es_final$var == vars[4] & es_final$support_pred_prey == "supported_bottom-up"]), 2)` and a p-value of `r round(es_final$p_value[es_final$var == vars[4] & es_final$support_pred_prey == "supported_bottom-up"], 3)`.
+    * For unsupported bottom-up models, the overall effect size is `r round((es_final$estimate[es_final$var == vars[4] & es_final$support_pred_prey == "unsupported_bottom-up"]), 2)` with a standard error of `r round((es_final$SE[es_final$var == vars[4] & es_final$support_pred_prey == "unsupported_bottom-up"]), 2)` and a p-value of `r round(es_final$p_value[es_final$var == vars[4] & es_final$support_pred_prey == "unsupported_bottom-up"], 3)`.
+
+```{r Visualize using a forest plot }
+## prep the data for plotting 
+
+## make an upper and lower CI
+es_final$upper = es_final$estimate + es_final$SE
+es_final$lower = es_final$estimate - es_final$SE
+
+## rename vars so they are just letters ordered for the graph
+es_final$var_letter[es_final$var == "HFP"] = "A)"
+es_final$var_letter[es_final$var == "FLII"] = "B)"
+es_final$var_letter[es_final$var == "Elevation"] = "C)"
+es_final$var_letter[es_final$var == "SIV"] = "D)"
+
+## set the factor order, putting SIV at the bottom
+es_final$var_letter = factor(es_final$var_letter, levels = c("D)","C)","B)","A)"))
+
+## set the factor order of points on the graph 
+es_final$support_pred_prey = factor(es_final$support_pred_prey, levels = c("unsupported_top-down", "supported_top-down","unsupported_bottom-up", "supported_bottom-up"))
+
+## ADDING * to graph is tricky!! hashed out for now in favor of doing it in ppt. 
+# ## finally, distinguish if effects are significant
+# es_final$sig[es_final$var != "D) Species interaction"] = ifelse(es_final$`p value`[es_final$var != "D) Species interaction"] < 0.05, "*", "")
+# table(es_final$sig) # should see 2 stars on the graph
+# es_final[es_final$sig == "*",] #usup_TD FLII & unsup_BU elevation --> no sig differences in HFP 
+## make the plot! 
+forest_plot =
+  ggplot(es_final, aes(x = var_letter, y = estimate, ymin=lower, ymax=upper))+
+  geom_pointrange(aes(color = support_pred_prey, shape = direction), size = 2, lwd = 2, position= position_dodge(width=.7))+
+  # geom_text(aes(y = estimate+.3*sign(estimate), label = sig), position = position_dodge(width = .7), size = 8) + # manually add via ppt to be more clear
+  scale_color_manual(values = c( "supported_bottom-up" = "springgreen4",
+                                 "unsupported_bottom-up" = "gray32",
+                                 "supported_top-down" = "darkorange4",
+                                 "unsupported_top-down" = "gray32"))+
+  scale_shape_manual(values = c("bottom-up" = 15, "top-down" = 18))+
+  geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.6)+
+  coord_flip() +  # flip coordinates (puts labels on y axis)
+  labs(y = "Weighted effect size", x = NULL)+ 
+  theme_bw()+
+  theme(axis.text.x = element_text(size = 22), # change these to 28 if going with model size 
+        axis.text.y = element_text(size = 22),
+        axis.title.x = element_text(size = 22),
+        axis.text = element_text(color = "black"),
+        legend.title = element_text(size = 22, family = "Helvetica"),
+        legend.text = element_text(size = 22, family = "Helvetica"),
+        text = element_text(family = "Helvetica"))
+
+### Create a nicer label for the plot 
+
+## convert to char for easier manipulation
+es_final$support_pred_prey = as.character(es_final$support_pred_prey)
+# replace undescore with ampersand 
+es_final$support_pred_prey = gsub("_", " & ", es_final$support_pred_prey)
+table(es_final$support_pred_prey)
+
+### now reverse the factors b/c of coordinate flip 
+es_final$support_pred_prey = factor(es_final$support_pred_prey, levels = c("supported & bottom-up", "unsupported & bottom-up","supported & top-down","unsupported & top-down"))
+                                      
+## Re-make the ggplot for the label 
+label =
+ggplot(es_final, aes(x = var, y = estimate, ymin=lower, ymax=upper))+
+  geom_pointrange(aes(color = support_pred_prey, shape = direction), size = 2, lwd = 2, #, size = mod_count), lwd = 2,
+                  position= position_dodge(width=.7))+
+  # geom_text(aes(y = estimate+.3*sign(estimate), label = sig), position = position_dodge(width = .7), size = 8) + # manually add via ppt to be more clear
+  scale_color_manual(values = c( "supported & bottom-up" = "springgreen4",
+                                 "unsupported & bottom-up" = "gray32",
+                                 "supported & top-down" = "darkorange4",
+                                 "unsupported & top-down" = "gray32"))+
+  scale_shape_manual(values = c("bottom-up" = 15, "top-down" = 18))+
+  geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.6)+
+  coord_flip() +  # flip coordinates (puts labels on y axis)
+  labs(y = "Weighted effect size", x = NULL)+#, title = "prey are subordinate in top-down models") +
+  theme_bw()+
+  theme(axis.text.x = element_text(size = 22), # change these to 28 if going with model size 
+        axis.text.y = element_text(size = 22),
+        axis.title.x = element_text(size = 22),
+        axis.text = element_text(color = "black"),
+        legend.title = element_text(size = 22, family = "Helvetica"),
+        legend.text = element_text(size = 22, family = "Helvetica"),
+        text = element_text(family = "Helvetica"))
+
+
+```
+
+For each level of support (i.e. `r paste(unique(coeff$support_simple), collapse = ", ")`), documenting sample sizes is important! 
+
+* For supported top-down models, there are `r as.numeric(table(dat$support_pred_prey[dat$var == "Species_Interaction"])[2])` results. 
+
+* For unsupported top-down models, there are `r as.numeric(table(dat$support_pred_prey[dat$var == "Species_Interaction"])[4])` results. 
+
+* For supported bottom-up models, there are `r as.numeric(table(dat$support_pred_prey[dat$var == "Species_Interaction"])[1])` results. 
+
+* For unsupported bottom-up models, there are `r as.numeric(table(dat$support_pred_prey[dat$var == "Species_Interaction"])[3])` results.
+
+```{r Visualize the forest plot, include=TRUE, echo=FALSE, fig.width= 12, fig.height=10}
+forest_plot
+```
+
+## Save everything! 
+Its going here in dropbox: Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/figures/step5_output_forest_plot/
+
+```{r Save the plot!}
+# specify the working directory
+wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/figures/step5_output_forest_plot/"
+# Grab the date
+day<-str_sub(Sys.Date(),-2)
+month<-str_sub(Sys.Date(),-5,-4)
+year<-str_sub(Sys.Date(),-10,-7)
+date = paste(year,month,day, sep = "")
+rm(year,month,day)
+# make a path 
+path = paste(wd, "meta-regression_forest_plot_", date, ".png", sep = "")
+# save! 
+# ggsave(path, forest_plot, width = 13, height = 9, units = "in")
+
+## and dont forget the label! 
+path = paste(wd, "STEAL_THIS_LABEL_", date, ".png", sep = "")
+#save!
+# ggsave(path, label, width = 13, height = 9, units = "in")
+
+```
+

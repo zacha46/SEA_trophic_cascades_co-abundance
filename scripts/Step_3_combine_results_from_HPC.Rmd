@@ -1,0 +1,1079 @@
+---
+title: "Step 3 combine results from HPC"
+author: "Zachary Amir"
+date: "`r Sys.time()`"
+output: html_document
+---
+
+```{r global-options, include=FALSE, warning=FALSE, error=FALSE}
+## We can knit this into a nice document! but dont include all the code unless otherwise specified (i.e. include=TRUE)
+knitr::opts_chunk$set(include=FALSE, warning=FALSE, error = FALSE)
+
+## start fresh
+rm(list = ls())
+
+## load libraries
+library(tidyverse)        ## For basic data wrangling
+
+```
+
+## Introduction
+
+This R Markdown file is used to bring together all of the results generated from the High Performance Computer [(HPC)](https://rcc.uq.edu.au/systems/high-performance-computing/bunya) that will then be saved as combined spreadsheets saved to dropbox. Some of the basic numeric results will be included in this markdown, but all of the data visualization will be left for the 4th and final step of this analysis. 
+
+As a reminder, the co-abundance models were implemented on this R script: scripts/HPC_code/HPC_co-abundance_model_final.R. However, the each JAGS model with long MCMC settings is too heavy to download (*i.e.*, several GB per model), so we only saved spreadsheets from the model on the HPC. 
+
+```{r import legacy data}
+
+## this is the data that was used to create data bundles. Will be useful for comparisons later
+
+## set WD to dropbox where the data lives
+wd = paste("/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/")
+
+## Import clean cam trap data here for referencing
+og_resamp_captures = read.csv(paste(wd,
+                          "data/step1_output/clean_captures_to_make_UMFs_5km_scale_20240928.csv", sep = ""))
+
+og_resamp_meta = read.csv(paste(wd,
+                          "data/step1_output/clean_metadata_to_make_UMFs_5km_scale_20240928.csv", sep = ""))
+
+### Maybe we want non-resampled data as well??
+# og_captures = read.csv("/Users/zachary_amir/Dropbox/CT capture histories database/Asian ECL raw CT data/Step4_output_pre-resampling/Clean_independent_captures_20230610.csv")
+# og_meta = read.csv("/Users/zachary_amir/Dropbox/CT capture histories database/Asian ECL raw CT data/Step4_output_pre-resampling/Clean_independent_metadata_20230610.csv")
+
+#
+##
+### Import bundled co-abundance data 
+
+## first, I will import the bundled data to generate a vector of relevant species pairs 
+# but since I split the bundled data into multiple files, I must import them all. 
+files = list.files(paste(wd,"data/step2_output_CoA_bundles/", sep = ""))
+files = files[grepl("Bundled", files)]
+files = files[!grepl("MISSING", files)] # avoid reading in repeated data 
+
+# import them all
+res = list()
+for(i in 1:length(files)){
+  
+  # import
+  b = readRDS(paste(wd, "data/step2_output_CoA_bundles/", files[i], sep = ""))
+  
+  # and save
+  res[[i]] = b
+  
+  # #### CHECK FOR FAILED MODS 
+  # check = preform$Species_Pair[is.na(preform$Interaction_Estimate) & preform$preference == "preferred"]
+  # if(any(names(b) %in% check)){
+  #   ## grab the match 
+  #   sp = check[check %in% names(b)]
+  #   ## print the message
+  #   print(paste("The species pairs:", paste(sp, collapse = " & "), "are in file name:", files[i]))
+  #   for(s in 1:length(sp)){
+  #     p = sp[s]
+  #     pos = which(names(b) %in% p)
+  #     print(paste("Specifically, species pair:", p, "is located in this bundle at position:", pos))
+  #   }
+  # }
+  
+}
+rm(b,i)
+
+## combine them into a single list by unlisting the list 
+bdata = unlist(res, recursive = F)
+rm(res)
+
+## save vector of relevant species pairs
+all_combos = names(bdata)
+
+
+```
+
+```{r import coefficent dataframes}
+
+# First, list all result files
+files = list.files(paste(wd, "results/", sep = ""), recursive = T)
+# We dont want OE files (that informed GB requirements)
+files = files[!grepl("OE", files)]
+files = files[!grepl("counterfactual2|counterfactual3|counterfactual4|counterfactual5|counterfactual6", files)]
+
+## specify the MCMC setting were interested in 
+setting = "LONG"
+
+## Specify the spatial scale we are interested in 
+scale = "5km"
+
+# Subset for the MCMC settings were interested in 
+files = files[grepl(setting, files)]
+# and same for spatial scale
+files = files[grepl(scale, files)]
+
+# Grab all coefficent dataframe files
+files = files[grepl("/coefficent_dataframes/", files)]
+
+# store results here
+coeff.res = list()
+
+# loop thru each file to import into list
+for(i in 1:length(files)){
+  
+  # import 
+  d = read.csv(paste(wd, "results/", files[i], sep = ""))
+  
+  ## if there are pesky row.names, remove em!
+  d$X = NULL
+  
+  ## And dont forget to add the MCMC settings
+  d$MCMC_setting = setting
+  
+  coeff.res[[i]] = d
+  
+  if(ncol(d) != 11){
+    print(paste("The file", files[i], "with the index value of", i, 
+                "has the wrong number of columns and wont combine well. INVESTIGTE!"))
+  }
+}
+rm(d,i, files)
+
+## bind together and inspect
+coeff = do.call(rbind, coeff.res)
+
+## quick inspection
+str(coeff)
+rm(coeff.res)
+
+## split apart species pair into sub vs dom species
+coeff <- within(coeff, {
+  sub_sp <- sapply(strsplit(Species_Pair, "~"), function(x) x[1])
+  dom_sp <- sapply(strsplit(Species_Pair, "~"), function(x) x[2])
+})
+coeff$dom_sp = gsub("DOM-", "", coeff$dom_sp)
+coeff$sub_sp = gsub("SUB-", "", coeff$sub_sp)
+
+
+### Inspect which species pairs are present/missing, 20241021, LONG settings
+setdiff(all_combos, coeff$Species_Pair) 
+## 91 models still running on the HPC, replace w/ middle settings 
+
+# save the missing mods 
+missing = setdiff(all_combos, coeff$Species_Pair)
+
+#
+##
+###
+#### Make this a conditional statement when there are no more missing mods 
+###
+##
+#
+
+if(length(missing)>0){
+  
+  # First, list all result files
+  files = list.files(paste(wd, "results/", sep = ""), recursive = T)
+  # We dont want OE files (that informed GB requirements)
+  files = files[!grepl("OE", files)]
+  files = files[!grepl("counterfactual2|counterfactual3|counterfactual4|counterfactual5|counterfactual6", files)]
+  
+  ## specify the MCMC setting were interested in 
+  setting = "MIDDLE"
+  
+  # Subset for the MCMC settings were interested in 
+  files = files[grepl(setting, files)]
+  # and same for spatial scale
+  files = files[grepl(scale, files)]
+  
+  # Grab all coefficent dataframe files
+  files = files[grepl("/coefficent_dataframes/", files)]
+  
+  # and make sure were only importing the relevant sp pairs
+  files = files[grepl(paste(missing, collapse = "|"), files)]
+  
+  ## make sure files is present! 
+  if(length(files) > 0){
+    # store results here
+  coeff.res = list()
+  
+  # loop thru each file to import into list
+  for(i in 1:length(files)){
+    
+    # import 
+    d = read.csv(paste(wd, "results/", files[i], sep = ""))
+    
+    ## if there are pesky row.names, remove em!
+    d$X = NULL
+    
+    ## And dont forget to add the MCMC settings
+    d$MCMC_setting = setting
+    
+    coeff.res[[i]] = d
+    
+    if(ncol(d) != 11){
+      print(paste("The file", files[i], "with the index value of", i, 
+                  "has the wrong number of columns and wont combine well. INVESTIGTE!"))
+    }
+  }
+  rm(d,i, files)
+  
+  ## bind together and inspect
+  coeff2 = do.call(rbind, coeff.res)
+  rm(coeff.res)
+  
+  ## split apart species pair into sub vs dom species
+  coeff2 <- within(coeff2, {
+    sub_sp <- sapply(strsplit(Species_Pair, "~"), function(x) x[1])
+    dom_sp <- sapply(strsplit(Species_Pair, "~"), function(x) x[2])
+  })
+  coeff2$dom_sp = gsub("DOM-", "", coeff2$dom_sp)
+  coeff2$sub_sp = gsub("SUB-", "", coeff2$sub_sp)
+  
+  ## Thin to only the missing models 
+  coeff2 = coeff2[coeff2$Species_Pair %in% missing, ]
+  
+  ## and combine! 
+  coeff = rbind(coeff, coeff2)
+  rm(coeff2)
+  } # end file length condition
+  
+  ## verify were all here now 
+  setdiff(all_combos, coeff$Species_Pair)
+  ## 20241021 --> middle only had preferred results! Still missing 84 mods :(, but all preferred mods are here, which is most important! 
+}
+
+## keep enviro clean! 
+rm(missing, setting)
+
+
+
+```
+
+```{r Create dataframe to track preformance}
+
+## create a dataframe to track our model performance
+preform = data.frame("Species_Pair" = all_combos,
+                     "sub_species" = as.character(NA),
+                     "dom_species" = as.character(NA))
+
+## add individual species to individual cols via loop 
+for(i in 1:length(preform$Species_Pair)){
+  
+  ## gather the combo and split it 
+  c = preform$Species_Pair[i]
+  c = str_split(c, "~")
+  
+  ## add it to the DF
+  preform$sub_species[i] = c[[1]][1]
+  preform$dom_species[i] = c[[1]][2]
+  
+  ## clean it up
+  preform$sub_species[i] = gsub("SUB-", "", preform$sub_species[i])
+  preform$dom_species[i] = gsub("DOM-", "", preform$dom_species[i])
+  
+}
+rm(c,i)
+
+## inspect
+anyNA(preform) # Must be F
+
+## assess which models are completed
+preform$mod_completion = "uncompleted"
+preform$mod_completion[preform$Species_Pair %in% coeff$Species_Pair] = "completed"
+table(preform$mod_completion) 
+## Oct 21, 2024, Long @ 5km
+# completed = 178
+# uncompleted = 84
+
+
+```
+
+```{r Import PPC dataframes}
+
+# First, list all result files
+files = list.files(paste(wd, "results/", sep = ""), recursive = T)
+# We dont want OE files (that informed GB requirements) or counter-factuals
+files = files[!grepl("OE", files)]
+files = files[!grepl("counterfactual2|counterfactual3|counterfactual4|counterfactual5|counterfactual6", files)]
+
+## specify the MCMC setting were interested in 
+setting = "LONG"
+
+# Subset for the MCMC settings were interested in 
+files = files[grepl(setting, files)]
+# and same for spatial scale
+files = files[grepl(scale, files)]
+
+# Grab all PPC_dataframe files
+files = files[grepl("/PPC_dataframes/", files)]
+# and dont want plotting data 
+files = files[!grepl("plotdata", files)] 
+
+# store results here
+ppc_res = list()
+
+# loop thru each file to import into list
+for(i in 1:length(files)){
+  
+  ## read the file 
+  d = read.csv(paste(wd, "results/", files[i], sep = ""))
+  
+  ## add the MCMC setting
+  d$MCMC_setting = setting
+  
+  ## save plotdata vs values in nested list. 
+  if(grepl("plotdata", files[i])){
+    
+    ppc_res$plotdata[[i]] = d
+    
+  }else{
+    
+    ppc_res$values[[i]] = d
+    
+  } # end plot vs value condition
+  
+}
+rm(d,i, files)
+
+# ## bind together and inspect
+# ppc_plotdat = do.call(rbind, ppc_res$plotdata)
+# head(ppc_plotdat) 
+
+## bind together and inspect
+ppc_values = do.call(rbind, ppc_res$values)
+str(ppc_values) # looks mostly good! 
+ppc_values$X = NULL # damn row names 
+
+
+### Inspect which species pairs are present/missing, 20241021, LONG settings
+setdiff(all_combos, ppc_values$Species_Pair) 
+## 91 models still running on the HPC, replace w/ middle settings 
+
+# save the missing mods 
+missing = setdiff(all_combos, ppc_values$Species_Pair)
+
+#
+##
+###
+#### Make this a conditional statement when there are no more missing mods 
+###
+##
+#
+
+if(length(missing)>0){
+  
+  # First, list all result files
+  files = list.files(paste(wd, "results/", sep = ""), recursive = T)
+  # We dont want OE files (that informed GB requirements) or counter-factuals
+  files = files[!grepl("OE", files)]
+  files = files[!grepl("counterfactual2|counterfactual3|counterfactual4|counterfactual5|counterfactual6", files)]
+  
+  ## specify the MCMC setting were interested in 
+  setting = "MIDDLE"
+  
+  # Subset for the MCMC settings were interested in 
+  files = files[grepl(setting, files)]
+  # and same for spatial scale
+  files = files[grepl(scale, files)]
+  
+  # Grab all PPC_dataframe files
+  files = files[grepl("/PPC_dataframes/", files)]
+  # and dont want plotting data 
+  files = files[!grepl("plotdata", files)] 
+  
+  # and make sure were only importing the relevant sp pairs
+  files = files[grepl(paste(missing, collapse = "|"), files)]
+  
+  # make sure files are present! 
+  if(length(files) > 0){
+    # store results here
+  ppc_res = list()
+  
+  # loop thru each file to import into list
+  for(i in 1:length(files)){
+    
+    ## read the file 
+    d = read.csv(paste(wd, "results/", files[i], sep = ""))
+    
+    ## add the MCMC setting
+    d$MCMC_setting = setting
+    
+    ## save plotdata vs values in nested list. 
+    if(grepl("plotdata", files[i])){
+      
+    ppc_res$plotdata[[i]] = d
+    
+  }else{
+    
+    ppc_res$values[[i]] = d
+    
+  } # end plot vs value condition
+  
+}
+rm(d,i, files)
+
+## bind together and inspect
+ppc2 = do.call(rbind, ppc_res$values)
+ppc2$X = NULL # damn row names 
+
+## and combine! 
+ppc_values = rbind(ppc_values, ppc2)
+rm(ppc2)
+
+  } # end file length condition
+  
+## verify were all here now 
+setdiff(all_combos, coeff$Species_Pair)
+## 20241021 --> middle only had preferred results! Still missing 84 mods :(, but all preferred mods are here, which is most important! 
+}
+
+## keep enviro clean! 
+rm(missing, setting, ppc_res)
+
+```
+
+```{r Import trait data and add to preformance dataframe}
+
+#load guild data
+guilds = read.csv(paste(wd, "data/step1_output/clean_44_species_trait_data_20240928.csv", sep = ""))
+str(guilds)
+## looks good, dietary preferences are ready to go! 
+
+#
+##
+### Combine species trait/guild data w/ model performance
+
+## make sure all species are present
+setdiff(preform$sub_species, guilds$scientificNameStd) # these match, add subordinate guild first
+
+add = select(guilds, scientificNameStd, TrophicGuild)
+names(add) = c("sub_species", "SUB_guild")
+
+preform = merge(preform, add, by = "sub_species")
+head(preform)
+
+## now do the same for dominant speices
+setdiff(preform$dom_species, guilds$scientificNameStd) # these match
+add = select(guilds, scientificNameStd, TrophicGuild)
+names(add) = c("dom_species", "DOM_guild")
+
+preform = merge(preform, add, by = "dom_species")
+head(preform)
+
+## combine into a guild pair 
+preform$guild_pair = paste("SUB-", preform$SUB_guild, "~",
+                           "DOM-", preform$DOM_guild, sep = "")
+## what can we actually work with rn
+table(preform$guild_pair[preform$mod_completion == "completed"]) # a lot!
+
+## clean up 
+rm(add)
+
+
+```
+
+```{r Add data to preformance dataframe to track model validity}
+
+### Will use the preform data.frame (generated in coefficents import), 
+## to track which models are robust, working, and converging. 
+# Currently this data.frame has no data in it, only descriptors
+
+## inspect data
+str(preform) 
+# need to add sub + dom BPV/Chat & species interaction, its significance, and the Rhat value
+
+### inspect available data 
+str(ppc_values) # its all here! 
+
+## merge it! 
+preform = merge(preform, ppc_values, by = "Species_Pair", all.x = T) # make sure to keep all values from preform b/c some could be missing from PPC! 
+
+
+## inspect
+str(preform) # looks good 
+## Check if any are still uncompleted --> will have NA values for BPV,Chat,Rhat,etc
+str(preform[preform$mod_completion == "uncompleted",]) # all NA 
+
+## Add a column denoting if the BPV values converged based on a wide range to account for many mods 
+preform$BPV_valid = "No"
+preform$BPV_valid[preform$BPV.dom >= 0.15 & preform$BPV.dom <= 0.85 &
+                    preform$BPV.sub >= 0.15 & preform$BPV.sub <= 0.85] = "Yes"
+table(preform$BPV_valid[!is.na(preform$Interaction_Estimate)]) 
+# majority are valid 
+
+## Add another column that is a more conservative BPV interpretation --> same as co-abundance MS 
+preform$BPV_valid_conserv = "No"
+preform$BPV_valid_conserv[preform$BPV.dom >= 0.25 & preform$BPV.dom <= 0.75 &
+                            preform$BPV.sub >= 0.25 & preform$BPV.sub <= 0.75] = "Yes"
+table(preform$BPV_valid_conserv[!is.na(preform$Interaction_Estimate)]) # No is the majority
+
+## add a column denoting if over dispersion remains with a wide range to account for many mods 
+preform$OD_valid = "No"
+preform$OD_valid[preform$Chat.dom >= 0.95 & preform$Chat.dom <= 1.3 &
+                     preform$Chat.sub >= 0.95 & preform$Chat.sub <= 1.3] = "Yes"
+table(preform$OD_valid[!is.na(preform$Interaction_Estimate)]) 
+## all are good! 
+## I bet this is because active_cams + RE for source are actually good for detection models... less reliance on ODRE
+
+## Add another column for a more conservative OD parameter --> same as co-abundance MS
+preform$OD_valid_conserv = "No"
+preform$OD_valid_conserv[preform$Chat.dom >= 0.98 & preform$Chat.dom <= 1.1 &
+                           preform$Chat.sub >= 0.98 & preform$Chat.sub <= 1.1] = "Yes"
+table(preform$OD_valid_conserv[!is.na(preform$Interaction_Estimate)]) # only 2 failed 
+
+
+## add a column denoting if the species interaction parameter converged 
+preform$parameter_valid = "No"
+preform$parameter_valid[preform$Rhat >= 0.99 & preform$Rhat <= 1.2] = "Yes"
+table(preform$parameter_valid[!is.na(preform$Interaction_Estimate)]) # majority is valid!
+
+## Add the direction of the relationship
+preform$direction[preform$sub_species %in% c("Panthera_tigris", "Panthera_pardus", 
+                                             "Neofelis_genus", "Cuon_alpinus")] = "bottom-up"
+preform$direction[preform$dom_species %in% c("Panthera_tigris", "Panthera_pardus", 
+                                             "Neofelis_genus", "Cuon_alpinus")] = "top-down" # this should allow large carnivore pairings to be top-down
+## Check all large carnivore pairings are top-down
+unique(preform$direction[preform$guild_pair == "SUB-Large_Carnivore~DOM-Large_Carnivore"]) #  good! 
+
+## add a column to preform to determine if the model is a preferred prey species or not
+preform$preference = "community"
+# top-downs
+preform$preference[preform$dom_sp == "Panthera_tigris" & preform$sub_sp %in% guilds$scientificNameStd[guilds$tiger_pref == "Yes"]] = "preferred"
+preform$preference[preform$dom_sp == "Panthera_pardus" & preform$sub_sp %in% guilds$scientificNameStd[guilds$leopard_pref == "Yes"]] = "preferred"
+preform$preference[preform$dom_sp == "Neofelis_genus" & preform$sub_sp %in% guilds$scientificNameStd[guilds$CL_pref == "Yes"]] = "preferred"
+preform$preference[preform$dom_sp == "Cuon_alpinus" & preform$sub_sp %in% guilds$scientificNameStd[guilds$dhole_pref == "Yes"]] = "preferred"
+# bottoms-up
+preform$preference[preform$sub_sp == "Panthera_tigris" & preform$dom_sp %in% guilds$scientificNameStd[guilds$tiger_pref == "Yes"]] = "preferred"
+preform$preference[preform$sub_sp == "Panthera_pardus" & preform$dom_sp %in% guilds$scientificNameStd[guilds$leopard_pref == "Yes"]] = "preferred"
+preform$preference[preform$sub_sp == "Neofelis_genus" & preform$dom_sp %in% guilds$scientificNameStd[guilds$CL_pref == "Yes"]] = "preferred"
+preform$preference[preform$sub_sp == "Cuon_alpinus" & preform$dom_sp %in% guilds$scientificNameStd[guilds$dhole_pref == "Yes"]] = "preferred"
+## how many do we have?
+table(preform$preference) # 66 preferred, 125 not. 66 + 125 = 191 -> know were missing! 
+
+## are all preferred models finished?
+anyNA(preform$Interaction_Estimate[preform$preference == "preferred"]) # MUST BE F! 
+
+## are all community models finished?
+anyNA(preform$Interaction_Estimate[preform$preference == "community"]) # MUST BE F! but can proceed before F, just make sure to come back here!
+
+
+## Assign 3 levels of non-support --> unsupported_1, unsupported_2, unsupported_3
+preform$support[preform$BPV_valid == "No" |
+                  preform$OD_valid == "No" |
+                  preform$parameter_valid == "No"] = "Unsupported_3" # lowest level of support --> bad mod.
+preform$support[preform$BPV_valid == "Yes" & 
+                  preform$OD_valid == "Yes" &
+                  preform$parameter_valid == "Yes" &
+                  preform$Significance == "Non-Significant"] = "Unsupported_2" # mid-low support --> good mod, but not important
+preform$support[preform$BPV_valid == "Yes" & 
+                  preform$OD_valid == "Yes" &
+                  preform$parameter_valid == "Yes" &
+                  preform$Significance == "Significant" &
+                  preform$direction == "top-down" &
+                  preform$Interaction_Estimate > 0] = "Unsupported_1" # almost supportive --> good model, significant result, but not in correct direction for hypothesis.  
+preform$support[preform$BPV_valid == "Yes" & 
+                  preform$OD_valid == "Yes" &
+                  preform$parameter_valid == "Yes" &
+                  preform$Significance == "Significant" &
+                  preform$direction == "bottom-up" &
+                  preform$Interaction_Estimate < 0] = "Unsupported_1" # Same as above, but applied for bottom-up direction. 
+## assign which models support our hypothesis
+preform$support[preform$BPV_valid == "Yes" & 
+                  preform$OD_valid == "Yes" &
+                  preform$parameter_valid == "Yes" &
+                  preform$Significance == "Significant" &
+                  preform$direction == "top-down" &
+                  preform$Interaction_Estimate <= 0] = "Supported" # good model, significant result, in correct direction for hypothesis.  
+preform$support[preform$BPV_valid == "Yes" & 
+                  preform$OD_valid == "Yes" &
+                  preform$parameter_valid == "Yes" &
+                  preform$Significance == "Significant" &
+                  preform$direction == "bottom-up" &
+                  preform$Interaction_Estimate >= 0] = "Supported" # Same as above, but applied for bottom-up direction. 
+
+## inspect
+table(preform$support);anyNA(preform$support) # must be F for NA! 
+
+
+#### Do the same thing, but with the conservative values
+## Assign 3 levels of non-support --> unsupported_1, unsupported_2, unsupported_3
+preform$support_conserv[preform$BPV_valid_conserv == "No" |
+                          preform$OD_valid_conserv == "No" |
+                          preform$parameter_valid == "No"] = "Unsupported_3" # lowest level of support --> bad mod.
+preform$support_conserv[preform$BPV_valid_conserv == "Yes" & 
+                          preform$OD_valid_conserv == "Yes" &
+                          preform$parameter_valid == "Yes" &
+                          preform$Significance == "Non-Significant"] = "Unsupported_2" # mid-low support --> good mod, but not important
+preform$support_conserv[preform$BPV_valid_conserv == "Yes" & 
+                          preform$OD_valid_conserv == "Yes" &
+                          preform$parameter_valid == "Yes" &
+                          preform$Significance == "Significant" &
+                          preform$direction == "top-down" &
+                          preform$Interaction_Estimate > 0] = "Unsupported_1" # almost supportive --> good model, significant result, but not in correct direction for hypothesis.  
+preform$support_conserv[preform$BPV_valid_conserv == "Yes" & 
+                          preform$OD_valid_conserv == "Yes" &
+                          preform$parameter_valid == "Yes" &
+                          preform$Significance == "Significant" &
+                          preform$direction == "bottom-up" &
+                          preform$Interaction_Estimate < 0] = "Unsupported_1" # Same as above, but applied for bottom-up direction. 
+## assign which models support our hypothesis
+preform$support_conserv[preform$BPV_valid_conserv == "Yes" & 
+                          preform$OD_valid_conserv == "Yes" &
+                          preform$parameter_valid == "Yes" &
+                          preform$Significance == "Significant" &
+                          preform$direction == "top-down" &
+                          preform$Interaction_Estimate <= 0] = "Supported" # good model, significant result, in correct direction for hypothesis.  
+preform$support_conserv[preform$BPV_valid_conserv == "Yes" & 
+                          preform$OD_valid_conserv == "Yes" &
+                          preform$parameter_valid == "Yes" &
+                          preform$Significance == "Significant" &
+                          preform$direction == "bottom-up" &
+                          preform$Interaction_Estimate >= 0] = "Supported" # Same as above, but applied for bottom-up direction. 
+## inspect
+table(preform$support_conserv[!is.na(preform$Interaction_Estimate)])
+anyNA(preform$support[!is.na(preform$Interaction_Estimate)]) # must be F for NA! 
+
+
+
+```
+
+## Description of results
+
+A total of `r length(preform$Species_Pair[preform$mod_completion == "completed"])` co-abundance models out of `r length(preform$Species_Pair)` were successfully completed and downloaded from the HPC. The models are composed of **`r length(preform$Species_Pair[preform$preference == "community" & !is.na(preform$Interaction_Estimate)])` 'community models'** across the entire eligible community, and **`r length(preform$Species_Pair[preform$preference == "preferred" & !is.na(preform$Interaction_Estimate)]) ` 'preferred models'** based on large carnivore dietary preferences. There were a total of `r length(preform$Species_Pair[preform$direction == "top-down" & preform$preference == "community"])` community top-down models and `r length(preform$Species_Pair[preform$direction == "top-down" & preform$preference == "preferred"])` preferred top-down models. There were a total of `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$preference == "community"])` community bottom-up models and `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$preference == "preferred"])` preferred bottom-up models.
+
+These completed models are composed of `r length(preform$Species_Pair[preform$preference == "preferred" & preform$mod_completion == "completed" & !is.na(preform$Interaction_Estimate)])` preferred models and  `r length(preform$Species_Pair[preform$preference == "community" & preform$mod_completion == "completed"& !is.na(preform$Interaction_Estimate)])` community models. The settings used on the HPC to complete these models are composed of `r length(unique(preform$Species_Pair[preform$MCMC_setting == "LONG" & !is.na(preform$Interaction_Estimate)]))` models with long settings,  `r length(unique(preform$Species_Pair[preform$MCMC_setting == "MIDDLE" & !is.na(preform$Interaction_Estimate)]))` models with middle settings, and  `r length(unique(preform$Species_Pair[preform$MCMC_setting == "SHORT" & !is.na(preform$Interaction_Estimate)]))` models with short settings. 
+
+It is important to inspect the diagnostics of the models before we interpret results, and there are four key diagnostic features to inspect. 
+
+1) The first key value we are interested in is the __parameter convergence (known as R-hat) around the species interaction value (SIV)__, where parameters are converged if values are between 1 and 1.2. **The median Rhat for the SIV is `r round(median(preform$Rhat, na.rm = T), 3)` with a standard deviation of `r round(sd(preform$Rhat, na.rm = T), 3)`**. In total, `r length(unique(preform$Species_Pair[preform$parameter_valid == "No"]))` models failed to generate a convergent SIV. This is composed of `r length(unique(preform$Species_Pair[preform$parameter_valid == "No" & preform$preference == "preferred"]))` preferred models and `r length(unique(preform$Species_Pair[preform$parameter_valid == "No" & preform$preference == "community"]))` community models.
+
+2) The second key value is the __Bayesian p-value denoting model goodness-of-fit__, where models are deemed to be a good fit if values are between 0.15 to 0.85, with values outside of this range being considered a bad fit. **Across all models `r round(as.numeric(table(preform$BPV_valid[!is.na(preform$Interaction_Estimate)])[1]/ length(preform$Species_Pair[!is.na(preform$Interaction_Estimate)]) * 100), 2)` percent of models are considered a bad fit**. This is composed of `r length(preform$Species_Pair[preform$BPV_valid == "No" & preform$preference == "preferred"])` preferred models and `r length(preform$Species_Pair[preform$BPV_valid == "No" & preform$preference == "community"])` community models. 
+
+3) The third key value is the __C-hat overdispersion value__, where models are deemed to not have any overdispersion in detections if values are between 0.95 and 1.3. **Across all models `r round(as.numeric(table(preform$OD_valid[!is.na(preform$Interaction_Estimate)])[1]/ length(preform$Species_Pair[!is.na(preform$Interaction_Estimate)]) * 100), 2)` percent of models over remaining overdispersion of detections not accounted for in the detection formula**. This is composed of `r length(preform$Species_Pair[preform$OD_valid == "No" & preform$preference == "preferred"])` preferred models and `r length(preform$Species_Pair[preform$OD_valid == "No" & preform$preference == "community"])` community models. 
+
+4) The fourth value is __the direction of the SIV based on our hypotheses__, where top-down models should have a significant negative relationship and bottom-up models should have a significant positive relationship. As a reminder, top-down models are when large carnivores are the dominant species and bottom-up models are where large carnivores are the subordinate species. For the preferred top-down models, `r length(preform$Species_Pair[preform$Significance == "Significant" & preform$direction == "top-down" & preform$Interaction_Estimate <= 0 & preform$preference == "preferred" ])` models meet these conditions. For the preferred bottom-up models, `r length(preform$Species_Pair[preform$Significance == "Significant" & preform$direction == "bottom-up" & preform$Interaction_Estimate >= 0 & preform$preference == "preferred" ])` models meet these conditions. For the community top-down models, `r length(preform$Species_Pair[preform$Significance == "Significant" & preform$direction == "top-down" & preform$Interaction_Estimate <= 0 & preform$preference == "community" ])` models meet these conditions. For the community bottom-up models, `r length(preform$Species_Pair[preform$Significance == "Significant" & preform$direction == "bottom-up" & preform$Interaction_Estimate >= 0 & preform$preference == "community" ])` models meet these conditions.
+
+In combining these different diagnostic tools, we can determine different levels of support for our results. Models that had unsuitable parameter convergence or Bayes p-values and remaining over-dispersion are likely due to insufficient data or excessive residual noise from weakly interacting species (Fig. S2, unsupported_3). 
+Models that had insignificant SIVs are likely due to the inclusion of covariates in the model being more informative than species interactions (Fig. S2, unsupported_2). Models with significant SIVs in the opposite direction as we hypothesized are likely due to shared responses to unexplained variation in covariates not included in the model, such as both predator and prey responding negatively to hunting in bottom-up models, or both species responding positively to fruit availability in top-down models (Fig. S2, unsupported_1). Finally, when a model meets all of the previous criteria, then we can determine the model as supported. The resulst from each level are provided below:
+
+1) There were a total of `r length(preform$Species_Pair[preform$support == "Unsupported_3" & !is.na(preform$Interaction_Estimate)])` unsupported_3 models. This is composed of `r length(preform$Species_Pair[preform$support == "Unsupported_3" & !is.na(preform$Interaction_Estimate) & preform$preference == "preferred"])` preferred models and `r length(preform$Species_Pair[preform$support == "Unsupported_3" & !is.na(preform$Interaction_Estimate) & preform$preference == "community"])` community models. 
+
+2) There were a total of `r length(preform$Species_Pair[preform$support == "Unsupported_2" & !is.na(preform$Interaction_Estimate)])` unsupported_2 models. This is composed of `r length(preform$Species_Pair[preform$support == "Unsupported_2" & !is.na(preform$Interaction_Estimate) & preform$preference == "preferred"])` preferred models and `r length(preform$Species_Pair[preform$support == "Unsupported_2" & !is.na(preform$Interaction_Estimate) & preform$preference == "community"])` community models. 
+
+3) There were a total of `r length(preform$Species_Pair[preform$support == "Unsupported_1" & !is.na(preform$Interaction_Estimate)])` unsupported_1 models. This is composed of `r length(preform$Species_Pair[preform$support == "Unsupported_1" & !is.na(preform$Interaction_Estimate) & preform$preference == "preferred"])` preferred models and `r length(preform$Species_Pair[preform$support == "Unsupported_1" & !is.na(preform$Interaction_Estimate) & preform$preference == "community"])` community models. 
+
+4) There were a total of `r length(preform$Species_Pair[preform$support == "Supported" & !is.na(preform$Interaction_Estimate)])` supported models. This is composed of `r length(preform$Species_Pair[preform$support == "Supported" & !is.na(preform$Interaction_Estimate) & preform$preference == "preferred"])` preferred models and `r length(preform$Species_Pair[preform$support == "Supported" & !is.na(preform$Interaction_Estimate) & preform$preference == "community"])` community models. 
+
+In interpreting our supported results, we can split them between top-down and bottom-up results.
+
+* **For the supported top-down results, we had a total of `r length(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported"])` models. This is composed of `r length(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported" & preform$preference == "preferred"])` preferred models and `r length(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported" & preform$preference == "community"])` community models.** __Tigers__ showed `r length(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported" & preform$preference == "preferred" & grepl("tigris", preform$dom_species)])` top-down relationships with their preferred prey and `r length(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported" & preform$preference == "community" & grepl("tigris", preform$dom_species)])` top-down relationships with the overall community. __Leopards__ showed `r length(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported" & preform$preference == "preferred" & grepl("pardus", preform$dom_species)])` top-down relationships with their preferred prey and `r length(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported" & preform$preference == "community" & grepl("pardus", preform$dom_species)])` top-down relationships with the overall community. __Dholes__ showed `r length(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported" & preform$preference == "preferred" & grepl("Cuon", preform$dom_species)])` top-down relationships with their preferred prey and `r length(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported" & preform$preference == "community" & grepl("Cuon", preform$dom_species)])` top-down relationships with the overall community. Finally, __clouded leopards__ showed `r length(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported" & preform$preference == "preferred" & grepl("Neofelis", preform$dom_species)])` top-down relationships with their preferred prey and `r length(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported" & preform$preference == "community" & grepl("Neofelis", preform$dom_species)])` top-down relationships with the overall community. 
+
+* **For the supported bottom-up results, we had a total of `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported"])` models. This is composed of `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "preferred"])` preferred models and `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "community"])` community models.** __Tigers__ showed `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "preferred" & grepl("tigris", preform$sub_species)])` bottom-up relationships with their preferred prey and `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "community" & grepl("tigris", preform$sub_species)])` bottom-up relationships with the overall community. __Leopards__ showed `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "preferred" & grepl("pardus", preform$sub_species)])` bottom-up relationships with their preferred prey and `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "community" & grepl("pardus", preform$sub_species)])` bottom-up relationships with the overall community. __Dholes__ showed `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "preferred" & grepl("Cuon", preform$sub_species)])` bottom-up relationships with their preferred prey and `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "community" & grepl("Cuon", preform$sub_species)])` bottom-up relationships with the overall community. Finally, __clouded leopards__ showed `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "preferred" & grepl("Neofelis", preform$sub_species)])` bottom-up relationships with their preferred prey and `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "community" & grepl("Neofelis", preform$sub_species)])` bottom-up relationships with the overall community. 
+
+## Counter-factual results 
+
+```{r Import counter-factual test coefficents}
+
+# First, list all result files
+files = list.files(paste(wd, "results/", sep = ""), recursive = T)
+# We dont want OE files (that informed GB requirements)
+files = files[!grepl("OE", files)]
+
+## specify the MCMC setting were interested in 
+setting = "MIDDLE"
+# LONG is still running/may take forever
+
+# Subset for the MCMC settings were interested in 
+files = files[grepl(setting, files)]
+
+# Grab all coefficent dataframe files
+files = files[grepl("/coefficent_dataframes/", files)]
+
+## split apart different tests
+# f1 = files[grepl("counterfactual1", files)]
+f2 = files[grepl("counterfactual2", files)]
+f3 = files[grepl("counterfactual3", files)]
+f4 = files[grepl("counterfactual4", files)]
+f5 = files[grepl("counterfactual5", files)]
+f6 = files[grepl("counterfactual6", files)]
+files_list = list(#"counterfactual1" = f1,
+                  "counterfactual2" = f2,
+                  "counterfactual3" = f3,
+                  "counterfactual4" = f4,
+                  "counterfactual5" = f5,
+                  "counterfactual6" = f6)
+rm(f2,f3,f4,f5,f6, files)
+
+# import them all
+res = list()
+for(i in 1:length(files_list)){
+  
+  # select one list of files
+  fl = files_list[[i]]
+  
+  # temp list
+  temp = list()
+  for(l in 1:length(fl)){
+    
+    # select one file 
+    f = fl[l]
+    
+    # import it
+    dat = read.csv(paste(wd, "results/", f, sep = ""))
+    
+    # add the MCMC setting
+    dat$MCMC_setting = setting
+
+    # save it
+    temp[[l]] = dat
+    
+  }
+  
+  ## turn into a DF 
+  r = do.call(rbind, temp)
+  
+  ## Add the testing column
+  if(names(files_list)[i] == "counterfactual1"){ r$counter_factual_test = "isolate_abundance_declines" }
+  if(names(files_list)[i] == "counterfactual2"){ r$counter_factual_test = "isolate_extirpations" }
+  if(names(files_list)[i] == "counterfactual3"){ r$counter_factual_test = "site_matching" }
+  if(names(files_list)[i] == "counterfactual4"){ r$counter_factual_test = "isolate_altitude" }
+  if(names(files_list)[i] == "counterfactual5"){ r$counter_factual_test = "isolate_FLII" }
+  if(names(files_list)[i] == "counterfactual6"){ r$counter_factual_test = "isolate_HFP" }
+  
+  # and save
+  res[[i]] = r
+  
+}
+rm(r,i,l,dat,temp,fl,f)
+
+## Convert to a dataframe
+coeff_cf = do.call(rbind, res)
+rm(res)
+
+## inspect
+table(coeff_cf$counter_factual_test)
+
+## make sure col names match other coefficents 
+setdiff(names(coeff), names(coeff_cf)) # need to split sub and dom species
+
+## split apart species pair into sub vs dom species
+coeff_cf <- within(coeff_cf, {
+  sub_sp <- sapply(strsplit(Species_Pair, "~"), function(x) x[1])
+  dom_sp <- sapply(strsplit(Species_Pair, "~"), function(x) x[2])
+})
+coeff_cf$dom_sp = gsub("DOM-", "", coeff_cf$dom_sp)
+coeff_cf$sub_sp = gsub("SUB-", "", coeff_cf$sub_sp)
+
+## only want the preferred pred-prey pairs 
+pref_pairs = preform$Species_Pair[preform$preference == "preferred"]
+
+## grab those pairs from the larger coeff DF 
+coeff_pref = coeff[coeff$Species_Pair %in% pref_pairs,]
+
+## add the testing column
+coeff_pref$counter_factual_test = "original_test"
+
+## and Rbind them together
+coeff_cf = rbind(coeff_cf, coeff_pref)
+# clean up
+rm(coeff_pref, pref_pairs)
+
+```
+
+```{r Import counter-factual test PPC values}
+# First, list all result files
+files = list.files(paste(wd, "results/", sep = ""), recursive = T)
+# We dont want OE files (that informed GB requirements)
+files = files[!grepl("OE", files)]
+
+## specify the MCMC setting were interested in 
+setting = "MIDDLE"
+# LONG is still running/may take forever
+
+# Subset for the MCMC settings were interested in 
+files = files[grepl(setting, files)]
+
+# Grab all coefficent dataframe files
+files = files[grepl("/PPC_dataframes/", files)]
+
+## split apart different tests
+# f1 = files[grepl("counterfactual1", files)]
+f2 = files[grepl("counterfactual2", files)]
+f3 = files[grepl("counterfactual3", files)]
+f4 = files[grepl("counterfactual4", files)]
+f5 = files[grepl("counterfactual5", files)]
+f6 = files[grepl("counterfactual6", files)]
+files_list = list(#"counterfactual1" = f1,
+                  "counterfactual2" = f2,
+                  "counterfactual3" = f3,
+                  "counterfactual4" = f4,
+                  "counterfactual5" = f5,
+                  "counterfactual6" = f6)
+rm(f2,f3,f4,f5,f6, files)
+
+# import them all
+res = list()
+for(i in 1:length(files_list)){
+  
+  # select one list of files
+  fl = files_list[[i]]
+  
+  # temp list
+  temp = list()
+  for(l in 1:length(fl)){
+    
+    # select one file 
+    f = fl[l]
+    
+    # import it
+    dat = read.csv(paste(wd, "results/", f, sep = ""))
+    
+    # add the MCMC setting
+    dat$MCMC_setting = setting
+
+    # save it
+    temp[[l]] = dat
+    
+  }
+  
+  ## turn into a DF 
+  r = do.call(rbind, temp)
+  
+  ## Add the testing column
+  if(names(files_list)[i] == "counterfactual1"){ r$counter_factual_test = "isolate_abundance_declines" }
+  if(names(files_list)[i] == "counterfactual2"){ r$counter_factual_test = "isolate_extirpations" }
+  if(names(files_list)[i] == "counterfactual3"){ r$counter_factual_test = "site_matching" }
+  if(names(files_list)[i] == "counterfactual4"){ r$counter_factual_test = "isolate_altitude" }
+  if(names(files_list)[i] == "counterfactual5"){ r$counter_factual_test = "isolate_FLII" }
+  if(names(files_list)[i] == "counterfactual6"){ r$counter_factual_test = "isolate_HFP" }
+  
+  # and save
+  res[[i]] = r
+  
+}
+rm(r,i,l,dat,temp,fl,f)
+
+## Convert to a dataframe
+ppc_values_cf = do.call(rbind, res)
+rm(res)
+ppc_values_cf$X = NULL # damn rownames
+
+### Now pull out the matching values from original tests
+ppc_pref = preform[preform$preference == "preferred",]
+# check if cols match 
+setdiff(names(ppc_values_cf), names(preform)) # need to add test name
+# add the test 
+ppc_pref$counter_factual_test = "original_test"
+# and select the relevant matching cols 
+ppc_pref = ppc_pref[, names(ppc_values_cf)]
+# And finally rbind the rest! 
+ppc_values_cf = rbind(ppc_pref, ppc_values_cf)
+rm(ppc_pref)
+
+```
+
+```{r Determine support for counter-factual tests}
+
+#### Bayes p-value
+## Add a column denoting if the BPV values converged based on a wide range to account for many mods 
+ppc_values_cf$BPV_valid = "No"
+ppc_values_cf$BPV_valid[ppc_values_cf$BPV.dom >= 0.15 & ppc_values_cf$BPV.dom <= 0.85 &
+                          ppc_values_cf$BPV.sub >= 0.15 & ppc_values_cf$BPV.sub <= 0.85] = "Yes"
+table(ppc_values_cf$BPV_valid[!is.na(ppc_values_cf$Interaction_Estimate)]) 
+# majority are valid, good! 
+
+#### Over-dispersion
+## add a column denoting if over dispersion remains with a wide range to account for many mods 
+ppc_values_cf$OD_valid = "No"
+ppc_values_cf$OD_valid[ppc_values_cf$Chat.dom >= 0.95 & ppc_values_cf$Chat.dom <= 1.3 &
+                         ppc_values_cf$Chat.sub >= 0.95 & ppc_values_cf$Chat.sub <= 1.3] = "Yes"
+table(ppc_values_cf$OD_valid[!is.na(ppc_values_cf$Interaction_Estimate)]) 
+## vast majority are good! 
+
+#### SIV parameter
+## add a column denoting if the species interaction parameter converged 
+ppc_values_cf$parameter_valid = "No"
+ppc_values_cf$parameter_valid[ppc_values_cf$Rhat >= 0.99 & ppc_values_cf$Rhat <= 1.2] = "Yes"
+table(ppc_values_cf$parameter_valid[!is.na(ppc_values_cf$Interaction_Estimate)])
+# majority are valid, good!
+
+## split apart species pair into sub vs dom species
+ppc_values_cf <- within(ppc_values_cf, {
+  sub_species <- sapply(strsplit(Species_Pair, "~"), function(x) x[1])
+  dom_species <- sapply(strsplit(Species_Pair, "~"), function(x) x[2])
+})
+ppc_values_cf$dom_species = gsub("DOM-", "", ppc_values_cf$dom_species)
+ppc_values_cf$sub_species = gsub("SUB-", "", ppc_values_cf$sub_species)
+
+## Add the direction of the relationship
+ppc_values_cf$direction[ppc_values_cf$sub_species %in% c("Panthera_tigris", "Panthera_pardus", "Neofelis_genus", "Cuon_alpinus")] = "bottom-up"
+ppc_values_cf$direction[ppc_values_cf$dom_species %in% c("Panthera_tigris", "Panthera_pardus","Neofelis_genus", "Cuon_alpinus")] = "top-down" # this should allow large carnivore pairings to be top-down
+
+## Assign 3 levels of non-support --> unsupported_1, unsupported_2, unsupported_3
+ppc_values_cf$support[ppc_values_cf$BPV_valid == "No" |
+                        ppc_values_cf$OD_valid == "No" |
+                        ppc_values_cf$parameter_valid == "No"] = "Unsupported_3" # lowest level of support --> bad mod.
+ppc_values_cf$support[ppc_values_cf$BPV_valid == "Yes" & 
+                        ppc_values_cf$OD_valid == "Yes" &
+                        ppc_values_cf$parameter_valid == "Yes" &
+                        ppc_values_cf$Significance == "Non-Significant"] = "Unsupported_2" # mid-low support --> good mod, but not important
+ppc_values_cf$support[ppc_values_cf$BPV_valid == "Yes" & 
+                        ppc_values_cf$OD_valid == "Yes" &
+                        ppc_values_cf$parameter_valid == "Yes" &
+                        ppc_values_cf$Significance == "Significant" &
+                        ppc_values_cf$direction == "top-down" &
+                        ppc_values_cf$Interaction_Estimate > 0] = "Unsupported_1" # almost supportive --> good model, significant result, but not in correct direction for hypothesis.  
+ppc_values_cf$support[ppc_values_cf$BPV_valid == "Yes" & 
+                        ppc_values_cf$OD_valid == "Yes" &
+                        ppc_values_cf$parameter_valid == "Yes" &
+                        ppc_values_cf$Significance == "Significant" &
+                        ppc_values_cf$direction == "bottom-up" &
+                        ppc_values_cf$Interaction_Estimate < 0] = "Unsupported_1" # Same as above, but applied for bottom-up direction. 
+## assign which models support our hypothesis
+ppc_values_cf$support[ppc_values_cf$BPV_valid == "Yes" & 
+                        ppc_values_cf$OD_valid == "Yes" &
+                        ppc_values_cf$parameter_valid == "Yes" &
+                        ppc_values_cf$Significance == "Significant" &
+                        ppc_values_cf$direction == "top-down" &
+                        ppc_values_cf$Interaction_Estimate <= 0] = "Supported" # good model, significant result, in correct direction for hypothesis.  
+ppc_values_cf$support[ppc_values_cf$BPV_valid == "Yes" & 
+                        ppc_values_cf$OD_valid == "Yes" &
+                        ppc_values_cf$parameter_valid == "Yes" &
+                        ppc_values_cf$Significance == "Significant" &
+                        ppc_values_cf$direction == "bottom-up" &
+                        ppc_values_cf$Interaction_Estimate >= 0] = "Supported" # Same as above, but applied for bottom-up direction. 
+## inspect
+table(ppc_values_cf$support);anyNA(ppc_values_cf$support) # must be F for NA! 
+
+```
+
+```{r Determine agreement across counter-factual tests}
+
+## Which species pairs have similar results across tests?
+ppc_values_cf$testing_agreement = NA
+for(i in 1:length(unique(ppc_values_cf$Species_Pair))){
+  
+  ## select data from one pair
+  dat = ppc_values_cf[ppc_values_cf$Species_Pair == unique(ppc_values_cf$Species_Pair)[i], ]
+
+  ## if all support values are the same 
+  if(length(unique(dat$support)) == 1 & 
+     length(unique(dat$counter_factual_test)) > 1){
+    
+    ## and if all of those support values are supported
+    if(unique(dat$support) == "Supported"){
+      ## update w/ good news
+      ppc_values_cf$testing_agreement[ppc_values_cf$Species_Pair == unique(ppc_values_cf$Species_Pair)[i]] = "agreement"
+    }else{
+      ## update w/ bad news
+      ppc_values_cf$testing_agreement[ppc_values_cf$Species_Pair == unique(ppc_values_cf$Species_Pair)[i]] = "disagreement"
+    } # end supported condition
+  }else{
+    ## update w/ bad news
+    ppc_values_cf$testing_agreement[ppc_values_cf$Species_Pair == unique(ppc_values_cf$Species_Pair)[i]] = "disagreement"
+  } # end length condition
+}# end per sp 
+rm(i, dat)
+
+## inspect
+anyNA(ppc_values_cf$testing_agreement) # MUST BE F
+table(ppc_values_cf$testing_agreement) # There is agreement! 
+
+# Grab all mods that agree across methods, per direction
+a = sort(unique(ppc_values_cf$Species_Pair[ppc_values_cf$testing_agreement == "agreement" & ppc_values_cf$direction == "top-down"]))
+b = sort(unique(ppc_values_cf$Species_Pair[ppc_values_cf$testing_agreement == "agreement" & ppc_values_cf$direction == "bottom-up"]))
+## organize w/ top-down first, followed by bottom-up
+agree = c(a,b)
+rm(a,b)
+
+
+# ### Finally, add simple support for easier plotting
+# ppc_values_cf$support_simple[grepl("Unsuppor", ppc_values_cf$support)] = "unsupported"
+# ppc_values_cf$support_simple[ppc_values_cf$support == "Supported" & ppc_values_cf$direction == "top-down"] = "top-down"
+# ppc_values_cf$support_simple[ppc_values_cf$support == "Supported" & ppc_values_cf$direction == "bottom-up"] = "bottom-up"
+# table(ppc_values_cf$support_simple)
+
+
+```
+
+We implemented a total of `r length(unique(ppc_values_cf$counter_factual_test)) - 1` counter-factual tests that will be compared with the original tests for a total of `r length(unique(ppc_values_cf$counter_factual_test))` tests. The key inference here will be determining which species pairs agree across all possible tests, noting that not every species pairing was able to be tested in every way. Currently, all tests have been run with the **MCMC setting `r paste(setting)`**. 
+
+* The first test, **`r paste(unique(ppc_values_cf$counter_factual_test)[1])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[1]]))` models. Based on the same criteria above for the original tests, there were `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[1]])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[1]])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[1]])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[1]])` supported models**.
+
+* The second test, **`r paste(unique(ppc_values_cf$counter_factual_test)[2])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2]]))` models. Based on the same criteria above for the original tests, there were `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2]])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2]])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2]])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2]])` supported models**.
+
+* The third test, **`r paste(unique(ppc_values_cf$counter_factual_test)[3])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3]]))` models. Based on the same criteria above for the original tests, there were `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3]])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3]])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3]])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3]])` supported models**.
+
+* The fourth test, **`r paste(unique(ppc_values_cf$counter_factual_test)[4])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4]]))` models. Based on the same criteria above for the original tests, there were `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4]])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4]])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4]])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4]])` supported models**.
+
+* The fifth test, **`r paste(unique(ppc_values_cf$counter_factual_test)[5])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5]]))` models. Based on the same criteria above for the original tests, there were `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5]])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5]])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5]])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5]])` supported models**.
+
+* The sixth test, **`r paste(unique(ppc_values_cf$counter_factual_test)[6])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6]]))` models. Based on the same criteria above for the original tests, there were `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6]])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6]])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6]])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6]])` supported models**.
+
+Finally, we assessed which species pairs agreed across the different tests and this resulted in `r length(preform$Species_Pair[preform$Species_Pair %in% agree & preform$direction == "top-down"])` top-down model and `r length(preform$Species_Pair[preform$Species_Pair %in% agree & preform$direction == "bottom-up"])` bottom-up models. **The `r length(agree)` specific species pairs that agree across different counter-factual tests are: `r paste(agree, collapse = ", ")`**.
+
+## Save results
+
+Save these results to dropbox, in this file directory: Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step3_output_combined_results 
+
+```{r Save relevant dataframes}
+
+## first, set the working directory where we will save these files
+wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step3_output_combined_results"
+
+## and grab the date! 
+day<-str_sub(Sys.Date(),-2)
+month<-str_sub(Sys.Date(),-5,-4)
+year<-str_sub(Sys.Date(),-10,-7)
+date = paste(year,month,day, sep = "")
+rm(year,month,day)
+
+
+### Coefficients data frame
+
+# make a saving path 
+path = paste(wd, "/compiled_co-abundance_coefficients_dataframe_", length(unique(coeff$Species_Pair)), "_completed_models_", date, ".csv", sep = "")
+# and save it! 
+write.csv(coeff, path)
+
+### PPC 
+
+# make a saving path 
+path = paste(wd, "/compiled_co-abundance_PPC_values_dataframe_", length(unique(coeff$Species_Pair)), "_completed_models_", date, ".csv", sep = "")
+# and save it! 
+write.csv(ppc_values, path)
+
+### Preform
+
+# make a saving path 
+path = paste(wd, "/compiled_co-abundance_preformance_and_support_dataframe_", length(unique(preform$Species_Pair[!is.na(preform$Interaction_Estimate)])), "_completed_models_", date, ".csv", sep = "")
+# and save it! 
+write.csv(preform, path)
+
+### CF coefficients
+
+# make a saving path 
+path = paste(wd, "/compiled_co-abundance_counter-factual_tests_coefficients_dataframe_", length(unique(coeff_cf$Species_Pair)), "_completed_models_", date, ".csv", sep = "")
+# and save it! 
+write.csv(coeff_cf, path)
+
+### CF PPC
+
+# make a saving path 
+path = paste(wd, "/compiled_co-abundance_counter-factual_tests_PPC_preformance_and_support_dataframe_", length(unique(coeff_cf$Species_Pair)), "_completed_models_", date, ".csv", sep = "")
+# and save it! 
+write.csv(ppc_values_cf, path)
+
+### 11 key mods for all CF tests
+
+# make a saving path 
+path = paste(wd, "/co-abundance_counter-factual_tests_PPC_preformance_and_support_for_", length(agree), "_supported_models_across_all_tests_", date, ".csv", sep = "")
+# and save it! 
+write.csv(ppc_values_cf[ppc_values_cf$Species_Pair %in% agree, ], path)
+
+
+### Also, good idea to save the 11 species we will need good prediciton graphs of later
+save = bdata[names(bdata)%in% agree]
+# make a path
+path = paste(wd, "/Bundled_data_for_co-abundance_predictions_", length(agree), "_key_species_pairs_",date, ".RDS", sep = "")
+# and save it! 
+saveRDS(save, path)
+
+```
+

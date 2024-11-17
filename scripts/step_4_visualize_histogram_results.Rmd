@@ -1,0 +1,1162 @@
+---
+title: "step 4 visualize results"
+author: "Zachary Amir"
+date: "`r Sys.time()`"
+output: html_document
+---
+
+```{r global-options, include=FALSE, warning=FALSE, error=FALSE}
+## We can knit this into a nice document! but dont include all the code unless otherwise specified (i.e. include=TRUE)
+knitr::opts_chunk$set(include=FALSE, warning=FALSE, error = FALSE)
+
+## start fresh
+rm(list = ls())
+
+## load libraries
+library(tidyverse)        ## For basic data wrangling
+library(plyr)             ## For ddply
+library(cowplot)          ## For arranging plots 
+
+```
+
+```{r Import collated model performance data from step 3}
+
+### Set the working directory where the data lives
+wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step3_output_combined_results/"
+
+## list all relevant files
+files = list.files(wd)
+
+## dont want counter-factual results (yet)
+files = files[! grepl("counter-factual", files)]
+
+### Import performance results
+p_file = files[grepl("preform", files)]
+preform = read.csv(paste(wd, p_file, sep = ""))
+
+## keep enviro clean
+rm(p_file, files) 
+
+```
+
+## Introduction
+
+This Rmarkdown file will be used to generate all key plots included in the main and supplementary text of our manuscript. Additional plots will likely be generated as well, but only the key plots will be visualized in this document. 
+
+```{r Prepare plotting data}
+
+## grab top-down mods
+td_plot_dat = preform[grepl("DOM-Large_Carnivore", preform$guild_pair),]
+
+## create a new col that is the relevant species
+td_plot_dat$rel_species = td_plot_dat$dom_species
+
+## double down for all_carns 
+a = td_plot_dat
+a$rel_species = "All_large_carnivores"
+td_plot_dat = rbind(td_plot_dat, a)
+
+
+## grab bottom-up mods
+bu_plot_dat = preform[preform$direction == "bottom-up",]
+
+## create a new col that is the relevant species
+bu_plot_dat$rel_species = bu_plot_dat$sub_species
+
+## double down for all_canrs 
+a = bu_plot_dat
+a$rel_species = "All_large_carnivores"
+bu_plot_dat = rbind(bu_plot_dat, a)
+
+## remove any models where there is also a dominant large carnivore
+bu_plot_dat = bu_plot_dat[!grepl("DOM-Large_Carnivore", bu_plot_dat$guild_pair),]
+
+## and combine them
+plot_dat = rbind(td_plot_dat, bu_plot_dat)
+rm(td_plot_dat, bu_plot_dat, a)
+
+### verify all large-carnivore pairings are top-down only
+table(plot_dat$direction[plot_dat$guild_pair == "SUB-Large_Carnivore~DOM-Large_Carnivore"]) # good! 
+
+## set order manually b/c order is silly on graph
+plot_dat$rel_species = factor(plot_dat$rel_species, levels = c("Neofelis_genus","Cuon_alpinus",
+                                                               "Panthera_pardus","Panthera_tigris",
+                                                                 "All_large_carnivores"))
+
+## create a new column for simple groupings: top-down, bottom-up and unsupported
+plot_dat$support_simple = plot_dat$direction
+plot_dat$support_simple_conserv = plot_dat$direction
+
+### edit support_simple to allow for unsupported mods
+plot_dat$support_simple[grepl("Unsupported", plot_dat$support)] = "unsupported"
+table(plot_dat$support_simple)
+
+### and do the same for conservative values
+plot_dat$support_simple_conserv[grepl("Unsupported", plot_dat$support_conserv)] = "unsupported"
+table(plot_dat$support_simple_conserv)
+
+
+## remove NA values from plot_dat if present --> from non-completed mods
+if(any(is.na(plot_dat$Interaction_Estimate))){
+  
+  plot_dat = plot_dat[! is.na(plot_dat$Interaction_Estimate), ]
+  
+}
+
+## Check if there are extreme species interaction values (> |2|)
+summary(plot_dat$Interaction_Estimate)  # some large values overall
+
+## Check pref models --> main text
+summary(plot_dat$Interaction_Estimate[plot_dat$preference == "preferred"]) # narrow range here, all good! 
+
+
+## set factors so unsupported is in the back 
+plot_dat$support_simple = factor(plot_dat$support_simple, levels = c("top-down", "bottom-up", "unsupported"))
+plot_dat$support_simple_conserv = factor(plot_dat$support_simple_conserv, levels = c("top-down", "bottom-up", "unsupported"))
+
+
+## make the support column more informative
+plot_dat$support[plot_dat$support == "Supported" & plot_dat$direction == "top-down"] = "top-down"
+plot_dat$support_conserv[plot_dat$support_conserv == "Supported" & plot_dat$direction == "top-down"] = "top-down"
+plot_dat$support[plot_dat$support == "Supported" & plot_dat$direction == "bottom-up"] = "bottom-up"
+plot_dat$support_conserv[plot_dat$support_conserv == "Supported" & plot_dat$direction == "bottom-up"] = "bottom-up"
+
+## make letters all lowercase
+plot_dat$support= tolower(plot_dat$support)
+plot_dat$support_conserv = tolower(plot_dat$support_conserv)
+
+## and set factor level 
+plot_dat$support = factor(plot_dat$support, levels = c("top-down", "bottom-up", "unsupported_1", "unsupported_2","unsupported_3"))
+plot_dat$support_conserv = factor(plot_dat$support_conserv, levels = c("top-down", "bottom-up", "unsupported_1","unsupported_2","unsupported_3"))
+
+### Verify plot_data has the correct info 
+table(plot_dat$rel_species[plot_dat$direction == "top-down"])
+table(plot_dat$rel_species[plot_dat$direction == "bottom-up"]) # all critters accounted for 
+## double check support
+table(plot_dat$support[plot_dat$direction == "top-down"])
+table(plot_dat$support_conserv[plot_dat$direction == "top-down"])
+table(plot_dat$support[plot_dat$direction == "bottom-up"])
+table(plot_dat$support_conserv[plot_dat$direction == "bottom-up"]) # All good! 
+
+### set up colors for all values 
+new_colors = c("unsupported_1" = "gray87",
+               "unsupported_2" = "gray55",
+               "unsupported_3" = "gray32",
+               "unsupported" = "gray32",
+               "top-down" = "darkorange4",
+               "bottom-up" = "springgreen4")
+
+## and finally, create a list to store all plots
+all_plots = list()
+
+```
+
+## Histograms 
+
+Histograms are a key tool for visualizing the results from many co-abundance models, by examining the count of different species interaction values (SIV) from different levels of support. Below you will see the key plots generated in this document, following the support criteria defined in step 3. Note that additional plots with more conservative PPC settings (matching those of Amir et al 2022, Ecology & Evolution) will be saved to dropbox but not visualized in this document.  
+
+```{r Visualize conceptual histogram}
+## This one will be included in the full-page figure the describe results of two competing hypotheses
+
+# Set a seed for reproducibility
+set.seed(123)
+
+# Function to generate values within a specific range
+generate_values <- function(n, mean, sd, lower_limit, upper_limit) {
+  values <- numeric(n)
+  for (i in seq_len(n)) {
+    while (TRUE) {
+      value <- rnorm(1, mean = mean, sd = sd)
+      if (value >= lower_limit & value <= upper_limit) {
+        values[i] <- value
+        break
+      }
+    }
+  }
+  return(values)
+}
+
+
+# Generate synthetic data with a bimodal distribution, limiting values to -1 to 1 for nice style
+neg <- data.frame("val" = generate_values(50, mean = -.4, sd = 0.2, 
+                                          lower_limit = -1, upper_limit = -.1), 
+                  "label" = "top-down")
+pos <- data.frame("val" = generate_values(50, mean = .4, sd = 0.2, 
+                                          lower_limit = .1, upper_limit = 1), 
+                  "label" = "bottom-up")
+unsup <- data.frame("val" = generate_values(60, mean = 0, sd = 1, 
+                                            lower_limit = -1, upper_limit = 1), 
+                    "label" = "unsupported")
+
+# Combine the dataframes
+dist <- rbind(neg, pos, unsup)
+rm(neg, pos, unsup)
+
+concept_siv_hist = 
+ggplot(dist, aes(x = val, fill = label))+
+  geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1, alpha = 1)+
+  theme_classic()+
+  geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+  scale_fill_manual(values = new_colors) +
+  labs(x = "Species Interaction Value", y = "Count", color = NULL, title = paste("CONCEPT"))+
+  guides(fill = "none") + 
+  theme(axis.text.x = element_text(size = 16),
+        axis.text.y = element_text(size = 16),
+        axis.text = element_text(color = "black"),
+        text = element_text(family = "Helvetica"))
+
+## save it in the list! 
+all_plots[[length(all_plots)+1]] = concept_siv_hist
+names(all_plots)[length(all_plots)] = "concept_siv_hist"
+
+
+# clean up
+rm(concept_siv_hist, dist, generate_values)
+
+
+```
+
+```{r Visualize community SIV histogram}
+
+## Make lists to store plots, based on settings 
+plot_list = list()
+plot_list_cons = list()
+## manually set the order
+order = c("Panthera_tigris","Panthera_pardus", "Cuon_alpinus", "Neofelis_genus")
+# grab min and max vals 
+min_val = min(plot_dat$Interaction_Estimate)
+max_val = max(plot_dat$Interaction_Estimate)
+
+for(i in 1:length(order)){
+  
+  # subset the data
+  d = plot_dat[plot_dat$rel_species == order[i], ]
+  
+  # make the plot 
+  p = ggplot(d, aes(x = Interaction_Estimate, fill = support_simple))+
+    geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1, alpha = 1)+#, position = "dodge")+
+    # theme_minimal()+
+    # theme_test()+
+    theme_classic()+
+    geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+    scale_fill_manual(values = new_colors) +
+    coord_cartesian(xlim = c(min_val, max_val))+
+    scale_y_continuous(breaks = seq(0, max(table(d$support_simple)), by = 3)) +
+    labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])+
+    theme(axis.text.x = element_text(size = 16),
+          axis.text.y = element_text(size = 16),
+          axis.text = element_text(color = "black"),
+          text = element_text(family = "Helvetica"))
+  
+  # save it! 
+  plot_list[[i]] = p
+  
+  ### Repeat for conservative values
+
+  # make the plot 
+  p = ggplot(d, aes(x = Interaction_Estimate, fill = support_simple_conserv))+
+    geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1, alpha = 1)+
+    theme_classic()+
+    geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+    scale_fill_manual(values = new_colors) +
+    coord_cartesian(xlim = c(min_val, max_val))+
+    scale_y_continuous(breaks = seq(0, max(table(d$support_simple)), by = 3)) +
+    labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])+
+    theme(axis.text.x = element_text(size = 16),
+          axis.text.y = element_text(size = 16),
+          axis.text = element_text(color = "black"),
+          text = element_text(family = "Helvetica"))
+  
+  # save it! 
+  plot_list_cons[[i]] = p
+}
+rm(d,p,i, min_val, max_val)
+
+## arrange them vertically 
+community_siv_hist = plot_grid(plotlist = plot_list, align = "v", 
+                               ncol = 1, nrow = length(plot_list)) 
+all_plots[[length(all_plots)+1]] = community_siv_hist
+names(all_plots)[length(all_plots)] = "community_siv_hist"
+
+## arrange them vertically 
+community_siv_hist_cons = plot_grid(plotlist = plot_list_cons, align = "v", 
+                                    ncol = 1, nrow = length(plot_list_cons)) 
+all_plots[[length(all_plots)+1]] = community_siv_hist_cons
+names(all_plots)[length(all_plots)] = "community_siv_hist_cons"
+
+## And make one bigger plot for all large carnivores for the community, conservative and not. 
+# regular
+community_siv_all_large_carns_hist = 
+  ggplot(plot_dat[plot_dat$rel_species == "All_large_carnivores" ,], aes(x = Interaction_Estimate, fill = support_simple))+
+  geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1, alpha = 1)+
+  theme_classic()+
+  geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+  scale_fill_manual(values = new_colors) +
+  scale_y_continuous(breaks = seq(0, max(table(plot_dat$support_simple[plot_dat$rel_species == "All_large_carnivores" & plot_dat$Interaction_Estimate > -3])), by = 5)) + 
+  labs(x = "Species Interaction Value", y = "Count", color = NULL, title = paste("all large carnivores and all prey"))+
+  guides(fill = "none") + 
+  theme(axis.text.x = element_text(size = 16),
+        axis.text.y = element_text(size = 16),
+        axis.text = element_text(color = "black"),
+        text = element_text(family = "Helvetica"))
+# save it!
+all_plots[[length(all_plots)+1]] = community_siv_all_large_carns_hist
+names(all_plots)[length(all_plots)] = "community_siv_all_large_carns_hist"
+
+## and now conservative
+community_siv_all_large_carns_hist_cons = 
+  ggplot(plot_dat[plot_dat$rel_species == "All_large_carnivores" ,], aes(x = Interaction_Estimate, fill = support_simple_conserv))+
+  geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1, alpha = 1)+
+  theme_classic()+
+  geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+  scale_fill_manual(values = new_colors) +
+  scale_y_continuous(breaks = seq(0, max(table(plot_dat$support_simple_conserv[plot_dat$rel_species == "All_large_carnivores" & plot_dat$Interaction_Estimate > -3])), by = 5)) + 
+  labs(x = "Species Interaction Value", y = "Count", color = NULL, title = paste("all large carnivores and all prey conservative support"))+
+  guides(fill = "none") + 
+  theme(axis.text.x = element_text(size = 16),
+        axis.text.y = element_text(size = 16),
+        axis.text = element_text(color = "black"),
+        text = element_text(family = "Helvetica"))
+# save it!
+all_plots[[length(all_plots)+1]] = community_siv_all_large_carns_hist_cons
+names(all_plots)[length(all_plots)] = "community_siv_all_large_carns_hist_cons"
+
+## clean up enviro
+rm(community_siv_hist_cons, community_siv_all_large_carns_hist, community_siv_hist, community_siv_all_large_carns_hist_cons, plot_list, plot_list_cons)
+
+```
+
+```{r Visualize preferred SIV histogram}
+
+##### Repeat for preferred prey species too! 
+td_dat_pref = plot_dat[plot_dat$direction == "top-down" &
+                         plot_dat$preference == "preferred",]
+# insepct
+unique(td_dat_pref$rel_species) # all large carns already accounted for in plot dat! 
+
+## inspect
+table(td_dat_pref$support);table(td_dat_pref$support_conserv) # all good! 
+
+
+#
+##
+### Repeat the process for bottom-up 
+bu_dat_pref = plot_dat[plot_dat$direction == "bottom-up"&
+                         plot_dat$preference == "preferred",]
+# insepct
+unique(bu_dat_pref$rel_species) # all large carns already accounted for in plot dat! 
+
+## inspect
+table(bu_dat_pref$support);table(bu_dat_pref$support_conserv) # all good! 
+
+## and combine them
+pref_dat = rbind(td_dat_pref, bu_dat_pref)
+rm(td_dat_pref, bu_dat_pref)
+
+## inspect
+summary(pref_dat$Interaction_Estimate) # small range
+anyNA(pref_dat) # MUST be F
+table(pref_dat$rel_species) #looks good! 
+
+## set factor levels for order on graph
+pref_dat$support_simple = factor(pref_dat$support_simple, 
+                           levels = c("top-down", "bottom-up","unsupported"))
+pref_dat$support_simple_conserv = factor(pref_dat$support_simple_conserv, 
+                                         levels = c("top-down", "bottom-up","unsupported"))
+
+table(pref_dat$support_simple);table(pref_dat$support_simple_conserv)
+anyNA(pref_dat$support_simple);anyNA(pref_dat$support_simple_conserv) # must be F! 
+
+## Create lists to store plots
+plot_list = list()
+plot_list_cons = list()
+
+# grab min and max vals 
+min_val = min(pref_dat$Interaction_Estimate)
+max_val = max(pref_dat$Interaction_Estimate)
+for(i in 1:length(order)){
+  
+  # subset the data
+  d = pref_dat[pref_dat$rel_species == order[i], ]
+  
+  # determine y-axis spacing based on species name --> CL has too many observations! 
+  by_value <- if (order[i] != "Neofelis_genus") 1 else 2
+  
+  # make the plot 
+  p = ggplot(d, aes(x = Interaction_Estimate, fill = support_simple))+
+    geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1, alpha = 1)+
+    theme_classic()+
+    geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+    scale_fill_manual(values = new_colors) +
+    scale_y_continuous(breaks = seq(0, max(table(d$support_simple)), by = by_value)) + 
+    coord_cartesian(xlim = c(min_val, max_val))+
+    labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])+
+    theme(axis.text.x = element_text(size = 16),
+          axis.text.y = element_text(size = 16),
+          axis.text = element_text(color = "black"),
+          text = element_text(family = "Helvetica"))
+  
+  
+  
+  # save it! 
+  plot_list[[i]] = p
+  
+  ### Repeat for liberal values
+  
+  # make the plot 
+  p = ggplot(d, aes(x = Interaction_Estimate, fill = support_simple_conserv))+
+    geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1, alpha = 1)+
+    theme_classic()+
+    geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+    scale_fill_manual(values = new_colors) +
+    scale_y_continuous(breaks = seq(0, max(table(d$support_simple_conserv)), by = by_value)) + 
+    coord_cartesian(xlim = c(min_val, max_val))+
+    labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])+
+    theme(axis.text.x = element_text(size = 16),
+          axis.text.y = element_text(size = 16),
+          axis.text = element_text(color = "black"),
+          text = element_text(family = "Helvetica"))
+  
+  # save it! 
+  plot_list_cons[[i]] = p
+}
+rm(d,p,i, min_val, max_val)
+
+## arrange them vertically 
+preferred_siv_hist = plot_grid(plotlist = plot_list, align = "v",
+                               ncol = 1, nrow = length(plot_list)) 
+# save it!
+all_plots[[length(all_plots)+1]] = preferred_siv_hist
+names(all_plots)[length(all_plots)] = "preferred_siv_hist"
+
+## repeat for conservative grouping
+preferred_siv_hist_cons = plot_grid(plotlist = plot_list_cons, align = "v", 
+                                    ncol = 1, nrow = length(plot_list)) 
+# save it! 
+all_plots[[length(all_plots)+1]] = preferred_siv_hist_cons
+names(all_plots)[length(all_plots)] = "preferred_siv_hist_cons"
+
+
+## When making nice all large carn hist, remove one unsupported outlier 
+prob_pair_pref = unique(pref_dat$Species_Pair[pref_dat$Interaction_Estimate > 1.6])
+
+## custom-make all large carnivore graph for sizing
+preferred_siv_all_large_carns_hist = 
+  ggplot(pref_dat[pref_dat$rel_species == "All_large_carnivores" & # remove one unsupported outlier 
+                    !pref_dat$Species_Pair %in%  prob_pair_pref,],
+         aes(x = Interaction_Estimate, fill = support_simple))+
+  geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1, alpha = 1)+
+  theme_classic()+
+  geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+  scale_fill_manual(values = new_colors) +
+  scale_y_continuous(breaks = seq(0, max(table(pref_dat$support_simple[pref_dat$rel_species == "All_large_carnivores"])), by = 2)) + 
+  labs(x = "Species Interaction Value", y = "Count", color = NULL, title = paste("all large carnivores and preferred prey"))+
+  guides(fill = "none") + 
+  coord_cartesian()+
+  theme(axis.text.x = element_text(size = 16),
+        axis.text.y = element_text(size = 16),
+        axis.text = element_text(color = "black"),
+        text = element_text(family = "Helvetica"))
+# Save it! 
+all_plots[[length(all_plots)+1]] = preferred_siv_all_large_carns_hist
+names(all_plots)[length(all_plots)] = "preferred_siv_all_large_carns_hist"
+
+
+## and remake w/ conservative settings
+preferred_siv_all_large_carns_hist_cons = 
+  ggplot(pref_dat[pref_dat$rel_species == "All_large_carnivores" & # remove one unsupported outlier 
+                    !pref_dat$Species_Pair %in%  prob_pair_pref,],
+         aes(x = Interaction_Estimate, fill = support_simple_conserv))+
+  geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1, alpha = 1)+
+  theme_classic()+
+  geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+  scale_fill_manual(values = new_colors) +
+  scale_y_continuous(breaks = seq(0, max(table(pref_dat$support_simple_conserv[pref_dat$rel_species == "All_large_carnivores"])), by = 2)) + 
+  labs(x = "Species Interaction Value", y = "Count", color = NULL, title = paste("all large carnivores and preferred prey"))+
+  guides(fill = "none") + 
+  coord_cartesian()+
+  theme(axis.text.x = element_text(size = 16),
+        axis.text.y = element_text(size = 16),
+        axis.text = element_text(color = "black"),
+        text = element_text(family = "Helvetica"))
+# save it! 
+all_plots[[length(all_plots)+1]] = preferred_siv_all_large_carns_hist_cons
+names(all_plots)[length(all_plots)] = "preferred_siv_all_large_carns_hist_cons"
+
+# clean up environment
+rm(preferred_siv_all_large_carns_hist, preferred_siv_all_large_carns_hist_cons, preferred_siv_hist_cons, preferred_siv_hist, plot_list, plot_list_cons)
+
+```
+
+```{r Summarize information from SIV histograms}
+
+## The goal here is to create a dataframe describing how many models fall into each category on the grouping, which can be added as mroe info to the figure (in ppt)
+
+### determine percentages in each category
+perc_table = ddply(plot_dat, .(rel_species, support_simple), summarize,
+                   num_lvl = length(Species_Pair))
+# then total number of mods per species
+perc_table$num_total[perc_table$rel_species == "Neofelis_genus"] = 
+  sum(perc_table$num_lvl[perc_table$rel_species == "Neofelis_genus"])
+perc_table$num_total[perc_table$rel_species == "Cuon_alpinus"] = 
+  sum(perc_table$num_lvl[perc_table$rel_species == "Cuon_alpinus"])
+perc_table$num_total[perc_table$rel_species == "Panthera_pardus"] = 
+  sum(perc_table$num_lvl[perc_table$rel_species == "Panthera_pardus"])
+perc_table$num_total[perc_table$rel_species == "Panthera_tigris"] = 
+  sum(perc_table$num_lvl[perc_table$rel_species == "Panthera_tigris"])
+perc_table$num_total[perc_table$rel_species == "All_large_carnivores"] = 
+  sum(perc_table$num_lvl[perc_table$rel_species == "All_large_carnivores"])
+# finally calulate the percent-
+perc_table$percent = round(perc_table$num_lvl / perc_table$num_total * 100, 1)
+## add the PPC settings
+perc_table$PPC_setting = "normal"
+## and the preference type 
+perc_table$preference = "community"
+
+
+### repeat for the conservative grouping
+perc_table_cons = ddply(plot_dat, .(rel_species, support_simple_conserv), summarize,
+                   num_lvl = length(Species_Pair))
+# then total number of mods per species
+perc_table_cons$num_total[perc_table_cons$rel_species == "Neofelis_genus"] = 
+  sum(perc_table_cons$num_lvl[perc_table_cons$rel_species == "Neofelis_genus"])
+perc_table_cons$num_total[perc_table_cons$rel_species == "Cuon_alpinus"] = 
+  sum(perc_table_cons$num_lvl[perc_table_cons$rel_species == "Cuon_alpinus"])
+perc_table_cons$num_total[perc_table_cons$rel_species == "Panthera_pardus"] = 
+  sum(perc_table_cons$num_lvl[perc_table_cons$rel_species == "Panthera_pardus"])
+perc_table_cons$num_total[perc_table_cons$rel_species == "Panthera_tigris"] = 
+  sum(perc_table_cons$num_lvl[perc_table_cons$rel_species == "Panthera_tigris"])
+perc_table_cons$num_total[perc_table_cons$rel_species == "All_large_carnivores"] = 
+  sum(perc_table_cons$num_lvl[perc_table_cons$rel_species == "All_large_carnivores"])
+# finally calulate the percent-
+perc_table_cons$percent = round(perc_table_cons$num_lvl / perc_table_cons$num_total * 100, 1)
+## add the PPC settings
+perc_table_cons$PPC_setting = "conservative"
+## and the preference type 
+perc_table_cons$preference = "community"
+
+## match col names for easier binding
+names(perc_table)[2] = "support_levels"
+names(perc_table_cons)[2] = "support_levels"
+
+#
+##
+### Repeat for preferred species
+##
+#
+
+### determine percentages in each preferred prey category
+pref_perc_table = ddply(pref_dat, .(rel_species, support_simple), summarize,
+                   num_lvl = length(Species_Pair))
+# then total number of mods per species
+pref_perc_table$num_total[pref_perc_table$rel_species == "Neofelis_genus"] = 
+  sum(pref_perc_table$num_lvl[pref_perc_table$rel_species == "Neofelis_genus"])
+pref_perc_table$num_total[pref_perc_table$rel_species == "Cuon_alpinus"] = 
+  sum(pref_perc_table$num_lvl[pref_perc_table$rel_species == "Cuon_alpinus"])
+pref_perc_table$num_total[pref_perc_table$rel_species == "Panthera_pardus"] = 
+  sum(pref_perc_table$num_lvl[pref_perc_table$rel_species == "Panthera_pardus"])
+pref_perc_table$num_total[pref_perc_table$rel_species == "Panthera_tigris"] = 
+  sum(pref_perc_table$num_lvl[pref_perc_table$rel_species == "Panthera_tigris"])
+pref_perc_table$num_total[pref_perc_table$rel_species == "All_large_carnivores"] = 
+  sum(pref_perc_table$num_lvl[pref_perc_table$rel_species == "All_large_carnivores"])
+# finally calulate the percent-
+pref_perc_table$percent = round(pref_perc_table$num_lvl / pref_perc_table$num_total * 100, 1)
+# add the PPC setting
+pref_perc_table$PPC_setting = "normal"
+# and the preference
+pref_perc_table$preference = "preferred"
+
+### Repeat for conservative groupings
+pref_perc_table_cons = ddply(pref_dat, .(rel_species, support_simple_conserv), summarize,
+                   num_lvl = length(Species_Pair))
+# then total number of mods per species
+pref_perc_table_cons$num_total[pref_perc_table_cons$rel_species == "Neofelis_genus"] = 
+  sum(pref_perc_table_cons$num_lvl[pref_perc_table_cons$rel_species == "Neofelis_genus"])
+pref_perc_table_cons$num_total[pref_perc_table_cons$rel_species == "Cuon_alpinus"] = 
+  sum(pref_perc_table_cons$num_lvl[pref_perc_table_cons$rel_species == "Cuon_alpinus"])
+pref_perc_table_cons$num_total[pref_perc_table_cons$rel_species == "Panthera_pardus"] = 
+  sum(pref_perc_table_cons$num_lvl[pref_perc_table_cons$rel_species == "Panthera_pardus"])
+pref_perc_table_cons$num_total[pref_perc_table_cons$rel_species == "Panthera_tigris"] = 
+  sum(pref_perc_table_cons$num_lvl[pref_perc_table_cons$rel_species == "Panthera_tigris"])
+pref_perc_table_cons$num_total[pref_perc_table_cons$rel_species == "All_large_carnivores"] = 
+  sum(pref_perc_table_cons$num_lvl[pref_perc_table_cons$rel_species == "All_large_carnivores"])
+# finally calulate the percent-
+pref_perc_table_cons$percent = round(pref_perc_table_cons$num_lvl / pref_perc_table_cons$num_total * 100, 1)
+## add the PPC setting
+pref_perc_table_cons$PPC_setting = "conservative"
+# and the preference
+pref_perc_table_cons$preference = "preferred"
+
+## re-name cols to save
+names(pref_perc_table_cons)[2] = "support_levels"
+names(pref_perc_table)[2] = "support_levels"
+
+## rbind all of them together
+res_table = rbind(pref_perc_table, pref_perc_table_cons, perc_table_cons, perc_table)
+rm(pref_perc_table, pref_perc_table_cons, perc_table_cons, perc_table)
+
+
+
+```
+
+```{r Visualize unsupported SIV histogram}
+## These graphs are split between top-down and bottom-up models 
+
+### Top-down & preferred non-support first 
+
+## subset rel_species for top-down models 
+table(plot_dat$direction)
+td_dat = plot_dat[plot_dat$direction == "top-down" &
+                    plot_dat$preference == "preferred",]
+table(td_dat$support); table(td_dat$support_conserv) # should have zero bottom-ups! 
+
+## Create lists to store results 
+plot_list = list()
+plot_list_cons = list()
+
+# grab min and max vals 
+min_val = min(td_dat$Interaction_Estimate[grepl("unsupport", td_dat$support) ])
+max_val = max(td_dat$Interaction_Estimate[grepl("unsupport", td_dat$support) ])
+min_val_cons = min(td_dat$Interaction_Estimate[grepl("unsupport", td_dat$support_conserv) ])
+max_val_cons = max(td_dat$Interaction_Estimate[grepl("unsupport", td_dat$support_conserv) ])
+
+for(i in 1:length(order)){
+  
+  # subset the data
+  d = td_dat[grepl("unsupport", td_dat$support) &
+               td_dat$rel_species == order[i], ]
+  
+  # make the plot 
+  p = ggplot(d, aes(x = Interaction_Estimate, fill = support))+
+    geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1, alpha = 1)+
+    theme_classic()+
+    geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+    scale_fill_manual(values = new_colors) +
+    scale_y_continuous(breaks = seq(0, max(table(d$support)), by = 1)) + 
+    coord_cartesian(xlim = c(min_val, max_val)) +
+    labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])+
+    theme(axis.text.x = element_text(size = 16),
+          axis.text.y = element_text(size = 16),
+          axis.text = element_text(color = "black"),
+          text = element_text(family = "Helvetica"))
+  
+  # save it! 
+  plot_list[[i]] = p
+  
+  ### Repeat for conservative values
+  
+  # subset the data
+  d = td_dat[grepl("unsupport", td_dat$support_conserv) &
+               td_dat$rel_species == order[i], ]
+  
+  # make the plot 
+  p = ggplot(d, aes(x = Interaction_Estimate, fill = support_conserv))+
+    geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1, alpha = 1)+
+    theme_classic()+
+    geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+    scale_fill_manual(values = new_colors) +
+    scale_y_continuous(breaks = seq(0, max(table(d$support)), by = 1)) + 
+    coord_cartesian(xlim = c(min_val_cons, max_val_cons))+
+    labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])+
+    theme(axis.text.x = element_text(size = 16),
+          axis.text.y = element_text(size = 16),
+          axis.text = element_text(color = "black"),
+          text = element_text(family = "Helvetica"))
+  
+  # save it! 
+  plot_list_cons[[i]] = p
+  
+}
+rm(d,p,i, min_val, max_val, min_val_cons, max_val_cons)
+
+## arrange them vertically
+unsup_top_down_siv_hists = plot_grid(plotlist = plot_list, align = "v",
+                               ncol = 1, nrow = length(plot_list))
+# save it! 
+all_plots[[length(all_plots)+1]] = unsup_top_down_siv_hists
+names(all_plots)[length(all_plots)] = "unsup_top_down_siv_hists"
+
+ ## repeat for the conservative plots 
+unsup_top_down_siv_hists_cons = plot_grid(plotlist = plot_list_cons, align = "v",
+                                          ncol = 1, nrow = length(plot_list))
+# save it! 
+all_plots[[length(all_plots)+1]] = unsup_top_down_siv_hists_cons
+names(all_plots)[length(all_plots)] = "unsup_top_down_siv_hists_cons"
+
+
+
+### Bottom-up & preferred non-support next 
+
+## subset plot_dat for bottom-up models 
+table(plot_dat$direction)
+bu_dat = plot_dat[plot_dat$direction == "bottom-up" &
+                    plot_dat$preference == "preferred",]
+table(bu_dat$support); table(bu_dat$support_conserv) # Must have zero top-downs! 
+
+## frequency plot version --> make one for each species 
+plot_list = list()
+plot_list_cons = list()
+
+# grab min and max vals 
+min_val = min(bu_dat$Interaction_Estimate[grepl("unsupport", bu_dat$support)])
+max_val = max(bu_dat$Interaction_Estimate[grepl("unsupport", bu_dat$support)])
+min_val_cons = min(bu_dat$Interaction_Estimate[grepl("unsupport", bu_dat$support_conserv)])
+max_val_cons = max(bu_dat$Interaction_Estimate[grepl("unsupport", bu_dat$support_conserv)])
+
+for(i in 1:length(order)){
+  
+  # subset the data
+  d = bu_dat[grepl("unsupport", bu_dat$support) &
+               bu_dat$rel_species == order[i], ]
+  
+  # make the plot 
+  p = ggplot(d, aes(x = Interaction_Estimate, fill = support))+
+    geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1, alpha = 1)+#, position = "dodge")+
+    # theme_minimal()+
+    # theme_test()+
+    theme_classic()+
+    geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+    scale_fill_manual(values = new_colors) +
+    scale_y_continuous(breaks = seq(0, max(table(d$support)), by = 1)) + 
+    coord_cartesian(xlim = c(min_val, max_val))+
+    labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])+
+    theme(axis.text.x = element_text(size = 16),
+          axis.text.y = element_text(size = 16),
+          axis.text = element_text(color = "black"),
+          text = element_text(family = "Helvetica"))
+  
+  # save it! 
+  plot_list[[i]] = p
+  
+  ### Repeat for conservative values
+  
+  # subset the data
+  d = bu_dat[grepl("unsupport", bu_dat$support_conserv) &
+               bu_dat$rel_species == order[i], ]
+  
+  # make the plot 
+  p = ggplot(d, aes(x = Interaction_Estimate, fill = support_conserv))+
+    geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1, alpha = 1)+
+    theme_classic()+
+    geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+    scale_fill_manual(values = new_colors) +
+    scale_y_continuous(breaks = seq(0, max(table(d$support)), by = 1)) + 
+    coord_cartesian(xlim = c(min_val_cons, max_val_cons))+
+    labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL, title = order[i])+
+    theme(axis.text.x = element_text(size = 16),
+          axis.text.y = element_text(size = 16),
+          axis.text = element_text(color = "black"),
+          text = element_text(family = "Helvetica"))
+  
+  # save it! 
+  plot_list_cons[[i]] = p
+  
+}
+rm(d,p,i, min_val, max_val, min_val_cons, max_val_cons)
+
+## arrange them vertically 
+unsup_bottom_up_siv_hists = plot_grid(plotlist = plot_list, align = "v", 
+                                      ncol = 1, nrow = length(plot_list))
+# save it! 
+all_plots[[length(all_plots)+1]] = unsup_bottom_up_siv_hists
+names(all_plots)[length(all_plots)] = "unsup_bottom_up_siv_hists"
+
+
+## repeat for the conservative plots 
+unsup_bottom_up_siv_hists_cons = plot_grid(plotlist = plot_list_cons, align = "v",
+                                           ncol = 1, nrow = length(plot_list))
+# save it! 
+all_plots[[length(all_plots)+1]] = unsup_bottom_up_siv_hists_cons
+names(all_plots)[length(all_plots)] = "unsup_bottom_up_siv_hists_cons"
+
+## keep it clean 
+rm(plot_list, plot_list_cons, unsup_top_down_siv_hists_cons, unsup_top_down_siv_hists, unsup_bottom_up_siv_hists_cons, unsup_bottom_up_siv_hists, by_value)
+
+
+```
+
+```{r Summarize info from unsupported SIV histograms}
+
+## summarize percentages in each non-supported category, which will be added to graphs manually in ppt
+# first how many mods per species per support
+top_down_nonsupport = ddply(td_dat[grepl("unsupported", td_dat$support), ], .(rel_species, support), summarize,
+                            num_lvl = length(Species_Pair))
+# then total number of mods per species
+top_down_nonsupport$num_total[top_down_nonsupport$rel_species == "Neofelis_genus"] = 
+  sum(top_down_nonsupport$num_lvl[top_down_nonsupport$rel_species == "Neofelis_genus"])
+top_down_nonsupport$num_total[top_down_nonsupport$rel_species == "Cuon_alpinus"] = 
+  sum(top_down_nonsupport$num_lvl[top_down_nonsupport$rel_species == "Cuon_alpinus"])
+top_down_nonsupport$num_total[top_down_nonsupport$rel_species == "Panthera_pardus"] = 
+  sum(top_down_nonsupport$num_lvl[top_down_nonsupport$rel_species == "Panthera_pardus"])
+top_down_nonsupport$num_total[top_down_nonsupport$rel_species == "Panthera_tigris"] = 
+  sum(top_down_nonsupport$num_lvl[top_down_nonsupport$rel_species == "Panthera_tigris"])
+top_down_nonsupport$num_total[top_down_nonsupport$rel_species == "All_large_carnivores"] = 
+  sum(top_down_nonsupport$num_lvl[top_down_nonsupport$rel_species == "All_large_carnivores"])
+# finally calulate the percent-
+top_down_nonsupport$percent = round(top_down_nonsupport$num_lvl / top_down_nonsupport$num_total * 100, 2)
+## add the PPC settings
+top_down_nonsupport$PPC_setting = "normal"
+## and the direction
+top_down_nonsupport$direction = "top-down"
+
+
+### remake w/ conservative values
+top_down_nonsupport_cons = ddply(td_dat[grepl("unsupported", td_dat$support_conserv), ], .(rel_species, support_conserv), summarize,
+                            num_lvl = length(Species_Pair))
+# then total number of mods per species
+top_down_nonsupport_cons$num_total[top_down_nonsupport_cons$rel_species == "Neofelis_genus"] = 
+  sum(top_down_nonsupport_cons$num_lvl[top_down_nonsupport_cons$rel_species == "Neofelis_genus"])
+top_down_nonsupport_cons$num_total[top_down_nonsupport_cons$rel_species == "Cuon_alpinus"] = 
+  sum(top_down_nonsupport_cons$num_lvl[top_down_nonsupport_cons$rel_species == "Cuon_alpinus"])
+top_down_nonsupport_cons$num_total[top_down_nonsupport_cons$rel_species == "Panthera_pardus"] = 
+  sum(top_down_nonsupport_cons$num_lvl[top_down_nonsupport_cons$rel_species == "Panthera_pardus"])
+top_down_nonsupport_cons$num_total[top_down_nonsupport_cons$rel_species == "Panthera_tigris"] = 
+  sum(top_down_nonsupport_cons$num_lvl[top_down_nonsupport_cons$rel_species == "Panthera_tigris"])
+top_down_nonsupport_cons$num_total[top_down_nonsupport_cons$rel_species == "All_large_carnivores"] = 
+  sum(top_down_nonsupport_cons$num_lvl[top_down_nonsupport_cons$rel_species == "All_large_carnivores"])
+# finally calulate the percent-
+top_down_nonsupport_cons$percent = round(top_down_nonsupport_cons$num_lvl / top_down_nonsupport_cons$num_total * 100, 2)
+## add the PPC settings
+top_down_nonsupport_cons$PPC_setting = "conservative"
+## and the direction
+top_down_nonsupport_cons$direction = "top-down"
+
+## standardize support column for easy rbinding
+names(top_down_nonsupport)[2] = "support_levels"
+names(top_down_nonsupport_cons)[2] = "support_levels"
+
+## and combine 
+top_down_nonsupport = rbind(top_down_nonsupport, top_down_nonsupport_cons)
+
+#
+##
+###
+#### Now repeat for bottom-up
+###
+##
+#
+
+# summarize percentages in each non-supported category, which will be added to graphs manually in ppt
+# first how many mods per species per support
+bottom_up_nonsupport = ddply(bu_dat[grepl("unsupport", bu_dat$support), ], .(rel_species, support), summarize,
+                            num_lvl = length(Species_Pair))
+# then total number of mods per species
+bottom_up_nonsupport$num_total[bottom_up_nonsupport$rel_species == "Neofelis_genus"] = 
+  sum(bottom_up_nonsupport$num_lvl[bottom_up_nonsupport$rel_species == "Neofelis_genus"])
+bottom_up_nonsupport$num_total[bottom_up_nonsupport$rel_species == "Cuon_alpinus"] = 
+  sum(bottom_up_nonsupport$num_lvl[bottom_up_nonsupport$rel_species == "Cuon_alpinus"])
+bottom_up_nonsupport$num_total[bottom_up_nonsupport$rel_species == "Panthera_pardus"] = 
+  sum(bottom_up_nonsupport$num_lvl[bottom_up_nonsupport$rel_species == "Panthera_pardus"])
+bottom_up_nonsupport$num_total[bottom_up_nonsupport$rel_species == "Panthera_tigris"] = 
+  sum(bottom_up_nonsupport$num_lvl[bottom_up_nonsupport$rel_species == "Panthera_tigris"])
+bottom_up_nonsupport$num_total[bottom_up_nonsupport$rel_species == "All_large_carnivores"] = 
+  sum(bottom_up_nonsupport$num_lvl[bottom_up_nonsupport$rel_species == "All_large_carnivores"])
+# calulate the percent-
+bottom_up_nonsupport$percent = round(bottom_up_nonsupport$num_lvl / bottom_up_nonsupport$num_total * 100, 2)
+## add the PPC settings
+bottom_up_nonsupport$PPC_setting = "normal"
+## and the direction
+bottom_up_nonsupport$direction = "bottom-up"
+
+
+#### Repeat w/ conservative groupings 
+## summarize percentages in each non-supported category, which will be added to graphs manually in ppt
+# first how many mods per species per support
+bottom_up_nonsupport_cons = ddply(bu_dat[grepl("unsupport", bu_dat$support_conserv), ], .(rel_species, support_conserv), summarize,
+                             num_lvl = length(Species_Pair))
+# then total number of mods per species
+bottom_up_nonsupport_cons$num_total[bottom_up_nonsupport_cons$rel_species == "Neofelis_genus"] = 
+  sum(bottom_up_nonsupport_cons$num_lvl[bottom_up_nonsupport_cons$rel_species == "Neofelis_genus"])
+bottom_up_nonsupport_cons$num_total[bottom_up_nonsupport_cons$rel_species == "Cuon_alpinus"] = 
+  sum(bottom_up_nonsupport_cons$num_lvl[bottom_up_nonsupport_cons$rel_species == "Cuon_alpinus"])
+bottom_up_nonsupport_cons$num_total[bottom_up_nonsupport_cons$rel_species == "Panthera_pardus"] = 
+  sum(bottom_up_nonsupport_cons$num_lvl[bottom_up_nonsupport_cons$rel_species == "Panthera_pardus"])
+bottom_up_nonsupport_cons$num_total[bottom_up_nonsupport_cons$rel_species == "Panthera_tigris"] = 
+  sum(bottom_up_nonsupport_cons$num_lvl[bottom_up_nonsupport_cons$rel_species == "Panthera_tigris"])
+bottom_up_nonsupport_cons$num_total[bottom_up_nonsupport_cons$rel_species == "All_large_carnivores"] = 
+  sum(bottom_up_nonsupport_cons$num_lvl[bottom_up_nonsupport_cons$rel_species == "All_large_carnivores"])
+# finally calulate the percent-
+bottom_up_nonsupport_cons$percent = round(bottom_up_nonsupport_cons$num_lvl / bottom_up_nonsupport_cons$num_total * 100, 2)
+## add the PPC settings
+bottom_up_nonsupport_cons$PPC_setting = "conservative"
+## and the direction
+bottom_up_nonsupport_cons$direction = "bottom-up"
+
+## standardize col names for easier rbinding
+names(bottom_up_nonsupport)[2] = "support_levels"
+names(bottom_up_nonsupport_cons)[2] = "support_levels"
+
+## rbind them together
+bottom_up_nonsupport = rbind(bottom_up_nonsupport, bottom_up_nonsupport_cons)
+
+## combine with top-down 
+nonsupport = rbind(top_down_nonsupport, bottom_up_nonsupport)
+
+# inspect
+table(nonsupport$PPC_setting) # makes sense to have less levels for conservative b/c more supported results 
+table(nonsupport$direction)
+
+## order by PPC setting before saving
+nonsupport = nonsupport[order(nonsupport$PPC_setting),]
+
+## add the preference just to be totally clear! 
+nonsupport$preference = "preferred"
+
+## keep it clean 
+rm(top_down_nonsupport_cons, top_down_nonsupport, bottom_up_nonsupport, bottom_up_nonsupport_cons, td_dat, bu_dat)
+
+```
+
+The first plot visualized the conceptual outcome of our hypotheses. If our top-down hypothesis is supported, then the majority of SIVs would be significant and negative. If our bottom-up hypothesis is supported, then the majority of SIVs would be significant and positive. 
+```{r Include concept in output, echo=FALSE, include=TRUE, results='asis'}
+all_plots$concept_siv_hist
+```
+
+The next plot is the pooled results from **preferred predator prey models** where all models are combined into a single histogram. The supported top-down results include `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == "All_large_carnivores" & res_table$support_levels == "top-down"]` models, which is `r res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == "All_large_carnivores" & res_table$support_levels == "top-down"]` percent of the available models. The supported bottom-up results include `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == "All_large_carnivores" & res_table$support_levels == "bottom-up"]` models, which is `r res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == "All_large_carnivores" & res_table$support_levels == "bottom-up"]` percent of the available models. Finally, the unsupported results include `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == "All_large_carnivores" & res_table$support_levels == "unsupported"]` models, which is `r res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == "All_large_carnivores" & res_table$support_levels == "unsupported"]` percent of the available models. 
+
+```{r Include preferred histogram of all large carnivores in output, echo=FALSE, include=TRUE, results='asis'}
+all_plots$preferred_siv_all_large_carns_hist
+```
+
+The next plot includes all of the preferred predator prey models (same as above), but this time split between the four large carnivore species. **Note that one outlying species pair has been removed from the histogram to enhance the style.** The missing species pair is `r prob_pair_pref` with support level `r preform$support[preform$Species_Pair == prob_pair_pref]` and a SIV of `r preform$Interaction_Estimate[preform$Species_Pair == prob_pair_pref]` with a standard deviation of `r preform$SD[preform$Species_Pair == prob_pair_pref]`. 
+
+* The results for `r unique(res_table$rel_species)[4]` include `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[4] & res_table$support_levels == "top-down"]` supported top-down models (`r paste(res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[4] & res_table$support_levels == "top-down"], "%", sep = "")`), `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[4] & res_table$support_levels == "bottom-up"]` supported bottom-up models (`r paste(res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[4] & res_table$support_levels == "bottom-up"], "%", sep = "")`), and `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[4] & res_table$support_levels == "unsupported"]` unsupported models (`r paste(res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[4] & res_table$support_levels == "unsupported"], "%", sep = "")`). 
+
+* The results for `r unique(res_table$rel_species)[3]` include `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[3] & res_table$support_levels == "top-down"]` supported top-down models (`r paste(res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[3] & res_table$support_levels == "top-down"], "%", sep = "")`), `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[3] & res_table$support_levels == "bottom-up"]` supported bottom-up models (`r paste(res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[3] & res_table$support_levels == "bottom-up"], "%", sep = "")`), and `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[3] & res_table$support_levels == "unsupported"]` unsupported models (`r paste(res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[3] & res_table$support_levels == "unsupported"], "%", sep = "")`). 
+
+* The results for `r unique(res_table$rel_species)[2]` include `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[2] & res_table$support_levels == "top-down"]` supported top-down models (`r paste(res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[2] & res_table$support_levels == "top-down"], "%", sep = "")`), `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[2] & res_table$support_levels == "bottom-up"]` supported bottom-up models (`r paste(res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[2] & res_table$support_levels == "bottom-up"], "%", sep = "")`), and `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[2] & res_table$support_levels == "unsupported"]` unsupported models (`r paste(res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[2] & res_table$support_levels == "unsupported"], "%", sep = "")`). 
+
+* The results for `r unique(res_table$rel_species)[1]` include `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[1] & res_table$support_levels == "top-down"]` supported top-down models (`r paste(res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[1] & res_table$support_levels == "top-down"], "%", sep = "")`), `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[1] & res_table$support_levels == "bottom-up"]` supported bottom-up models (`r paste(res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[1] & res_table$support_levels == "bottom-up"], "%", sep = "")`), and `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[1] & res_table$support_levels == "unsupported"]` unsupported models (`r paste(res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[1] & res_table$support_levels == "unsupported"], "%", sep = "")`). 
+
+```{r Include preferred histogram per large carnivores in output, echo=FALSE, include=TRUE, results='asis', fig.height= 8}
+all_plots$preferred_siv_hist
+```
+
+The next plot is the pooled results from **all predator prey models across the community** where all models are combined into a single histogram. The supported top-down results include `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == "All_large_carnivores" & res_table$support_levels == "top-down"]` models, which is `r res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == "All_large_carnivores" & res_table$support_levels == "top-down"]` percent of the available models. The supported bottom-up results include `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == "All_large_carnivores" & res_table$support_levels == "bottom-up"]` models, which is `r res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == "All_large_carnivores" & res_table$support_levels == "bottom-up"]` percent of the available models. Finally, the unsupported results include `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == "All_large_carnivores" & res_table$support_levels == "unsupported"]` models, which is `r res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == "All_large_carnivores" & res_table$support_levels == "unsupported"]` percent of the available models. 
+
+```{r Include community histogram of all large carnivores in output, echo=FALSE, include=TRUE, results='asis'}
+all_plots$community_siv_all_large_carns_hist
+```
+
+The next plot includes all predator prey models across the community (same as above), but this time split between the four large carnivore species. 
+
+* The results for `r unique(res_table$rel_species)[4]` include `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == unique(res_table$rel_species)[4] & res_table$support_levels == "top-down"]` supported top-down models (`r paste(res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == unique(res_table$rel_species)[4] & res_table$support_levels == "top-down"], "%", sep = "")`), `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == unique(res_table$rel_species)[4] & res_table$support_levels == "bottom-up"]` supported bottom-up models (`r paste(res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == unique(res_table$rel_species)[4] & res_table$support_levels == "bottom-up"], "%", sep = "")`), and `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == unique(res_table$rel_species)[4] & res_table$support_levels == "unsupported"]` unsupported models (`r paste(res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == unique(res_table$rel_species)[4] & res_table$support_levels == "unsupported"], "%", sep = "")`). 
+
+* The results for `r unique(res_table$rel_species)[3]` include `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == unique(res_table$rel_species)[3] & res_table$support_levels == "top-down"]` supported top-down models (`r paste(res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == unique(res_table$rel_species)[3] & res_table$support_levels == "top-down"], "%", sep = "")`), `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == unique(res_table$rel_species)[3] & res_table$support_levels == "bottom-up"]` supported bottom-up models (`r paste(res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == unique(res_table$rel_species)[3] & res_table$support_levels == "bottom-up"], "%", sep = "")`), and `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == unique(res_table$rel_species)[3] & res_table$support_levels == "unsupported"]` unsupported models (`r paste(res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == unique(res_table$rel_species)[3] & res_table$support_levels == "unsupported"], "%", sep = "")`). 
+
+* The results for `r unique(res_table$rel_species)[2]` include `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == unique(res_table$rel_species)[2] & res_table$support_levels == "top-down"]` supported top-down models (`r paste(res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == unique(res_table$rel_species)[2] & res_table$support_levels == "top-down"], "%", sep = "")`), `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == unique(res_table$rel_species)[2] & res_table$support_levels == "bottom-up"]` supported bottom-up models (`r paste(res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == unique(res_table$rel_species)[2] & res_table$support_levels == "bottom-up"], "%", sep = "")`), and `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == unique(res_table$rel_species)[2] & res_table$support_levels == "unsupported"]` unsupported models (`r paste(res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == unique(res_table$rel_species)[2] & res_table$support_levels == "unsupported"], "%", sep = "")`). 
+
+* The results for `r unique(res_table$rel_species)[1]` include `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == unique(res_table$rel_species)[1] & res_table$support_levels == "top-down"]` supported top-down models (`r paste(res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == unique(res_table$rel_species)[1] & res_table$support_levels == "top-down"], "%", sep = "")`), `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == unique(res_table$rel_species)[1] & res_table$support_levels == "bottom-up"]` supported bottom-up models (`r paste(res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == unique(res_table$rel_species)[1] & res_table$support_levels == "bottom-up"], "%", sep = "")`), and `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == unique(res_table$rel_species)[1] & res_table$support_levels == "unsupported"]` unsupported models (`r paste(res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "community" & res_table$rel_species == unique(res_table$rel_species)[1] & res_table$support_levels == "unsupported"], "%", sep = "")`). 
+
+```{r Include community histogram per large carnivores in output, echo=FALSE, include=TRUE, results='asis', fig.height= 8}
+all_plots$community_siv_hist
+```
+
+Finally, the last set of histograms visualize the distribution of the unsupported results for preferred predator-prey models, split between top-down and bottom-up models. **When pooling data across all large carnivores for the top-down models**, there were `r nonsupport$num_lvl[nonsupport$rel_species == "All_large_carnivores" & nonsupport$PPC_setting == "normal" & nonsupport$direction == "top-down" & nonsupport$support_levels == "unsupported_3"]` unsupported_3 models (`r paste(nonsupport$percent[nonsupport$rel_species == "All_large_carnivores" & nonsupport$PPC_setting == "normal" & nonsupport$direction == "top-down" & nonsupport$support_levels == "unsupported_3"], "%", sep = "")`), `r nonsupport$num_lvl[nonsupport$rel_species == "All_large_carnivores" & nonsupport$PPC_setting == "normal" & nonsupport$direction == "top-down" & nonsupport$support_levels == "unsupported_2"]` unsupported_2 models (`r paste(nonsupport$percent[nonsupport$rel_species == "All_large_carnivores" & nonsupport$PPC_setting == "normal" & nonsupport$direction == "top-down" & nonsupport$support_levels == "unsupported_2"], "%", sep = "")`), and `r nonsupport$num_lvl[nonsupport$rel_species == "All_large_carnivores" & nonsupport$PPC_setting == "normal" & nonsupport$direction == "top-down" & nonsupport$support_levels == "unsupported_1"]` unsupported_3 models (`r paste(nonsupport$percent[nonsupport$rel_species == "All_large_carnivores" & nonsupport$PPC_setting == "normal" & nonsupport$direction == "top-down" & nonsupport$support_levels == "unsupported_1"], "%", sep = "")`).
+
+* The top-down results for `r unique(nonsupport$rel_species)[4]` include `r nonsupport$num_lvl[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[4] & nonsupport$support_levels == "unsupported_1" & nonsupport$direction == "top-down"]` unsupported_1 models (`r paste(nonsupport$percent[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[4] & nonsupport$support_levels == "unsupported_1" & nonsupport$direction == "top-down"], "%", sep = "")`), `r nonsupport$num_lvl[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[4] & nonsupport$support_levels == "unsupported_2" & nonsupport$direction == "top-down"]` unsupported_2 models (`r paste(nonsupport$percent[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[4] & nonsupport$support_levels == "unsupported_2" & nonsupport$direction == "top-down"], "%", sep = "")`), and `r nonsupport$num_lvl[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[4] & nonsupport$support_levels == "unsupported_3" & nonsupport$direction == "top-down"]` unsupported_3 models (`r paste(nonsupport$percent[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[4] & nonsupport$support_levels == "unsupported_3" & nonsupport$direction == "top-down"], "%", sep = "")`). 
+
+* The top-down results for `r unique(nonsupport$rel_species)[3]` include `r nonsupport$num_lvl[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[3] & nonsupport$support_levels == "unsupported_1" & nonsupport$direction == "top-down"]` unsupported_1 models (`r paste(nonsupport$percent[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[3] & nonsupport$support_levels == "unsupported_1" & nonsupport$direction == "top-down"], "%", sep = "")`), `r nonsupport$num_lvl[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[3] & nonsupport$support_levels == "unsupported_2" & nonsupport$direction == "top-down"]` unsupported_2 models (`r paste(nonsupport$percent[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[3] & nonsupport$support_levels == "unsupported_2" & nonsupport$direction == "top-down"], "%", sep = "")`), and `r nonsupport$num_lvl[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[3] & nonsupport$support_levels == "unsupported_3" & nonsupport$direction == "top-down"]` unsupported_3 models (`r paste(nonsupport$percent[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[3] & nonsupport$support_levels == "unsupported_3" & nonsupport$direction == "top-down"], "%", sep = "")`). 
+
+* The top-down results for `r unique(nonsupport$rel_species)[2]` include `r nonsupport$num_lvl[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[2] & nonsupport$support_levels == "unsupported_1" & nonsupport$direction == "top-down"]` unsupported_1 models (`r paste(nonsupport$percent[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[2] & nonsupport$support_levels == "unsupported_1" & nonsupport$direction == "top-down"], "%", sep = "")`), `r nonsupport$num_lvl[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[2] & nonsupport$support_levels == "unsupported_2" & nonsupport$direction == "top-down"]` unsupported_2 models (`r paste(nonsupport$percent[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[2] & nonsupport$support_levels == "unsupported_2" & nonsupport$direction == "top-down"], "%", sep = "")`), and `r nonsupport$num_lvl[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[2] & nonsupport$support_levels == "unsupported_3" & nonsupport$direction == "top-down"]` unsupported_3 models (`r paste(nonsupport$percent[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[2] & nonsupport$support_levels == "unsupported_3" & nonsupport$direction == "top-down"], "%", sep = "")`). 
+
+* The results for `r unique(nonsupport$rel_species)[1]` include `r nonsupport$num_lvl[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[1] & nonsupport$support_levels == "unsupported_1" & nonsupport$direction == "top-down"]` unsupported_1 models (`r paste(nonsupport$percent[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[1] & nonsupport$support_levels == "unsupported_1" & nonsupport$direction == "top-down"], "%", sep = "")`), `r nonsupport$num_lvl[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[1] & nonsupport$support_levels == "unsupported_2" & nonsupport$direction == "top-down"]` unsupported_2 models (`r paste(nonsupport$percent[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[1] & nonsupport$support_levels == "unsupported_2" & nonsupport$direction == "top-down"], "%", sep = "")`), and `r nonsupport$num_lvl[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[1] & nonsupport$support_levels == "unsupported_3" & nonsupport$direction == "top-down"]` unsupported_3 models (`r paste(nonsupport$percent[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[1] & nonsupport$support_levels == "unsupported_3" & nonsupport$direction == "top-down"], "%", sep = "")`). 
+
+```{r Include preferred unsupported top-down histogram in output, echo=FALSE, include=TRUE, results='asis', fig.height= 8}
+all_plots$unsup_top_down_siv_hists
+```
+
+**When pooling data across all large carnivores for the bottom-up models**, there were `r nonsupport$num_lvl[nonsupport$rel_species == "All_large_carnivores" & nonsupport$PPC_setting == "normal" & nonsupport$direction == "bottom-up" & nonsupport$support_levels == "unsupported_3"]` unsupported_3 models (`r paste(nonsupport$percent[nonsupport$rel_species == "All_large_carnivores" & nonsupport$PPC_setting == "normal" & nonsupport$direction == "bottom-up" & nonsupport$support_levels == "unsupported_3"], "%", sep = "")`), `r nonsupport$num_lvl[nonsupport$rel_species == "All_large_carnivores" & nonsupport$PPC_setting == "normal" & nonsupport$direction == "bottom-up" & nonsupport$support_levels == "unsupported_2"]` unsupported_2 models (`r paste(nonsupport$percent[nonsupport$rel_species == "All_large_carnivores" & nonsupport$PPC_setting == "normal" & nonsupport$direction == "bottom-up" & nonsupport$support_levels == "unsupported_2"], "%", sep = "")`), and `r nonsupport$num_lvl[nonsupport$rel_species == "All_large_carnivores" & nonsupport$PPC_setting == "normal" & nonsupport$direction == "bottom-up" & nonsupport$support_levels == "unsupported_1"]` unsupported_3 models (`r paste(nonsupport$percent[nonsupport$rel_species == "All_large_carnivores" & nonsupport$PPC_setting == "normal" & nonsupport$direction == "bottom-up" & nonsupport$support_levels == "unsupported_1"], "%", sep = "")`). 
+
+* The bottom-up results for `r unique(nonsupport$rel_species)[4]` include `r nonsupport$num_lvl[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[4] & nonsupport$support_levels == "unsupported_1" & nonsupport$direction == "bottom-up"]` unsupported_1 models (`r paste(nonsupport$percent[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[4] & nonsupport$support_levels == "unsupported_1" & nonsupport$direction == "bottom-up"], "%", sep = "")`), `r nonsupport$num_lvl[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[4] & nonsupport$support_levels == "unsupported_2" & nonsupport$direction == "bottom-up"]` unsupported_2 models (`r paste(nonsupport$percent[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[4] & nonsupport$support_levels == "unsupported_2" & nonsupport$direction == "bottom-up"], "%", sep = "")`), and `r nonsupport$num_lvl[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[4] & nonsupport$support_levels == "unsupported_3" & nonsupport$direction == "bottom-up"]` unsupported_3 models (`r paste(nonsupport$percent[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[4] & nonsupport$support_levels == "unsupported_3" & nonsupport$direction == "bottom-up"], "%", sep = "")`). 
+
+* The bottom-up results for `r unique(nonsupport$rel_species)[3]` include `r nonsupport$num_lvl[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[3] & nonsupport$support_levels == "unsupported_1" & nonsupport$direction == "bottom-up"]` unsupported_1 models (`r paste(nonsupport$percent[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[3] & nonsupport$support_levels == "unsupported_1" & nonsupport$direction == "bottom-up"], "%", sep = "")`), `r nonsupport$num_lvl[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[3] & nonsupport$support_levels == "unsupported_2" & nonsupport$direction == "bottom-up"]` unsupported_2 models (`r paste(nonsupport$percent[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[3] & nonsupport$support_levels == "unsupported_2" & nonsupport$direction == "bottom-up"], "%", sep = "")`), and `r nonsupport$num_lvl[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[3] & nonsupport$support_levels == "unsupported_3" & nonsupport$direction == "bottom-up"]` unsupported_3 models (`r paste(nonsupport$percent[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[3] & nonsupport$support_levels == "unsupported_3" & nonsupport$direction == "bottom-up"], "%", sep = "")`). 
+
+* The bottom-up results for `r unique(nonsupport$rel_species)[2]` include `r nonsupport$num_lvl[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[2] & nonsupport$support_levels == "unsupported_1" & nonsupport$direction == "bottom-up"]` unsupported_1 models (`r paste(nonsupport$percent[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[2] & nonsupport$support_levels == "unsupported_1" & nonsupport$direction == "bottom-up"], "%", sep = "")`), `r nonsupport$num_lvl[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[2] & nonsupport$support_levels == "unsupported_2" & nonsupport$direction == "bottom-up"]` unsupported_2 models (`r paste(nonsupport$percent[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[2] & nonsupport$support_levels == "unsupported_2" & nonsupport$direction == "bottom-up"], "%", sep = "")`), and `r nonsupport$num_lvl[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[2] & nonsupport$support_levels == "unsupported_3" & nonsupport$direction == "bottom-up"]` unsupported_3 models (`r paste(nonsupport$percent[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[2] & nonsupport$support_levels == "unsupported_3" & nonsupport$direction == "bottom-up"], "%", sep = "")`). 
+
+* The results for `r unique(nonsupport$rel_species)[1]` include `r nonsupport$num_lvl[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[1] & nonsupport$support_levels == "unsupported_1" & nonsupport$direction == "bottom-up"]` unsupported_1 models (`r paste(nonsupport$percent[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[1] & nonsupport$support_levels == "unsupported_1" & nonsupport$direction == "bottom-up"], "%", sep = "")`), `r nonsupport$num_lvl[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[1] & nonsupport$support_levels == "unsupported_2" & nonsupport$direction == "bottom-up"]` unsupported_2 models (`r paste(nonsupport$percent[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[1] & nonsupport$support_levels == "unsupported_2" & nonsupport$direction == "bottom-up"], "%", sep = "")`), and `r nonsupport$num_lvl[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[1] & nonsupport$support_levels == "unsupported_3" & nonsupport$direction == "bottom-up"]` unsupported_3 models (`r paste(nonsupport$percent[nonsupport$PPC_setting == "normal" & nonsupport$rel_species == unique(nonsupport$rel_species)[1] & nonsupport$support_levels == "unsupported_3" & nonsupport$direction == "bottom-up"], "%", sep = "")`). 
+
+```{r Include preferred unsupported bottom-up histogram in output, echo=FALSE, include=TRUE, results='asis', fig.height= 8}
+all_plots$unsup_bottom_up_siv_hists
+```
+
+## Counter-factual histograms
+
+```{r Import counterfactual results}
+
+# First, list the relevant files
+files = list.files(wd)
+# only want counterfactuals
+files = files[grepl("counter-factual", files)]
+# and only after PPC values
+files = files[grepl("PPC", files)]
+# but not just the 11 supported models!
+files = files[!grepl("11_supported_models", files)]
+
+## import the data! 
+ppc_values_cf = read.csv(paste(wd, files, sep = ""))
+rm(files)
+
+```
+
+```{r Visualize counter-factual histograms into one figure}
+
+## goal here is to recreate the SIV histogram, but facet-wrap it for the 4 different tests
+## but make sure there are no crazy outliers (esp b/c of MIDDLE testing)
+summary(ppc_values_cf$Interaction_Estimate) # there are a few biggies! 
+# will be in the supplement anyway, so ok to leave in. 
+# inspect further
+anyNA(ppc_values_cf$Interaction_Estimate) # must be F! 
+
+## condense support levels for easier plotting
+ppc_values_cf$support_simple[grepl("Unsuppor", ppc_values_cf$support)] = "unsupported"
+ppc_values_cf$support_simple[ppc_values_cf$support == "Supported" & ppc_values_cf$direction == "top-down"] = "top-down"
+ppc_values_cf$support_simple[ppc_values_cf$support == "Supported" & ppc_values_cf$direction == "bottom-up"] = "bottom-up"
+table(ppc_values_cf$support_simple)
+
+## Set the facet wrap factor levels for nice ordering
+ppc_values_cf$counter_factual_test = factor(ppc_values_cf$counter_factual_test,
+                                            levels = c("original_test", "site_matching",
+                                                       #"isolate_abundance_declines",
+                                                       "isolate_extirpations",
+                                                       "isolate_altitude", "isolate_FLII",
+                                                       "isolate_HFP"))
+
+## Add info about # and percent in each category 
+sum_table_cf = ddply(ppc_values_cf, .(counter_factual_test, support_simple), summarize,
+                  num_lvl = length(Species_Pair))
+## Calculate percentage per test 
+sum_table_cf$percent[sum_table_cf$counter_factual_test == "original_test"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "original_test"] /  length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "original_test"]) * 100, 1)
+
+sum_table_cf$percent[sum_table_cf$counter_factual_test == "site_matching"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "site_matching"] / length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "site_matching"]) * 100, 1)
+
+# sum_table_cf$percent[sum_table_cf$counter_factual_test == "isolate_abundance_declines"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "isolate_abundance_declines"] / length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "isolate_abundance_declines"]) * 100, 1)
+
+sum_table_cf$percent[sum_table_cf$counter_factual_test == "isolate_extirpations"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "isolate_extirpations"] / length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "isolate_extirpations"]) * 100, 1)
+
+sum_table_cf$percent[sum_table_cf$counter_factual_test == "isolate_altitude"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "isolate_altitude"] / length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "isolate_altitude"]) * 100, 1)
+
+sum_table_cf$percent[sum_table_cf$counter_factual_test == "isolate_HFP"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "isolate_HFP"] /      length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "isolate_HFP"]) * 100, 1)
+
+sum_table_cf$percent[sum_table_cf$counter_factual_test == "isolate_FLII"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "isolate_FLII"] /     length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "isolate_FLII"]) * 100, 1)
+
+## inspect
+sum_table_cf # looks good! 
+
+## make the plot 
+counterfactual_siv_hist = 
+  ggplot(ppc_values_cf, aes(x = Interaction_Estimate, fill = support_simple))+
+  geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1, alpha = 1)+
+  theme_classic()+
+  geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+  scale_fill_manual(values = new_colors) +
+  scale_y_continuous(breaks = seq(0, max(table(ppc_values_cf$support_simple)), by = 2)) + 
+  labs(x = "Species Interaction Value", y = "Number of pairwise co-abundance models", color = NULL)+
+  facet_wrap(~counter_factual_test) + 
+  guides(fill = "none") + 
+  theme(axis.text.x = element_text(size = 16),
+        axis.text.y = element_text(size = 16),
+        axis.text = element_text(color = "black"),
+        text = element_text(family = "Helvetica"))
+## save it in the list! 
+all_plots[[length(all_plots)+1]] = counterfactual_siv_hist
+names(all_plots)[length(all_plots)] = "counterfactual_siv_hist"
+
+
+```
+
+Below is a graph of the SIVs from `r length(unique(sum_table_cf$counter_factual_test)) - 1` counter-factual tests, and compared with the original results presented above. As a reminder, all counter-factual tests only include preferred predator-prey co-abundance models. 
+
+* For the counter-factual test `r unique(sum_table_cf$counter_factual_test)[1]`, there were `r sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[1] & sum_table_cf$support_simple == "top-down"]` supported top-down models (`r paste(sum_table_cf$percent[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[1] & sum_table_cf$support_simple == "top-down"], "%", sep = "")`), `r sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[1] & sum_table_cf$support_simple == "bottom-up"]` supported bottom-up models (`r paste(sum_table_cf$percent[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[1] & sum_table_cf$support_simple == "bottom-up"], "%", sep = "")`), and `r sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[1] & sum_table_cf$support_simple == "unsupported"]` unsupported models (`r paste(sum_table_cf$percent[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[1] & sum_table_cf$support_simple == "unsupported"], "%", sep = "")`).
+
+* For the counter-factual test `r unique(sum_table_cf$counter_factual_test)[2]`, there were `r sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[2] & sum_table_cf$support_simple == "top-down"]` supported top-down models (`r paste(sum_table_cf$percent[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[2] & sum_table_cf$support_simple == "top-down"], "%", sep = "")`), `r sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[2] & sum_table_cf$support_simple == "bottom-up"]` supported bottom-up models (`r paste(sum_table_cf$percent[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[2] & sum_table_cf$support_simple == "bottom-up"], "%", sep = "")`), and `r sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[2] & sum_table_cf$support_simple == "unsupported"]` unsupported models (`r paste(sum_table_cf$percent[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[2] & sum_table_cf$support_simple == "unsupported"], "%", sep = "")`).
+
+* For the counter-factual test `r unique(sum_table_cf$counter_factual_test)[3]`, there were `r sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[3] & sum_table_cf$support_simple == "top-down"]` supported top-down models (`r paste(sum_table_cf$percent[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[3] & sum_table_cf$support_simple == "top-down"], "%", sep = "")`), `r sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[3] & sum_table_cf$support_simple == "bottom-up"]` supported bottom-up models (`r paste(sum_table_cf$percent[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[3] & sum_table_cf$support_simple == "bottom-up"], "%", sep = "")`), and `r sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[3] & sum_table_cf$support_simple == "unsupported"]` unsupported models (`r paste(sum_table_cf$percent[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[3] & sum_table_cf$support_simple == "unsupported"], "%", sep = "")`).
+
+* For the counter-factual test `r unique(sum_table_cf$counter_factual_test)[4]`, there were `r sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[4] & sum_table_cf$support_simple == "top-down"]` supported top-down models (`r paste(sum_table_cf$percent[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[4] & sum_table_cf$support_simple == "top-down"], "%", sep = "")`), `r sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[4] & sum_table_cf$support_simple == "bottom-up"]` supported bottom-up models (`r paste(sum_table_cf$percent[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[4] & sum_table_cf$support_simple == "bottom-up"], "%", sep = "")`), and `r sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[4] & sum_table_cf$support_simple == "unsupported"]` unsupported models (`r paste(sum_table_cf$percent[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[4] & sum_table_cf$support_simple == "unsupported"], "%", sep = "")`).
+
+* For the counter-factual test `r unique(sum_table_cf$counter_factual_test)[5]`, there were `r sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[5] & sum_table_cf$support_simple == "top-down"]` supported top-down models (`r paste(sum_table_cf$percent[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[5] & sum_table_cf$support_simple == "top-down"], "%", sep = "")`), `r sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[5] & sum_table_cf$support_simple == "bottom-up"]` supported bottom-up models (`r paste(sum_table_cf$percent[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[5] & sum_table_cf$support_simple == "bottom-up"], "%", sep = "")`), and `r sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[5] & sum_table_cf$support_simple == "unsupported"]` unsupported models (`r paste(sum_table_cf$percent[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[5] & sum_table_cf$support_simple == "unsupported"], "%", sep = "")`).
+
+* For the counter-factual test `r unique(sum_table_cf$counter_factual_test)[6]`, there were `r sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[6] & sum_table_cf$support_simple == "top-down"]` supported top-down models (`r paste(sum_table_cf$percent[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[6] & sum_table_cf$support_simple == "top-down"], "%", sep = "")`), `r sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[6] & sum_table_cf$support_simple == "bottom-up"]` supported bottom-up models (`r paste(sum_table_cf$percent[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[6] & sum_table_cf$support_simple == "bottom-up"], "%", sep = "")`), and `r sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[6] & sum_table_cf$support_simple == "unsupported"]` unsupported models (`r paste(sum_table_cf$percent[sum_table_cf$counter_factual_test == unique(sum_table_cf$counter_factual_test)[6] & sum_table_cf$support_simple == "unsupported"], "%", sep = "")`).
+
+```{r Include counterfactual SIV histogram in output, echo=FALSE, include=TRUE, results='asis', fig.width= 8, fig.height=6}
+all_plots$counterfactual_siv_hist
+```
+
+## Save plots & data
+
+The plots, and data used to inform this document, will be saved in dropbox at this directory: Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/figures/step4_output_figs/ & figures/step4_output_summarized_results_for_figs
+
+```{r Save everything!, }
+
+## specify the new working directory to save figures
+wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/figures/step4_output_figs/"
+
+# Grab the date
+day<-str_sub(Sys.Date(),-2)
+month<-str_sub(Sys.Date(),-5,-4)
+year<-str_sub(Sys.Date(),-10,-7)
+date = paste(year,month,day, sep = "")
+rm(year,month,day)
+
+## use object names stored in loop to save plots
+for(i in 1:length(all_plots)){
+  # grab a plot
+  p = all_plots[[i]]
+  # and the name
+  n = names(all_plots)[i]
+  # make a path
+  path = paste(wd, n, "_", date, ".png", sep = "")
+  ## custom sizing per graph
+  if(grepl("concept", n)){
+    ggsave(path, p, width = 13, height = 4, units = "in")
+  }
+  if(grepl("unsup", n)){
+    ggsave(path, p, width = 10, height = 10, units = "in")
+  }
+  if(grepl("community", n) & !grepl("all_large_carn", n)){
+    ggsave(path, p, width = 8, height = 10, units = "in")
+  }
+  if(grepl("preferred", n) & !grepl("all_large_carn", n)){
+    ggsave(path, p, width = 8, height = 10, units = "in")
+  }
+  if(grepl("community", n) & grepl("all_large_carn", n)){
+    ggsave(path, p, width = 12, height = 4, units = "in")
+  }
+  if(grepl("preferred", n) & grepl("all_large_carn", n)){
+    ggsave(path, p, width = 12, height = 4, units = "in")
+  }
+  if(grepl("counterfactual", n)){
+    ggsave(path, p, width = 15, height = 7, units = "in")
+  }
+
+}
+rm(i, p, n, path)
+
+## now save the summarized data with a new wd
+wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/figures/step4_output_summarized_results_for_figs/"
+
+## main results
+#make a path
+path = paste(wd, "percentages_for_3-level_support_histograms_", date, ".csv", sep = "")
+# and save! 
+write.csv(res_table, path, row.names = F)
+
+## unsupported results
+#make a path
+path = paste(wd, "percentages_for_unsupport_histograms_", date, ".csv", sep = "")
+# and save! 
+write.csv(nonsupport, path, row.names = F)
+
+## and counterfactuals
+#make a path
+path = paste(wd, "percentages_for_counter-factual_histograms_", date, ".csv", sep = "")
+# and save! 
+write.csv(sum_table_cf, path, row.names = F)
+
+
+
+```
+
+
+

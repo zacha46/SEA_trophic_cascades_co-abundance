@@ -12,7 +12,7 @@
 <meta name="author" content="Zachary Amir" />
 
 
-<title>Step 2_generate co-abundance pairwise data bundles</title>
+<title>Step 1 Prepare data to make count history matrix</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -349,121 +349,170 @@ display: none;
 
 
 
-<h1 class="title toc-ignore">Step 2_generate co-abundance pairwise data
-bundles</h1>
+<h1 class="title toc-ignore">Step 1 Prepare data to make count history
+matrix</h1>
 <h4 class="author">Zachary Amir</h4>
-<h4 class="date">2024-09-28 17:11:32</h4>
+<h4 class="date">2024-10-28 14:54:39</h4>
 
 </div>
 
 
-<div id="import-data" class="section level2">
-<h2>Import data</h2>
-<p>Import count matrices for each species that was generated on the High
-Performance Computer <a href="https://rcc.uq.edu.au/systems/high-performance-computing/bunya">(HPC)</a>.
-Objects were saved as .RDS files because they were list(), so I will use
-the readRDS function to import them into R.</p>
+<div id="introduction" class="section level2">
+<h2>Introduction</h2>
+<p>This code will prepare camera trap data to create count history
+matrices and the associated covariates. This is a necessary first step
+towards preparing the data to implement Zachary Amir’s co-abundance
+models on the High Performance Computers (HPC).</p>
+<p>This code works off the spatially re-sampled captures and covariates
+that are generated in the 4-step Southeast Asian camera trap data
+standardization pipeline. To learn more about this Southeast Asian
+camera trap data standardization pipeline, please contact Zachary Amir
+(<a href="mailto:z.amir@uq.edu.au" class="email">z.amir@uq.edu.au</a>)
+or Matthew Luskin (<a href="mailto:m.luskin@uq.edu.au" class="email">m.luskin@uq.edu.au</a>) to request access to the following
+relevant <a href="https://github.com/EcologicalCascadesLab/AsianCaptureHistories">GitHub
+repository</a>.</p>
 </div>
-<div id="generate-co-abundance-data-bundles" class="section level2">
-<h2>Generate co-abundance data bundles</h2>
-<p>Now that the data is loaded in our environment, I will use a very
-large for-loop to generate co-abundance data bundles that will be ready
-to run on the HPC. Bundles will be generated for species pairs, where
-one species is explicitly assigned as a dominant species
-(predictor/independent variable), while the other is the subordinate
-species (response/dependent variable).</p>
-<p>Bundles will be generated based on spatial associations. Each species
-pair needs to be present in at least one landscape and have at least 100
-independent detection from a shared landscape. Despite the loop being
-very long and complex, it is mainly reorganizing and sorting data rather
-than running calculations. Therefore, it completes in &lt; 5 min.</p>
-<p>After successfully generating the bundled data, we have a total of
-262 pairwise interactions composed of both top-down and bottom-up
-models.</p>
-<div id="reorganize-list-for-efficent-analysis" class="section level3">
-<h3>Reorganize list for efficent analysis</h3>
-<p>After some preliminary testing, I realized that all co-abundance
-models don’t need the same amount of RAM. Most complete w/ 100 GB, but
-some need 250 or even 500 GB to complete. Based of prior testing, I will
-reorganize the list into 100, 250, or 500 GB lists. This process will be
-achieved by inspecting the OE (output or error) files extracted from the
-HPC when each job runs.</p>
-<p>After splitting and organizing the data bundles, we have a total of
-<strong>66 preferred co-abundance models</strong> and a total of
-<strong>196 co-abundance models across the larger
-community</strong>.</p>
+<div id="camera-trap-data-included-for-analysis" class="section level2">
+<h2>Camera trap data included for analysis</h2>
+<p>The camera trap data used in this analysis comes from <strong>13 data
+providers</strong> that sampled <strong>45 spatially distinct
+landscapes</strong> from a total of <strong>282 temporally distinct
+survey_ids</strong> that have been defined to be a maximum of 100 days
+long. This data is comprised of <strong>10503 single-season camera
+deployments</strong>. The single-season surveys ranged in duration from
+13 to 107 days, with an average of 85.77 and SD of 23.92 days. In terms
+of trap-nights (<em>i.e.</em>, number of deployments multiplied by
+duration), the average sampling effort per survey had 100 to 6237
+trap-nights, with an average of 1247.89 and SD of 1139.98
+trap-nights.</p>
+<p>We have spatially re-sampled the camera trap captures and covariates
+to the <strong>5km spatial scale</strong>, meaning that any cameras
+within a 5km hexagon had their captures aggregated. There are a total of
+<strong>4062 5km sampling units</strong> available for analysis, and
+each <strong>landscape contains between 3 to 723</strong> sampling
+units, with an average of 90.27 and SD of 127.08 per landscape.</p>
+<p>As part of ensuring we are using robust data, a landscape needs be at
+least 9 km2 to provide spatial variation and a survey needs to contain
+at least 100 trap-nights. Therefore, a total of <strong>68 surveys have
+been removed</strong> that do not meet these standards, and this
+represents <strong>5.4% of the captures</strong>. For the remaining 282
+valid surveys, the <strong>median number of 5km sampling units is 12
+with a range from 3 - 63</strong>, and the <strong>median sampling
+effort per survey is 891 trap-nights, with a range from 100 -
+6237</strong>.</p>
 </div>
+<div id="determine-which-species-to-analyze" class="section level2">
+<h2>Determine which species to analyze</h2>
+<p>In these code chunks, I will determine which species have
+<strong>sufficient captures (n = 100)</strong>, standardize similar
+species to the genera level (<em>e.g.</em>, clouded leopards in the
+genus <em>Neofelis</em>), and remove non-relevant ‘species’
+(e.g. blanks).</p>
+<p>I will also gather species traits from the
+<code>library(speciestraits)</code> databases. Each species will have 1)
+a trophic level (<em>i.e.</em>, carnivore, omnivore, herbivore), 2) body
+mass (in grams), and 3) home range size (in km2). Finally, I have also
+added dietary preferences for the four large carnivores species that are
+the focus of this analysis.</p>
+<p>Before any standardization there are a total of 106 ‘species’ with
+100 captures ready for analysis, but after removing domestic species
+(<em>e.g.</em>, <em>Canis lupus familiaris</em> &amp; <em>Bos
+taurus</em>), primarily arboreal species (<em>e.g.</em>, <em>Pongo
+pygmaeus</em> &amp; <em>Presbytis rubicunda</em>), species less than 1kg
+or greater than 1000 kg, or species lacking any trait data, we are left
+with a <strong>total of 44 species ready for analysis</strong>.
+Therefore, the total number of independent captures for these species is
+133694.</p>
+<p>A total of 6 trophic guilds were constructed based on trophic level
+and body mass. Unfortunately, <strong>home-range data was lacking for 32
+species</strong>, but for the known home-range values. For the remaining
+values, the median value is 3.515 with a range of 0.46 - 64.89 square
+kilometers.</p>
+<p>There are a <strong>total of 15 herbivores</strong>, split between
+<strong>11 small herbivores</strong> and <strong>4 large
+herbivores</strong> using a 100 kg cut-off.</p>
+<p>There are a <strong>total of 17 omnivores</strong>, split between
+<strong>13 small omnivores</strong> and <strong>4 large
+omnivores</strong> using a 50 kg cut-off.</p>
+<p>There are a <strong>total of 12 carnivores</strong>, split between
+<strong>8 small carnivores</strong> and <strong>4 large
+carnivores</strong> using a 15 kg cut-off.</p>
+<p><strong>Tigers (<em>Panthera tigris</em>)</strong> were generated 0
+independent detections from 0 landscapes. They were deemed to prefer any
+other species that is not a large carnivore and above 17 kg. This
+includes a total of <strong>9 species composed of Helarctos_malayanus,
+Rusa_unicolor, Sus_barbatus, Sus_scrofa, Tapirus_indicus,
+Ursus_thibetanus, Bos_gaurus, Capricornis_genus,
+Muntiacus_genus</strong>.</p>
+<p><strong>Leopards (<em>Panthera pardus</em>)</strong> were generated 0
+independent detections from 0 landscapes. They were deemed to prefer any
+other species that is not a large carnivore and with a weight range of
+10-40 kg. Also, all primates were included as preferred prey. This
+includes a total of <strong>7 species composed of Arctictis_binturong,
+Arctonyx_collaris, Macaca_arctoides, Macaca_fascicularis,
+Macaca_nemestrina, Sus_scrofa, Muntiacus_genus</strong>.</p>
+<p><strong>Dholes (<em>Cuon alpinus</em>)</strong> were generated 0
+independent detections from 0 landscapes. They were deemed to prefer any
+other species that is not a large carnivore and with a weight range of
+40-190 kg. Also, all bear species were removed as preferred prey and
+muntjac deer were included. This includes a total of <strong>5 species
+composed of Rusa_unicolor, Sus_barbatus, Sus_scrofa, Capricornis_genus,
+Muntiacus_genus</strong>.</p>
+<p><strong>Clouded leopards (<em>Neofelis</em> genus)</strong> were
+generated 646 independent detections from 24 landscapes. They were
+deemed to prefer any other species that is not a large carnivore and
+with a weight range of 7-190 kg. Also, all bear species and golden cats
+were removed as preferred prey. This includes a total of <strong>12
+species composed of Arctictis_binturong, Arctonyx_collaris,
+Hystrix_brachyura, Macaca_arctoides, Macaca_nemestrina, Rusa_unicolor,
+Sus_barbatus, Sus_scrofa, Viverra_tangalunga, Viverra_zibetha,
+Capricornis_genus, Muntiacus_genus</strong>.</p>
 </div>
-<div id="save-the-final-list-of-bundled-data" class="section level2">
-<h2>Save the final list of bundled data</h2>
-<p>Now that all species pairs are established, the data is properly
-formatted, and everything is clean, its time to save the data! We will
-send it to the HPC to run on the R script called:
-data/HPC_code/HPC_co-abundance_model_final.R</p>
-<p>Alternatively, I could save the list as a single object rather than
-splitting it up.</p>
+<div id="prepare-data-to-be-saved" class="section level2">
+<h2>Prepare data to be saved</h2>
+<p>Now that relevant species have been determined and species traits are
+sorted, I will finalize preparing the data by generating a sampling
+occasion index to create count history matrices for each species using
+the formatted captures and metadata files. Instead of creating a
+detection history matrix based on the date a photo was taken, I make all
+cameras start on the same ‘day’ (based around start/end dates) to
+increase model speed and efficiency.</p>
+<p>By adding the observation sequence to the captures, we lost 5% of the
+captures. This is an acceptable amount.</p>
+<p>I have also determined which species need to be analyzed as groups
+instead of inviduals because of very large group sizes cause N-mixture
+models to crash and create unrealistic estimates. <strong>This includes
+9 species: Bos_gaurus, Cuon_alpinus, Macaca_arctoides,
+Macaca_fascicularis, Macaca_nemestrina, Muntiacus_genus, Rusa_unicolor,
+Sus_barbatus, Sus_scrofa</strong>.</p>
+<p>The key spatial variables that will get included in each species’
+N-mixture model to account for habitat filtering are:
+<strong>Avg_FLLI_5km, Avg_altitude_5km,
+Avg_human_footprint_5km</strong>. The correlation coefficient between
+forest integrity and human footprint is <strong>-0.564</strong>. The
+correlation coefficient between elevation and human footprint is
+<strong>-0.366</strong>. The correlation coefficient between forest
+integrity and elevation is <strong>0.432</strong>.</p>
 </div>
-<div id="generate-counterfactual-data-bundles" class="section level2">
-<h2>Generate counterfactual data bundles</h2>
-<p>After submitting the manuscript and analysis to Science and receving
-reviews from 3 expert reviewers, 2 reviewers revealed an appetite for
-causation that was lacking from the current analysis. Moreover, when
-presenting my findings at conferences and to collegues, similar
-sentiments were voiced. Structural Equation Models (SEM) was a logical
-starting place, but the limitations of the data (ie lacking key
-variables like hunting pressure or resource availability) and inability
-to include a count history matrix as the response variable (and
-therefore propagate uncertainty) left me unsatisfied.</p>
-<p>Instead, the new goal here is to examine the counter-factual to
-understand if prey abundance increases would not have happened if not
-for large carnivore decline/extirpation (top-down test), AND if predator
-abundance increases would not have happened if not for prey abundance
-increases (bottom-up test). Additionally, we can run more variations of
-the same co-abundance model by sub-setting the co-occuring species data
-into locations that match in their measured covariates to help control
-for unmeasured variables. All counter-factual testing will occurr only
-with the 33 preferred prey species-pairs.</p>
-<p>This approach builds towards the top of the ‘ladder of causation’
-proposed by Judea Pearl’s Book of Why. The first rung,
-association/observation, can be represented simply with a
-non-directional association between two species (e.g. correlation
-between RAI of two species). The second run, intervention, typically
-involves a manipulation, but can also be expressed through causal
-diagrams, where one variable directionally affects another variable,
-such as predators suppress prey or prey bolster predators. Finally, the
-third rung, counter-factual, forces the researcher to imagine an
-alternative reality where causal forces are reversed or eliminated, such
-as testing if prey abundance increases in a world with no large
-carnivore extirpation.</p>
-<p>I will be running several counter-factual tests, listed here: 1)
-Would prey abundance increase in landscapes where large carnivores
-remain abundant (top-down test), AND would predator abundance increase
-in landscapes where preferred prey remain scarce (bottom-up test). This
-isolates the effect of declines while being present rather than species
-extirpations, and is tested by selecting landscapes where predators
-remain common (upper 3rd quartile of site-level abundance) and prey
-remain scarce (bottom 1st quartile of site-level abundance). 2) What if
-prey abundance increases would not have happened if not for large
-carnivore extirpation (top-down test), AND if predator abundance
-decreases would not have happened if not for prey abundance extirpations
-(bottom-up test). This isolates the effect of species extirpations
-rather than declines, and is tested by only selecting landscapes where
-species co-occur w/ sufficient detections. 3) Would we observe trophic
-release in prey or bottom-up bolstering in predators when controlling
-for landscape variation that may be driving observed trends. This is
-tested by implementing good and clear site-matching, but in this test,
-just the Thai Eastern Forest Complex (for now).</p>
-<p>4:6) Would we observe trophic release in prey and bottom-up
-bolstering in predators when controlling for our observed site
-covariates? This is tested by running three different counterfactual
-tests where we let one of the three covariates (HFP, FLII, elev) vary
-while holding the other two around their mean (mean plus and minus 1/2
-SD).</p>
-<p>Ideally, there would be a chunk here that implements some nifty
-site-matching formulas or at least examines various covariate
-relationships. However, I am running out of time atm and just want to
-get a test running. Therefore, I will examine relationships ONLY at the
-Thai E Forest complex and the three landscapes it is composed of.</p>
+<div id="save-data" class="section level2">
+<h2>Save data</h2>
+<p>Generating the count histories and covariates for each species on a
+regular computer takes hours, so instead I will send the information to
+the High Performance Computers (HPC) to run much faster. The data is
+saved in my personal Dropbox folder, but will move to GitHub
+eventually.</p>
+</div>
+<div id="hpc-matrix-and-covariate-creation-code" class="section level2">
+<h2>HPC matrix and covariate creation code</h2>
+<p>The next section of analysis relies on the HPC, where we convert our
+covariates and metadata into a count history matrix with the proper
+associated observation- and site-level covariates. We use the HPC to
+iterate the process per species with more computational power which
+vastly speeds up the process.</p>
+<p>The separate R script is called:
+<strong>scripts/HPC_code/HPC_matrix_generator_SEA_TC.R</strong>.</p>
+<p>To make that code run on the HPC, I use the SLURM script called:
+<strong>scripts/SLURM_code/SLURM_generate_matricies.txt</strong>.</p>
 </div>
 
 

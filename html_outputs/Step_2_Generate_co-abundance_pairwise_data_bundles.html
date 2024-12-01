@@ -352,7 +352,7 @@ display: none;
 <h1 class="title toc-ignore">Step 2_generate co-abundance pairwise data
 bundles</h1>
 <h4 class="author">Zachary Amir</h4>
-<h4 class="date">2024-10-21 10:22:16</h4>
+<h4 class="date">2024-12-01 13:32:25</h4>
 
 </div>
 
@@ -499,6 +499,30 @@ from values between 303.2 to 618.12. For Forest Landscape Integrity
 Index, this ranges from values between 6.18 to 8.91. <strong>For the
 counter-factual co-abundance models examining the effect of
 Avg_human_footprint_5km, we have 66 models.</strong></p></li>
+<li><p>While not necessarily a counterfactual test, this new bundling of
+species pairs to run co-abundance models include <strong>a new
+variable</strong>. In an effort to address unmeasured variables
+influencing co-abundance relationships, we are creating a new variable
+called <strong>community_detections</strong>, which is simply a
+site-level variable containing the sum number of all independent
+detections of all species detected at that sampling unit except for the
+two-species whose co-abundance is considered in the model. The variable
+has been log-transformed to better normalize outliers and, like all
+other variables, it has been standardized with a mean of 0 and standard
+deviation of 1. The idea behind this variable is that some sampling unit
+are just better than other sampling units for a many different factors,
+which should manifest as more detections of more species at that
+sampling unit. If this variable legitimetly tracks unmeasured variation,
+we predict that large positive unsupported top-down in the original test
+will now produce either small and unsupported if not an important
+interaction or a negative interaction if real. Conversely, small
+positive supported bottom-up in the original test should now produce
+either no change and remain significant if a legitimate interaction, or
+become unsupported if unmeasured variation was driving a spurious
+positive correlation. For clarity and organization sake’ this new test
+will be called counterfactual 7. <strong>In this co-abundance model test
+with the new community detections, we are running a total of 66
+co-abundance models</strong>.</p></li>
 </ol>
 </div>
 

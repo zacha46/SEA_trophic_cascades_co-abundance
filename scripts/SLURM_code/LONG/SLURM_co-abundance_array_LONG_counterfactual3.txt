@@ -23,7 +23,7 @@
 #SBATCH --time=336:00:00
 
 # SPECIFY THE JOB ARRAY-
-#SBATCH --array=1-40
+#SBATCH --array=1-66
 
 # SPECIFY THE JOB NAME
 #SBATCH --job-name=CF3
@@ -43,7 +43,7 @@ fi
 export SETTING="LONG" 
 
 # SET THE 'counter' VARIABLE THAT WILL BE LOADED IN R
-export COUNTER="counterfactual3_site_matching"
+export COUNTER="counterfactual3_isolate_altitude"
 
 # SPECIFY THE PBS WORKING DIRECTORY AND PRINT TO VERIFY
 cd $SLURM_SUBMIT_DIR

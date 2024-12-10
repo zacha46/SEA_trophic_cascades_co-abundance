@@ -43,7 +43,7 @@ fi
 export SETTING="LONG" 
 
 # SET THE 'counter' VARIABLE THAT WILL BE LOADED IN R
-export COUNTER="counterfactual4_isolate_altitude"
+export COUNTER="counterfactual4_isolate_FLII"
 
 # SPECIFY THE PBS WORKING DIRECTORY AND PRINT TO VERIFY
 cd $SLURM_SUBMIT_DIR

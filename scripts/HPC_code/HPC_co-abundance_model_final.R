@@ -10,7 +10,11 @@
 ## Will no longer generate prediction plots or monitor site-level abundance
 # in an effort to save RAM and complete LONG settings. 
 
-## Submitted to HPC on January 3rd, 2024
+### December 2024 Update-
+## including new variable community-detections to account for unmeasured variation
+# and running @ 5km scale w/ counterfactual tests as well. 
+
+## Submitted to HPC on December 10th, 2024
 # Zachary Amir, z.amir@uq.edu.au
 
 ####### Set up #####
@@ -62,7 +66,7 @@ n = names(dat)[slurm]
 res =  paste(setting, "_co-abundance_coefficents_", n, sep = "")
 
 # Second, list all completed results
-res_search = list.files("results/co-abundance/coefficent_dataframes/")
+res_search = list.files("results/co-abundance/dec2024_coefficent_dataframes/")
 # # local testing
 # res_search = list.files("results/LONG_5km_final_and_counterfactual_Oct2024/coefficent_dataframes/")
 
@@ -86,6 +90,9 @@ bdata$y.dom = apply(bdata$y.dom, 2, as.numeric)
 bdata$y.sub = apply(bdata$y.sub, 2, as.numeric)
 bdata$cams = apply(bdata$cams, 2, as.numeric)
 
+## new variable got saved as a 2D matrix, but needs to be a vector, so convert
+bdata$comm_det = as.vector(bdata$comm_det)
+
 ## if results are not already present, start the models! 
 print(paste("Begining to run co-abundance model for: ", n, " with MCMC settings: ", setting ,
             " and is starting at ", Sys.time(), sep = ""))
@@ -93,7 +100,7 @@ print(paste("Begining to run co-abundance model for: ", n, " with MCMC settings:
 
 ####### Make the model in BUGS language and run it ####
 
-cat(file = "ZDA_Co_Abundance_Model_final_20240228.jags", 
+cat(file = "ZDA_Co_Abundance_Model_final_20241201.jags", 
     
     "model{
 
@@ -111,6 +118,9 @@ cat(file = "ZDA_Co_Abundance_Model_final_20240228.jags",
     
     # Elev
     a3[i] ~ dnorm(0, 0.01)
+    
+    # community detections
+    a4[i] ~ dnorm(0, 0.01)
   
   
     # Det intercept
@@ -178,12 +188,12 @@ cat(file = "ZDA_Co_Abundance_Model_final_20240228.jags",
     # Abundance of Subordinate Species w/ iZIP
     N.sub[j] ~ dpois(lambda.sub[j] * Z.sub[j])
 
-      log(lambda.sub[j]) <- a0[1] + a1[1]*flii[j] + a2[1]*hfp[j] + a3[1]*elev[j] + a5*N.dom[j] + a6[area[j]] + a8[year[j]]
+      log(lambda.sub[j]) <- a0[1] + a1[1]*flii[j] + a2[1]*hfp[j] + a3[1]*elev[j] + a4[1]*comm_det[j] + a5*N.dom[j] + a6[area[j]] + a8[year[j]]
     
     # Abundance of Dominant Species w/ iZIP 
     N.dom[j] ~ dpois(lambda.dom[j] * Z.dom[j])
     
-      log(lambda.dom[j]) <- a0[2] + a1[2]*flii[j] + a2[2]*hfp[j] + a3[2]*elev[j] + a7[area[j]] + a9[year[j]]
+      log(lambda.dom[j]) <- a0[2] + a1[2]*flii[j] + a2[2]*hfp[j] + a3[2]*elev[j] + a4[2]*comm_det[j] + a7[area[j]] + a9[year[j]]
                       
                       
     # Observation model for counts per replicated observation with OD params 
@@ -264,7 +274,7 @@ cat(file = "ZDA_Co_Abundance_Model_final_20240228.jags",
 
 
 ### Specify the parameters to be monitored.
-params = c('a0', 'a1', 'a2', 'a3', 'a5',          # Abundance parameters
+params = c('a0', 'a1', 'a2', 'a3', 'a4', 'a5',    # Abundance parameters
            'b0',  'b2',                           # Detection parameters
            'var.a6','var.a7','a6', 'a7',          # Landscape random effects
            'var.a8','var.a9','a8', 'a9',          # Year random effects
@@ -275,12 +285,12 @@ params = c('a0', 'a1', 'a2', 'a3', 'a5',          # Abundance parameters
            # "E.dom", "E.rep.dom",
            # "E.sub", "E.rep.sub",
            # "N.dom", "N.sub"                     # NOT monitoring abundance per site to save RAM on LONG mods. 
-           )                         
+)                         
 
 
 # Specify the initial values
 inits = function() {
-  list(a0=rnorm(2), a1=rnorm(2), a2=rnorm(2), a3=rnorm(2), a5=rnorm(1),
+  list(a0=rnorm(2), a1=rnorm(2), a2=rnorm(2), a3=rnorm(2), a4=rnorm(2), a5=rnorm(1),
        b0=rnorm(2), b2=rnorm(2),
        sd.p = runif(2, .4, .8), # Experimented and medium values seem to produce better convergence.
        a6=rnorm(bdata$narea), a7=rnorm(bdata$narea),
@@ -313,13 +323,14 @@ if(setting == "LONG"){
 start = Sys.time()
 
 ### Run the model 
-mod = jags(bdata, inits, params, "ZDA_Co_Abundance_Model_final_20240228.jags",
+mod = jags(bdata, inits, params, "ZDA_Co_Abundance_Model_final_20241201.jags",
            ## MCMC settings
            n.chains = nc, n.adapt = na, n.thin = nt, 
            n.iter = ni, n.burnin = nb, parallel = T)
 
 # take the end time 
 end = Sys.time()
+
 
 ### DONT SAVE THE MODEL, they are too big 
 
@@ -362,7 +373,7 @@ s$var[grepl("a0", s$var)]= "Abundance_intercept"
 s$var[grepl("a1", s$var)]= "FLII"
 s$var[grepl("a2", s$var)]= "HFP"
 s$var[grepl("a3", s$var)]= "Elevation"
-# s$var[grepl("a4", s$var)]= "Hunting"
+s$var[grepl("a4", s$var)]= "Community_detections"
 s$var[grepl("a5", s$var)]= "Species_Interaction"
 
 s$var[grepl("b0", s$var)]= "Detection_intercept"
@@ -394,7 +405,7 @@ day<-substr(Sys.Date(),9, 10)
 month<-substr(Sys.Date(),6,7)
 year<-substr(Sys.Date(),1,4)
 
-path = paste(paste(paste(paste("results/co-abundance/coefficent_dataframes/", slurm, "_", setting, "_co-abundance_coefficents_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
+path = paste(paste(paste(paste("results/co-abundance/dec2024_coefficent_dataframes/", slurm, "_", setting, "_co-abundance_coefficents_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
 write.csv(s, path, row.names = F)
 
 
@@ -512,32 +523,32 @@ print(paste("Finished generating coefficent dataframe for: ", n, " at ", Sys.tim
 # 
 ####### Generate dataframe for PPC plots ########
 
-# Data Prep for Plot
-ppc.dat = data.frame("sub.sim" = mod$sims.list$fit.rep.sub,
-                     "sub.real" = mod$sims.list$fit.sub,
-                     "dom.sim" = mod$sims.list$fit.rep.dom,
-                     "dom.real" = mod$sims.list$fit.dom)
-
-## Add a label to color the dots
-ppc.dat$sub.label[mod$sims.list$fit.rep.sub > mod$sims.list$fit.sub]= "Above"
-ppc.dat$sub.label[mod$sims.list$fit.rep.sub < mod$sims.list$fit.sub]= "Below"
-
-ppc.dat$dom.label[mod$sims.list$fit.rep.dom > mod$sims.list$fit.dom]= "Above"
-ppc.dat$dom.label[mod$sims.list$fit.rep.dom < mod$sims.list$fit.dom]= "Below"
-
-## dont forget to add the species pair! 
-ppc.dat$Species_Pair = n
-
-#### Save it! 
-day<-substr(Sys.Date(),9, 10)
-month<-substr(Sys.Date(),6,7)
-year<-substr(Sys.Date(),1,4)
-
-path = paste(paste(paste(paste("results/co-abundance/PPC_dataframes/", slurm, "_", setting, "_PPC_plotdata_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
-write.csv(ppc.dat, path)
-
-print(paste("Finished generating PPC plotdata dataframe for: ", n, " at ", Sys.time(),
-            ". Beginning PPC values dataframe now.", sep = ""))
+# # Data Prep for Plot
+# ppc.dat = data.frame("sub.sim" = mod$sims.list$fit.rep.sub,
+#                      "sub.real" = mod$sims.list$fit.sub,
+#                      "dom.sim" = mod$sims.list$fit.rep.dom,
+#                      "dom.real" = mod$sims.list$fit.dom)
+# 
+# ## Add a label to color the dots
+# ppc.dat$sub.label[mod$sims.list$fit.rep.sub > mod$sims.list$fit.sub]= "Above"
+# ppc.dat$sub.label[mod$sims.list$fit.rep.sub < mod$sims.list$fit.sub]= "Below"
+# 
+# ppc.dat$dom.label[mod$sims.list$fit.rep.dom > mod$sims.list$fit.dom]= "Above"
+# ppc.dat$dom.label[mod$sims.list$fit.rep.dom < mod$sims.list$fit.dom]= "Below"
+# 
+# ## dont forget to add the species pair! 
+# ppc.dat$Species_Pair = n
+# 
+# #### Save it! 
+# day<-substr(Sys.Date(),9, 10)
+# month<-substr(Sys.Date(),6,7)
+# year<-substr(Sys.Date(),1,4)
+# 
+# path = paste(paste(paste(paste("results/co-abundance/PPC_dataframes/", slurm, "_", setting, "_PPC_plotdata_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
+# write.csv(ppc.dat, path)
+# 
+# print(paste("Finished generating PPC plotdata dataframe for: ", n, " at ", Sys.time(),
+#             ". Beginning PPC values dataframe now.", sep = ""))
 
 
 ##### Generate dataframe w/ only BPV and C-hat values
@@ -580,7 +591,7 @@ day<-substr(Sys.Date(),9, 10)
 month<-substr(Sys.Date(),6,7)
 year<-substr(Sys.Date(),1,4)
 
-path = paste(paste(paste(paste("results/co-abundance/PPC_dataframes/", slurm, "_", setting, "_BPV_and_Chat_values_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
+path = paste(paste(paste(paste("results/co-abundance/dec2024_PPC_dataframes/", slurm, "_", setting, "_BPV_and_Chat_values_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
 write.csv(da, path)
 
 print(paste("Finished generating PPC plotdata dataframe for: ", n, " at ", Sys.time(),

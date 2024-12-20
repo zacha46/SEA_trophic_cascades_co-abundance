@@ -91,7 +91,7 @@ bdata$comm_det = as.vector(bdata$comm_det)
 
 ## if results are not already present, start the models! 
 print(paste("Begining to run co-abundance model for: ", n, " with MCMC settings: ", setting ,
-            " and is starting at ", Sys.time(), sep = ""))
+            "with counter-factual test: ",counter, " and is starting at ", Sys.time(), sep = ""))
 
 
 ####### Make the model in BUGS language and run it ####

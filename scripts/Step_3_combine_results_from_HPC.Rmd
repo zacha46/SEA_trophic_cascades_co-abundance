@@ -94,7 +94,7 @@ all_combos = names(bdata)
 files = list.files(paste(wd, "results/", sep = ""), recursive = T)
 # We dont want OE files (that informed GB requirements)
 files = files[!grepl("OE", files)]
-files = files[!grepl("counterfactual2|counterfactual3|counterfactual4|counterfactual5|counterfactual6|counterfactual7", files)]
+files = files[!grepl("counterfactual1|counterfactual2|counterfactual3|counterfactual4|counterfactual5|counterfactual6|counterfactual7", files)]
 
 ## specify the MCMC setting were interested in 
 setting = "LONG"
@@ -102,10 +102,16 @@ setting = "LONG"
 ## Specify the spatial scale we are interested in 
 scale = "5km"
 
+## Specify the specific iteration of tests were interested in
+# options are "Jan_2024", "Sep_2024" "Oct2024", and "Dec2024"
+time = "Dec2024"
+
 # Subset for the MCMC settings were interested in 
 files = files[grepl(setting, files)]
 # and same for spatial scale
 files = files[grepl(scale, files)]
+# and for the same time period
+files = files[grepl(time, files)]
 
 # Grab all coefficent dataframe files
 files = files[grepl("/coefficent_dataframes/", files)]
@@ -168,12 +174,14 @@ coeff$dom_sp = gsub("DOM-", "", coeff$dom_sp)
 coeff$sub_sp = gsub("SUB-", "", coeff$sub_sp)
 
 
-### Inspect which species pairs are present/missing, 20241209, LONG settings
+### Inspect which species pairs are present/missing, 20241220, LONG settings
 setdiff(all_combos, coeff$Species_Pair) 
-## 2 models missing, replace w/ middle settings. 
+## 195 models missing, replace w/ middle settings. 
 
 # save the missing mods 
 missing = setdiff(all_combos, coeff$Species_Pair)
+# 2024-12-20 w/ new comm_det variable, dont compare old mods 
+missing = c()
 
 #
 ##
@@ -302,7 +310,11 @@ table(preform$mod_completion)
 
 ## December 9th, 2024, Long @ 5 km w/ community
 # completed = 260
-# uncompleted = 2 (community mods) --> sent to re-runon HPC
+# uncompleted = 2 (community mods) --> sent to re-run on HPC
+
+## December 20th, 2024, Long @ 5km w/ comm_det
+# completed = 67 (preferred)
+# uncompleted = 195 (community mods) --> sent to re-run on HPC
 
 
 ```
@@ -313,7 +325,7 @@ table(preform$mod_completion)
 files = list.files(paste(wd, "results/", sep = ""), recursive = T)
 # We dont want OE files (that informed GB requirements) or counter-factuals
 files = files[!grepl("OE", files)]
-files = files[!grepl("counterfactual2|counterfactual3|counterfactual4|counterfactual5|counterfactual6|counterfactual7", files)]
+files = files[!grepl("counterfactual1|counterfactual2|counterfactual3|counterfactual4|counterfactual5|counterfactual6|counterfactual7", files)]
 
 ## specify the MCMC setting were interested in 
 setting = "LONG"
@@ -322,6 +334,8 @@ setting = "LONG"
 files = files[grepl(setting, files)]
 # and same for spatial scale
 files = files[grepl(scale, files)]
+# and same time frame
+files = files[grepl(time, files)]
 
 # Grab all PPC_dataframe files
 files = files[grepl("/PPC_dataframes/", files)]
@@ -381,12 +395,14 @@ str(ppc_values) # looks mostly good!
 ppc_values$X = NULL # damn row names 
 
 
-### Inspect which species pairs are present/missing, 20241209, LONG settings
+### Inspect which species pairs are present/missing, 20241220, LONG settings
 setdiff(all_combos, ppc_values$Species_Pair) 
-## same 2 missing mods from coeff. 
+## 193 mods missing, mostly community 
 
 # save the missing mods 
 missing = setdiff(all_combos, ppc_values$Species_Pair)
+# 2024-12-20 w/ new comm_det variable, dont compare old mods 
+missing = c()
 
 #
 ##
@@ -588,6 +604,9 @@ table(preform$preference) # 66 preferred, 125 not. 66 + 125 = 191 -> know were m
 
 ## are all preferred models finished?
 anyNA(preform$Interaction_Estimate[preform$preference == "preferred"]) # MUST BE F! 
+# if true, check who 
+preform$Species_Pair[is.na(preform$Interaction_Estimate) & preform$preference == "preferred"]
+# 2 mods :(, important ones too. 
 
 ## are all community models finished?
 anyNA(preform$Interaction_Estimate[preform$preference == "community"]) # MUST BE F! but can proceed before F, just make sure to come back here!
@@ -679,6 +698,8 @@ A total of `r length(preform$Species_Pair[preform$mod_completion == "completed"]
 
 These completed models are composed of `r length(preform$Species_Pair[preform$preference == "preferred" & preform$mod_completion == "completed" & !is.na(preform$Interaction_Estimate)])` preferred models and  `r length(preform$Species_Pair[preform$preference == "community" & preform$mod_completion == "completed"& !is.na(preform$Interaction_Estimate)])` community models. The settings used on the HPC to complete these models are composed of `r length(unique(preform$Species_Pair[preform$MCMC_setting == "LONG" & !is.na(preform$Interaction_Estimate)]))` models with long settings,  `r length(unique(preform$Species_Pair[preform$MCMC_setting == "MIDDLE" & !is.na(preform$Interaction_Estimate)]))` models with middle settings, and  `r length(unique(preform$Species_Pair[preform$MCMC_setting == "SHORT" & !is.na(preform$Interaction_Estimate)]))` models with short settings. 
 
+If there are any __uncompleted preferred models__, the names of those species-pairs will appear here: **`r paste(preform$Species_Pair[is.na(preform$Interaction_Estimate) & preform$preference == "preferred"], collapse = ", ")`**. 
+
 It is important to inspect the diagnostics of the models before we interpret results, and there are four key diagnostic features to inspect. 
 
 1) The first key value we are interested in is the __parameter convergence (known as R-hat) around the species interaction value (SIV)__, where parameters are converged if values are between 1 and 1.2. **The median Rhat for the SIV is `r round(median(preform$Rhat, na.rm = T), 3)` with a standard deviation of `r round(sd(preform$Rhat, na.rm = T), 3)`**. In total, `r length(unique(preform$Species_Pair[preform$parameter_valid == "No"]))` models failed to generate a convergent SIV. This is composed of `r length(unique(preform$Species_Pair[preform$parameter_valid == "No" & preform$preference == "preferred"]))` preferred models and `r length(unique(preform$Species_Pair[preform$parameter_valid == "No" & preform$preference == "community"]))` community models.
@@ -720,27 +741,27 @@ setting = "LONG" # its finally time !
 
 # Subset for the MCMC settings were interested in 
 files = files[grepl(setting, files)]
+# and the correct time frame
+files = files[grepl(time, files)]
 
 # Grab all coefficent dataframe files
-files = files[grepl("/coefficent_dataframes/", files)]
+files = files[grepl("/counterfactual_coefficent_dataframes/", files)]
 
 ## split apart different tests
-# f1 = files[grepl("counterfactual1", files)]
+f1 = files[grepl("counterfactual1", files)]
 f2 = files[grepl("counterfactual2", files)]
 f3 = files[grepl("counterfactual3", files)]
 f4 = files[grepl("counterfactual4", files)]
 f5 = files[grepl("counterfactual5", files)]
 f6 = files[grepl("counterfactual6", files)]
-f7 = files[grepl("counterfactual7", files)]
 # combine into a list
-files_list = list(#"counterfactual1" = f1,
+files_list = list("counterfactual1" = f1,
                   "counterfactual2" = f2,
                   "counterfactual3" = f3,
                   "counterfactual4" = f4,
                   "counterfactual5" = f5,
-                  "counterfactual6" = f6,
-                  "counterfactual7" = f7)
-rm(f2,f3,f4,f5,f6,f7, files)
+                  "counterfactual6" = f6)
+rm(f2,f3,f4,f5,f6, files)
 
 # import them all
 res = list()
@@ -751,7 +772,9 @@ for(i in 1:length(files_list)){
   
   # temp list
   temp = list()
-  for(l in 1:length(fl)){
+  ## verify we have data first! 
+  if(length(fl)>0){
+    for(l in 1:length(fl)){
     
     ## grab the matching species pair here
     match = all_combos[sapply(all_combos, grepl, x = fl[l])]
@@ -770,7 +793,11 @@ for(i in 1:length(files_list)){
       f = fl[l]
     }# end multiple file conditon
     
-    # import it
+    ## verify this is a preferred model
+    if(any(sapply(preform$Species_Pair[preform$preference == "preferred"], 
+                  function(x) grepl(x, f)))){
+      
+          # import it
     dat = read.csv(paste(wd, "results/", f, sep = ""))
     
     # add the MCMC setting
@@ -778,20 +805,29 @@ for(i in 1:length(files_list)){
 
     # save it
     temp[[l]] = dat
-    
-  }
+      
+    }else{
+      ## but if not, skip it! 
+      next
+    } # end preferred prey prefrerence 
+      
+  } # end for loop with l
+  }else{
+    ## but if not, skip it! 
+    next
+  } # end length condition
   
   ## turn into a DF 
   r = do.call(rbind, temp)
   
   ## Add the testing column
-  if(names(files_list)[i] == "counterfactual1"){ r$counter_factual_test = "isolate_abundance_declines" }
-  if(names(files_list)[i] == "counterfactual2"){ r$counter_factual_test = "isolate_extirpations" }
-  if(names(files_list)[i] == "counterfactual3"){ r$counter_factual_test = "site_matching_ThaiEFC" }
-  if(names(files_list)[i] == "counterfactual4"){ r$counter_factual_test = "isolate_altitude" }
-  if(names(files_list)[i] == "counterfactual5"){ r$counter_factual_test = "isolate_FLII" }
-  if(names(files_list)[i] == "counterfactual6"){ r$counter_factual_test = "isolate_HFP" }
-  if(names(files_list)[i] == "counterfactual7"){ r$counter_factual_test = "new_variable_unmeasured_site_quality" }
+  if(names(files_list)[i] == "counterfactual1"){ r$counter_factual_test = "isolate_extirpations" }
+  if(names(files_list)[i] == "counterfactual2"){ r$counter_factual_test = "site_matching_ThaiEFC" }
+  if(names(files_list)[i] == "counterfactual3"){ r$counter_factual_test = "isolate_altitude" }
+  if(names(files_list)[i] == "counterfactual4"){ r$counter_factual_test = "isolate_FLII" }
+  if(names(files_list)[i] == "counterfactual5"){ r$counter_factual_test = "isolate_HFP" }
+  if(names(files_list)[i] == "counterfactual6"){ r$counter_factual_test = "remove_community_detections" }
+  # if(names(files_list)[i] == "counterfactual7"){ r$counter_factual_test = "new_variable_unmeasured_site_quality" }
 
   # and save
   res[[i]] = r
@@ -847,25 +883,23 @@ setting = "LONG"
 files = files[grepl(setting, files)]
 
 # Grab all coefficent dataframe files
-files = files[grepl("/PPC_dataframes/", files)]
+files = files[grepl("/counterfactual_PPC_dataframes/", files)]
 
 ## split apart different tests
-# f1 = files[grepl("counterfactual1", files)]
+f1 = files[grepl("counterfactual1", files)]
 f2 = files[grepl("counterfactual2", files)]
 f3 = files[grepl("counterfactual3", files)]
 f4 = files[grepl("counterfactual4", files)]
 f5 = files[grepl("counterfactual5", files)]
 f6 = files[grepl("counterfactual6", files)]
-f7 = files[grepl("counterfactual7", files)]
 # combine into a list 
-files_list = list(#"counterfactual1" = f1,
+files_list = list("counterfactual1" = f1,
                   "counterfactual2" = f2,
                   "counterfactual3" = f3,
                   "counterfactual4" = f4,
                   "counterfactual5" = f5,
-                  "counterfactual6" = f6,
-                  "counterfactual7" = f7)
-rm(f2,f3,f4,f5,f6,f7, files)
+                  "counterfactual6" = f6)
+rm(f2,f3,f4,f5,f6, files)
 
 # import them all
 res = list()
@@ -876,7 +910,9 @@ for(i in 1:length(files_list)){
   
   # temp list
   temp = list()
-  for(l in 1:length(fl)){
+  ## verify we have results first!
+  if(length(fl)> 0){
+     for(l in 1:length(fl)){
     
     ## grab the matching species pair here
     match = all_combos[sapply(all_combos, grepl, x = fl[l])]
@@ -895,29 +931,42 @@ for(i in 1:length(files_list)){
       f = fl[l]
     }# end multiple file conditon
     
-    # import it
-    dat = read.csv(paste(wd, "results/", f, sep = ""))
+    ## verify this is a preferred model
+    if(any(sapply(preform$Species_Pair[preform$preference == "preferred"], 
+                  function(x) grepl(x, f)))){
+      
+      # import it
+      dat = read.csv(paste(wd, "results/", f, sep = ""))
+      
+      # add the MCMC setting
+      dat$MCMC_setting = setting
+      
+      # save it
+      temp[[l]] = dat
+      
+    }else{
+      ## but if not, skip it! 
+      next
+    } # end preferred prey prefrerence 
     
-    # add the MCMC setting
-    dat$MCMC_setting = setting
-
-    # save it
-    temp[[l]] = dat
-    
-  }
+     } # end loop per l
+  }else{
+    # but if not, skip to the next! 
+    next
+  } # end length condition
   
   ## turn into a DF 
   r = do.call(rbind, temp)
   
   ## Add the testing column
-  if(names(files_list)[i] == "counterfactual1"){ r$counter_factual_test = "isolate_abundance_declines" }
-  if(names(files_list)[i] == "counterfactual2"){ r$counter_factual_test = "isolate_extirpations" }
-  if(names(files_list)[i] == "counterfactual3"){ r$counter_factual_test = "site_matching_ThaiEFC" }
-  if(names(files_list)[i] == "counterfactual4"){ r$counter_factual_test = "isolate_altitude" }
-  if(names(files_list)[i] == "counterfactual5"){ r$counter_factual_test = "isolate_FLII" }
-  if(names(files_list)[i] == "counterfactual6"){ r$counter_factual_test = "isolate_HFP" }
-  if(names(files_list)[i] == "counterfactual7"){ r$counter_factual_test = "new_variable_unmeasured_site_quality" }
-
+  if(names(files_list)[i] == "counterfactual1"){ r$counter_factual_test = "isolate_extirpations" }
+  if(names(files_list)[i] == "counterfactual2"){ r$counter_factual_test = "site_matching_ThaiEFC" }
+  if(names(files_list)[i] == "counterfactual3"){ r$counter_factual_test = "isolate_altitude" }
+  if(names(files_list)[i] == "counterfactual4"){ r$counter_factual_test = "isolate_FLII" }
+  if(names(files_list)[i] == "counterfactual5"){ r$counter_factual_test = "isolate_HFP" }
+  if(names(files_list)[i] == "counterfactual6"){ r$counter_factual_test = "remove_community_detections" }
+  # if(names(files_list)[i] == "counterfactual7"){ r$counter_factual_test = "new_variable_unmeasured_site_quality" }
+  
   
   # and save
   res[[i]] = r
@@ -1088,7 +1137,11 @@ We implemented a total of `r length(unique(ppc_values_cf$counter_factual_test)) 
 
 Finally, we assessed which species pairs agreed across the different tests and this resulted in `r length(preform$Species_Pair[preform$Species_Pair %in% agree & preform$direction == "top-down"])` top-down model and `r length(preform$Species_Pair[preform$Species_Pair %in% agree & preform$direction == "bottom-up"])` bottom-up models. **The `r length(agree)` specific species pairs that agree across different counter-factual tests are: `r paste(agree, collapse = ", ")`**.
 
-```{r Inspect new counterfactual test 7} 
+```{r Inspect new counterfactual test 7, eval=FALSE}
+### OLD CODE, leaving for now, but will not assess when knitting. 
+### Also, I have deleted the old Markdown text for this document to ensure a clean knit
+### but I have saved the html output in the OLD folder for back up. 
+
 ## grab original + CF7 to compare
 new_dat = ppc_values_cf[ppc_values_cf$counter_factual_test == "new_variable_unmeasured_site_quality",]
 dat = ppc_values_cf[ppc_values_cf$counter_factual_test == "original_test",]
@@ -1182,26 +1235,6 @@ summary(check2_new$Interaction_Estimate[check2_new$support == "Supported"])
 # median is 0.12, mean is 0.24, min = 0.1,  max = 0.54
 ## seems like it worked as predicted --> more conservative! 
 
-```
-
-Counter-factual test number 7 introduced a new variable, **community_detections**, to address unmeasured variables influencing co-abundance relationships. To determine if this variable captures unmeasured variation, we made two predictions: 
-
-1) Large positive (>1) unsupported top-down models in the original test will now produce a small and unsupported SIV if not an important interaction or a negative interaction if real.
-
-* In the original test, we generated `r length(check_old$Species_Pair)` unsupported top-down SIVs <1. The minimum value was `r round(min(check_old$Interaction_Estimate), 2)`, the maximum value was `r round(max(check_old$Interaction_Estimate), 2)`, and the mean value was `r round(mean(check_old$Interaction_Estimate), 2)`. In counter-factual test 7, the same `r length(check_new$Species_Pair)` species pairs produced SIVs with a minimum value of `r round(min(check_new$Interaction_Estimate), 2)`, a maximum value of `r round(max(check_new$Interaction_Estimate), 2)`, and a mean value of `r round(mean(check_new$Interaction_Estimate), 2)`. In counter-factual test 7, these top-down models are all at the support level: `r  unique(check_new$support)`.
-
-A comparison of the top-down co-abundance models compared are shown here:
-```{r Visualize top-down CF7 results, echo=FALSE, include=TRUE, results='asis'}
-check_td_plot
-```
-
-2) Positive supported bottom-up models in the original test should now produce either no change and remain significant if a legitimate interaction, or become unsupported if unmeasured variation was driving a spurious positive correlation. 
-
-* In the original test, we generated `r length(check2_old$Species_Pair)` supported bottom-up models. The minimum value was `r round(min(check2_old$Interaction_Estimate), 2)`, the maximum value was `r round(max(check2_old$Interaction_Estimate), 2)`, and the mean value was `r round(mean(check2_old$Interaction_Estimate), 2)`. In counter-factual test 7, the same `r length(check2_new$Species_Pair)` species pairs produced SIVs with a minimum value of `r round(min(check2_new$Interaction_Estimate), 2)`, a maximum value of `r round(max(check2_new$Interaction_Estimate), 2)`, and a mean value of `r round(mean(check2_new$Interaction_Estimate), 2)`. In counter-factual test 7, there were a total of `r length(check2_new$Species_Pair[check2_new$support == "Supported"])` supported bottom-up models, and a total of `r length(check2_new$Species_Pair[grepl("Unsup", check2_new$support)])` unsupported bottom-up models. **The bottom-up models that are no longer supported are: `r paste(check2_new$Species_Pair[grepl("Unsup", check2_new$support)], collapse = ", ")`**.
-
-A comparison of the bottom-up co-abundance models compared are shown here:
-```{r Visualize bottom-up CF7 results, echo=FALSE, include=TRUE, results='asis'}
-check_bu_plot
 ```
 
 ## Save results

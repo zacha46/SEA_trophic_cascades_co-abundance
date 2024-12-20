@@ -352,7 +352,7 @@ display: none;
 <h1 class="title toc-ignore">Step 2_generate co-abundance pairwise data
 bundles</h1>
 <h4 class="author">Zachary Amir</h4>
-<h4 class="date">2024-12-01 13:32:25</h4>
+<h4 class="date">2024-12-10 13:01:21</h4>
 
 </div>
 
@@ -377,11 +377,23 @@ pair needs to be present in at least one landscape and have at least 100
 independent detection from a shared landscape. Despite the loop being
 very long and complex, it is mainly reorganizing and sorting data rather
 than running calculations. Therefore, it completes in &lt; 5 min.</p>
+<p>We are now including a new variable called
+<strong>community_detections</strong> across all models, which is simply
+a site-level variable containing the sum number of all independent
+detections of all species detected at that sampling unit except for the
+two-species whose co-abundance is considered in the model. The variable
+has been log-transformed to better normalize outliers and, like all
+other variables, it has been standardized with a mean of 0 and standard
+deviation of 1. The idea behind this variable is that some sampling unit
+are just better than other sampling units for a many different factors
+(including better cameras and deployment sites), which should manifest
+as more detections of more species at that sampling unit.</p>
 <p>After successfully generating the bundled data, we have a total of
 262 pairwise interactions composed of both top-down and bottom-up
 models.</p>
-<div id="reorganize-list-for-efficent-analysis" class="section level3">
-<h3>Reorganize list for efficent analysis</h3>
+</div>
+<div id="reorganize-list-for-efficent-analysis" class="section level2">
+<h2>Reorganize list for efficent analysis</h2>
 <p>After some preliminary testing, I realized that all co-abundance
 models don’t need the same amount of RAM. Most complete w/ 100 GB, but
 some need 250 or even 500 GB to complete. Based of prior testing, I will
@@ -392,7 +404,6 @@ HPC when each job runs.</p>
 <strong>66 preferred co-abundance models</strong> and a total of
 <strong>196 co-abundance models across the larger
 community</strong>.</p>
-</div>
 </div>
 <div id="save-the-final-list-of-bundled-data" class="section level2">
 <h2>Save the final list of bundled data</h2>
@@ -441,15 +452,6 @@ extirpation.</p>
 preferred predator-prey models</strong> to examine the causal forces
 driving observed relationships. The tests include:</p>
 <ol style="list-style-type: decimal">
-<li><p><strong>NOTE: This test is complicated to interpret and is
-currently omitted from analysis!</strong> Would prey abundance increase
-in landscapes where large carnivores remain abundant (top-down test),
-AND would predator abundance increase in landscapes where preferred prey
-remain scarce (bottom-up test). This isolates the effect of declines
-while being present rather than species extirpations, and is tested by
-selecting landscapes where predators remain common (upper 3rd quartile
-of site-level abundance) and prey remain scarce (bottom 1st quartile of
-site-level abundance).</p></li>
 <li><p><em>What if</em> prey abundance increases would not have happened
 if not for large carnivore extirpation (top-down test), AND <em>what
 if</em> predator abundance decreases would not have happened if not for
@@ -499,31 +501,22 @@ from values between 303.2 to 618.12. For Forest Landscape Integrity
 Index, this ranges from values between 6.18 to 8.91. <strong>For the
 counter-factual co-abundance models examining the effect of
 Avg_human_footprint_5km, we have 66 models.</strong></p></li>
-<li><p>While not necessarily a counterfactual test, this new bundling of
-species pairs to run co-abundance models include <strong>a new
-variable</strong>. In an effort to address unmeasured variables
-influencing co-abundance relationships, we are creating a new variable
-called <strong>community_detections</strong>, which is simply a
-site-level variable containing the sum number of all independent
-detections of all species detected at that sampling unit except for the
-two-species whose co-abundance is considered in the model. The variable
-has been log-transformed to better normalize outliers and, like all
-other variables, it has been standardized with a mean of 0 and standard
-deviation of 1. The idea behind this variable is that some sampling unit
-are just better than other sampling units for a many different factors,
-which should manifest as more detections of more species at that
-sampling unit. If this variable legitimetly tracks unmeasured variation,
-we predict that large positive unsupported top-down in the original test
-will now produce either small and unsupported if not an important
-interaction or a negative interaction if real. Conversely, small
-positive supported bottom-up in the original test should now produce
-either no change and remain significant if a legitimate interaction, or
-become unsupported if unmeasured variation was driving a spurious
-positive correlation. For clarity and organization sake’ this new test
-will be called counterfactual 7. <strong>In this co-abundance model test
-with the new community detections, we are running a total of 66
-co-abundance models</strong>.</p></li>
+<li><p>What would happen if we <strong>did not include our new variable
+community_detections</strong>? Therefore, we assume that we are not
+accounting for unmeasured variation as well as we might be able to, so
+we would expect to see more spurious correations.</p></li>
 </ol>
+<p>If this variable legitimetly tracks unmeasured variation, we predict
+that large positive unsupported top-down in the original test will now
+produce either small and unsupported if not an important interaction or
+a negative interaction if real. Conversely, small positive supported
+bottom-up in the original test should now produce either no change and
+remain significant if a legitimate interaction, or become unsupported if
+unmeasured variation was driving a spurious positive correlation. For
+clarity and organization sake’ this new test will be called
+counterfactual 7. <strong>In this co-abundance model test with the new
+community detections, we are running a total of 66 co-abundance
+models</strong>.</p>
 </div>
 
 

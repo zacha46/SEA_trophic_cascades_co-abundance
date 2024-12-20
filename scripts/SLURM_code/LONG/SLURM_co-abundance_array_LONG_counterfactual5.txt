@@ -43,7 +43,7 @@ fi
 export SETTING="LONG" 
 
 # SET THE 'counter' VARIABLE THAT WILL BE LOADED IN R
-export COUNTER="counterfactual5_isolate_FLII"
+export COUNTER="counterfactual5_isolate_HFP"
 
 # SPECIFY THE PBS WORKING DIRECTORY AND PRINT TO VERIFY
 cd $SLURM_SUBMIT_DIR

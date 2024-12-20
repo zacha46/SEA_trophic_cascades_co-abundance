@@ -10,7 +10,7 @@
 # Select 1 task per node (b/c R is not MPI)
 #SBATCH --ntasks=1
 
-# Select 4 CPUS per node (one per MCMC chain)
+# Select 3 CPUS per node (one per MCMC chain)
 #SBATCH --cpus-per-task=3
 
 # Select 300,000 MB (300 GB) of memory per node 
@@ -23,7 +23,7 @@
 #SBATCH --time=336:00:00
 
 # SPECIFY THE JOB ARRAY-
-#SBATCH --array=1-66
+#SBATCH --array=1-40
 
 # SPECIFY THE JOB NAME
 #SBATCH --job-name=CF2
@@ -43,7 +43,7 @@ fi
 export SETTING="LONG" 
 
 # SET THE 'counter' VARIABLE THAT WILL BE LOADED IN R
-export COUNTER="counterfactual2_isolate_extirpation"
+export COUNTER="counterfactual2_site_matching"
 
 # SPECIFY THE PBS WORKING DIRECTORY AND PRINT TO VERIFY
 cd $SLURM_SUBMIT_DIR

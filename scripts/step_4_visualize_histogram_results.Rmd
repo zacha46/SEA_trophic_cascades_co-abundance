@@ -1016,8 +1016,9 @@ table(ppc_values_cf$support_simple)
 
 ## Set the facet wrap factor levels for nice ordering
 ppc_values_cf$counter_factual_test = factor(ppc_values_cf$counter_factual_test,
-                                            levels = c("original_test", "site_matching",
+                                            levels = c("original_test", "site_matching_ThaiEFC",
                                                        #"isolate_abundance_declines",
+                                                       "remove_community_detections",
                                                        "isolate_extirpations",
                                                        "isolate_altitude", "isolate_FLII",
                                                        "isolate_HFP"))
@@ -1028,9 +1029,11 @@ sum_table_cf = ddply(ppc_values_cf, .(counter_factual_test, support_simple), sum
 ## Calculate percentage per test 
 sum_table_cf$percent[sum_table_cf$counter_factual_test == "original_test"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "original_test"] /  length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "original_test"]) * 100, 1)
 
-sum_table_cf$percent[sum_table_cf$counter_factual_test == "site_matching"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "site_matching"] / length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "site_matching"]) * 100, 1)
+sum_table_cf$percent[sum_table_cf$counter_factual_test == "site_matching_ThaiEFC"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "site_matching_ThaiEFC"] / length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "site_matching_ThaiEFC"]) * 100, 1)
 
 # sum_table_cf$percent[sum_table_cf$counter_factual_test == "isolate_abundance_declines"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "isolate_abundance_declines"] / length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "isolate_abundance_declines"]) * 100, 1)
+
+sum_table_cf$percent[sum_table_cf$counter_factual_test == "remove_community_detections"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "remove_community_detections"] / length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "remove_community_detections"]) * 100, 1)
 
 sum_table_cf$percent[sum_table_cf$counter_factual_test == "isolate_extirpations"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "isolate_extirpations"] / length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "isolate_extirpations"]) * 100, 1)
 
@@ -1115,10 +1118,10 @@ for(i in 1:length(all_plots)){
     ggsave(path, p, width = 10, height = 10, units = "in")
   }
   if(grepl("community", n) & !grepl("all_large_carn", n)){
-    ggsave(path, p, width = 8, height = 10, units = "in")
+    ggsave(path, p, width = 10, height = 10, units = "in")
   }
   if(grepl("preferred", n) & !grepl("all_large_carn", n)){
-    ggsave(path, p, width = 8, height = 10, units = "in")
+    ggsave(path, p, width = 10, height = 10, units = "in")
   }
   if(grepl("community", n) & grepl("all_large_carn", n)){
     ggsave(path, p, width = 12, height = 4, units = "in")

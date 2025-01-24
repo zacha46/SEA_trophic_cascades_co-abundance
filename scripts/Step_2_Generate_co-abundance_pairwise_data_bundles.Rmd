@@ -177,6 +177,18 @@ for(i in 1:length(umfs)){ # repeat for each first speices
     
     #
     ##
+    ### Add a detection ratio cutoff (e.g., 50:1) to avoid highly skewed detections 
+    det_ratio <- max(dom_det, sub_det) / min(dom_det, sub_det)
+    if (det_ratio > 50) { 
+      # Let us know
+      print(paste("The species combo of", sp_sub, "~", sp_dom, 
+                  "have a detection ratio greater than 50:1! This pair was skipped."))
+      # Skip the problematic pair
+      next
+    }
+    
+    #
+    ##
     ###
     #### Remove landscapes where neither species was detected and convert to matrix
     ###
@@ -543,13 +555,14 @@ for(i in 1:length(umfs)){ # repeat for each first speices
 rm(i,l,sp_dom,sp_sub, sp_dom_dat, sp_sub_dat, temp, z.dom, z.sub, rm_SU, dom_tg,
    bdata, all_else, data.dom, data.sub, covs, exp, non_det_SU, non_det_land, pres,
    ob, obs_dom, obs_sub, o, obs, ob_name, sp, a, dom_det, sub_det, lands, env, check,
-   d.dom,e.dom,p.dom,d.sub,e.sub,p.sub, dom_land, dom_rows, sub_land, sub_rows)
+   d.dom,e.dom,p.dom,d.sub,e.sub,p.sub, dom_land, dom_rows, sub_land, sub_rows, det_ratio)
 
 
 
 ## flatten the list of lists into a single list
 bdata_list = unlist(bdata_list, recursive = FALSE)
-length(bdata_list) # 262 combos @ 5 km and also better iZIP?
+length(bdata_list) # 258 combos @ 5 km after implementing detection_ratio
+## This removed dholes <-> bearded pigs & dholes <-> argus pheasent
 names(bdata_list) # looks good! 
 
 ```
@@ -777,7 +790,6 @@ rm(sp_pairs, jobs_final, date)
 
 ```
 
-
 ## Generate counterfactual data bundles 
 
 After submitting the manuscript and analysis to Science and receiving reviews from 3 expert reviewers, 2 reviewers revealed an appetite for causation that was lacking from the current analysis. Moreover, when presenting my findings at conferences and to colleagues, similar sentiments were voiced. __Structural Equation Models (SEM)__ was a logical starting place, but the limitations of the data (*i.e.,* lacking key variables like hunting pressure or resource availability) and inability to include a count history matrix as the response variable (and therefore propagate uncertainty) left me unsatisfied. 
@@ -786,7 +798,21 @@ Instead, the new goal here is to examine counter-factual realities to understand
 
 This approach builds towards the top of the **'ladder of causation'** proposed by __Judea Pearl's Book of Why__. The first rung, associations from data, can be represented simply with a non-directional association between two species (*e.g.,* correlation between RAI of two species). The second run, conceptual causal diagrams, can be used to visualize the researchers hypotheses, assumptions, and biases where one variable directionally affects another variable, such as predators suppress prey or prey bolster predators. Finally, the third rung, testing counter-factual realities, forces the researcher to imagine an alternative reality where the assumed causal forces are reversed or eliminated, such as testing if prey abundance increases in a world with no large carnivore extirpation. 
 
-I will be running several counter-factual tests from the **66 preferred predator-prey models** to examine the causal forces driving observed relationships. The tests include:
+```{r Import vector of community species pairs}
+## We will also be running counter-factual tests for the supported community models
+# to determine if they are robust 
+
+## this vector is generated in step3, which is less than ideal if starting from scratch
+# but you can figure it out 
+
+# change wd first
+wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step3_output_combined_results/"
+comm_sp = readRDS(paste(wd, "supported_community_31_species_pairs_vector_for_counterfactual_testing_20250124.csv", sep = ""))
+
+
+```
+
+I will be running several counter-factual tests from the **64 preferred predator-prey models**, and the `r length(comm_sp)` supported results from the broader community, to examine the causal forces driving observed relationships. The tests include:
 
 ```{r Ultra loop to generate data bundles for counterfactual test 1}
 
@@ -817,18 +843,43 @@ for(i in 1:length(umfs)){ # repeat for each first speices
     ## then sub_species should only be preferred prey
     if(sp_dom == "Cuon_alpinus"){ 
       all_else = traits$scientificNameStd[traits$dhole_pref == "Yes"]
+      
+      ## AND include the extra select members from the community that matched here
+      comm = comm_sp[grepl('DOM-Cuon_alpinus', comm_sp)]
+      # remove the fluff
+      extra = sub("SUB-([A-Za-z_]+)~DOM-.*", "\\1", comm)
+      # then append these to all_elese
+      all_else = c(all_else, extra)
     }
     ## then sub_species should only be preferred prey
     if(sp_dom == "Panthera_tigris"){ 
       all_else = traits$scientificNameStd[traits$tiger_pref == "Yes"]
+      ## AND include the extra select members from the community that matched here
+      comm = comm_sp[grepl('DOM-Panthera_tigris', comm_sp)]
+      # remove the fluff
+      extra = sub("SUB-([A-Za-z_]+)~DOM-.*", "\\1", comm)
+      # then append these to all_elese
+      all_else = c(all_else, extra)
       }
     ## then sub_species should only be preferred prey
     if(sp_dom == "Panthera_pardus"){ 
       all_else = traits$scientificNameStd[traits$leopard_pref == "Yes"]
+      ## AND include the extra select members from the community that matched here
+      comm = comm_sp[grepl('DOM-Panthera_pardus', comm_sp)]
+      # remove the fluff
+      extra = sub("SUB-([A-Za-z_]+)~DOM-.*", "\\1", comm)
+      # then append these to all_elese
+      all_else = c(all_else, extra)
       }
     ## then sub_species should only be preferred prey
     if(sp_dom == "Neofelis_genus"){ 
       all_else = traits$scientificNameStd[traits$CL_pref == "Yes"]
+      ## AND include the extra select members from the community that matched here
+      comm = comm_sp[grepl('DOM-Neofelis_genus', comm_sp)]
+      # remove the fluff
+      extra = sub("SUB-([A-Za-z_]+)~DOM-.*", "\\1", comm)
+      # then append these to all_elese
+      all_else = c(all_else, extra)
       }
     
   } # end dominant predator condition
@@ -845,25 +896,52 @@ for(i in 1:length(umfs)){ # repeat for each first speices
     if(sp_sub %in% c("Panthera_tigris", "Panthera_pardus", "Neofelis_genus", "Cuon_alpinus")){
       
       ## then sub_species should only be preferred prey
-      if(sp_sub == "Cuon_alpinus" & sp_dom %in% traits$scientificNameStd[traits$dhole_pref != "Yes"]){ 
-        # skip to the next iterations
-        next
-      }
+      if(sp_sub == "Cuon_alpinus"){
+        # check which community models are present
+        comm = comm_sp[grepl('SUB-Cuon_alpinus', comm_sp)]
+        # if species is not in the community results AND not preferred
+        if(!any(grepl(paste0("DOM-", sp_dom), comm)) &
+           sp_dom %in% traits$scientificNameStd[traits$dhole_pref != "Yes"]){
+          # skip to the next iterations
+          next
+        } # end per matching
+      } # end per dhole 
+        
       ## then sub_species should only be preferred prey
-      if(sp_sub == "Panthera_tigris" & sp_dom %in% traits$scientificNameStd[traits$tiger_pref != "Yes"]){ 
-        # skip to the next iterations
-        next
-      }
+      if(sp_sub == "Panthera_tigris"){
+        # check which community models are present
+        comm = comm_sp[grepl('SUB-Panthera_tigris', comm_sp)]
+        # if species is not in the community results AND not preferred
+        if(!any(grepl(paste0("DOM-", sp_dom), comm)) &
+           sp_dom %in% traits$scientificNameStd[traits$tiger_pref != "Yes"]){
+          # skip to the next iterations
+          next
+        } # end per matching
+      } # end per tiger
+      
       ## then sub_species should only be preferred prey
-      if(sp_sub == "Panthera_pardus" & sp_dom %in% traits$scientificNameStd[traits$leopard_pref != "Yes"]){ 
-        # skip to the next iterations
-        next
-      }
+            if(sp_sub == "Panthera_pardus"){
+        # check which community models are present
+        comm = comm_sp[grepl('SUB-Panthera_pardus', comm_sp)]
+        # if species is not in the community results AND not preferred
+        if(!any(grepl(paste0("DOM-", sp_dom), comm)) &
+           sp_dom %in% traits$scientificNameStd[traits$leopard_pref != "Yes"]){
+          # skip to the next iterations
+          next
+        } # end per matching
+      } # end per leopard
+      
       ## then sub_species should only be preferred prey
-      if(sp_sub == "Neofelis_genus" & sp_dom %in% traits$scientificNameStd[traits$CL_pref != "Yes"]){ 
-        # skip to the next iterations
-        next
-      }
+            if(sp_sub == "Neofelis_genus"){
+        # check which community models are present
+        comm = comm_sp[grepl('SUB-Neofelis_genus', comm_sp)]
+        # if species is not in the community results AND not preferred
+        if(!any(grepl(paste0("DOM-", sp_dom), comm)) &
+           sp_dom %in% traits$scientificNameStd[traits$CL_pref != "Yes"]){
+          # skip to the next iterations
+          next
+        } # end per matching
+      } # end per clouded leopards 
       
     } # end preferred prey conditional 
     
@@ -893,9 +971,22 @@ for(i in 1:length(umfs)){ # repeat for each first speices
       next
       
     } # end 100 detection conditional 
-    rm(dom_det, sub_det)
+    
     ## this conditional will also catch species pairs that dont spatially overlap, 
     ## where a conditonal does that below and isnt needed anymore, but leaving for saftey. 
+    
+    #
+    ##
+    ### Add a detection ratio cutoff (e.g., 50:1) to avoid highly skewed detections 
+    det_ratio <- max(dom_det, sub_det) / min(dom_det, sub_det)
+    if (det_ratio > 50) { 
+      # Let us know
+      print(paste("The species combo of", sp_sub, "~", sp_dom, 
+                  "have a detection ratio greater than 50:1! This pair was skipped."))
+      # Skip the problematic pair
+      next
+    }
+    rm(dom_det, sub_det)
     
     #
     ##
@@ -1127,6 +1218,7 @@ rm(i,l,sp_dom,sp_sub, sp_dom_dat, sp_sub_dat, obs, temp, z.dom, z.sub,
 ## flatten the list of lists into a single list
 counterf2_bdata_list = unlist(counterf2_bdata_list, recursive = FALSE)
 length(counterf2_bdata_list) #66 combos of preferred pred and prey --> perfect match! 
+## UDPATE --> 95 mods b/c 64 pref + 31 comm = 95 total. 
 sort(names(counterf2_bdata_list)) # looks correct! 
 
 ## verify iZIP is 1 for everyone
@@ -1147,7 +1239,7 @@ for(i in 1:length(counterf2_bdata_list)){
 names(counterf2_bdata_list)[grepl("DOM-Cuon_alpinus", names(counterf2_bdata_list))] # 5 
 ## how many sub?
 names(counterf2_bdata_list)[grepl("SUB-Cuon_alpinus", names(counterf2_bdata_list))] # Also 5, good! 
-
+## different now w/ comm results. 
 
 ## how many bottom-up tests
 bu = names(counterf2_bdata_list)[grepl("SUB-Panthera_tigis|SUB-Panthera_pardus|SUB-Neofelis_genus|SUB-Cuon_alpinus", names(counterf2_bdata_list))]
@@ -1205,18 +1297,43 @@ for(i in 1:length(umfs)){ # repeat for each first speices
     ## then sub_species should only be preferred prey
     if(sp_dom == "Cuon_alpinus"){ 
       all_else = traits$scientificNameStd[traits$dhole_pref == "Yes"]
+      
+      ## AND include the extra select members from the community that matched here
+      comm = comm_sp[grepl('DOM-Cuon_alpinus', comm_sp)]
+      # remove the fluff
+      extra = sub("SUB-([A-Za-z_]+)~DOM-.*", "\\1", comm)
+      # then append these to all_elese
+      all_else = c(all_else, extra)
     }
     ## then sub_species should only be preferred prey
     if(sp_dom == "Panthera_tigris"){ 
       all_else = traits$scientificNameStd[traits$tiger_pref == "Yes"]
+      ## AND include the extra select members from the community that matched here
+      comm = comm_sp[grepl('DOM-Panthera_tigris', comm_sp)]
+      # remove the fluff
+      extra = sub("SUB-([A-Za-z_]+)~DOM-.*", "\\1", comm)
+      # then append these to all_elese
+      all_else = c(all_else, extra)
       }
     ## then sub_species should only be preferred prey
     if(sp_dom == "Panthera_pardus"){ 
       all_else = traits$scientificNameStd[traits$leopard_pref == "Yes"]
+      ## AND include the extra select members from the community that matched here
+      comm = comm_sp[grepl('DOM-Panthera_pardus', comm_sp)]
+      # remove the fluff
+      extra = sub("SUB-([A-Za-z_]+)~DOM-.*", "\\1", comm)
+      # then append these to all_elese
+      all_else = c(all_else, extra)
       }
     ## then sub_species should only be preferred prey
     if(sp_dom == "Neofelis_genus"){ 
       all_else = traits$scientificNameStd[traits$CL_pref == "Yes"]
+      ## AND include the extra select members from the community that matched here
+      comm = comm_sp[grepl('DOM-Neofelis_genus', comm_sp)]
+      # remove the fluff
+      extra = sub("SUB-([A-Za-z_]+)~DOM-.*", "\\1", comm)
+      # then append these to all_elese
+      all_else = c(all_else, extra)
       }
     
   } # end dominant predator condition
@@ -1233,27 +1350,54 @@ for(i in 1:length(umfs)){ # repeat for each first speices
     if(sp_sub %in% c("Panthera_tigris", "Panthera_pardus", "Neofelis_genus", "Cuon_alpinus")){
       
       ## then sub_species should only be preferred prey
-      if(sp_sub == "Cuon_alpinus" & sp_dom %in% traits$scientificNameStd[traits$dhole_pref != "Yes"]){ 
-        # skip to the next iterations
-        next
-      }
+      if(sp_sub == "Cuon_alpinus"){
+        # check which community models are present
+        comm = comm_sp[grepl('SUB-Cuon_alpinus', comm_sp)]
+        # if species is not in the community results AND not preferred
+        if(!any(grepl(paste0("DOM-", sp_dom), comm)) &
+           sp_dom %in% traits$scientificNameStd[traits$dhole_pref != "Yes"]){
+          # skip to the next iterations
+          next
+        } # end per matching
+      } # end per dhole 
+        
       ## then sub_species should only be preferred prey
-      if(sp_sub == "Panthera_tigris" & sp_dom %in% traits$scientificNameStd[traits$tiger_pref != "Yes"]){ 
-        # skip to the next iterations
-        next
-      }
-      ## then sub_species should only be preferred prey
-      if(sp_sub == "Panthera_pardus" & sp_dom %in% traits$scientificNameStd[traits$leopard_pref != "Yes"]){ 
-        # skip to the next iterations
-        next
-      }
-      ## then sub_species should only be preferred prey
-      if(sp_sub == "Neofelis_genus" & sp_dom %in% traits$scientificNameStd[traits$CL_pref != "Yes"]){ 
-        # skip to the next iterations
-        next
-      }
-    } # end preferred prey condition
+      if(sp_sub == "Panthera_tigris"){
+        # check which community models are present
+        comm = comm_sp[grepl('SUB-Panthera_tigris', comm_sp)]
+        # if species is not in the community results AND not preferred
+        if(!any(grepl(paste0("DOM-", sp_dom), comm)) &
+           sp_dom %in% traits$scientificNameStd[traits$tiger_pref != "Yes"]){
+          # skip to the next iterations
+          next
+        } # end per matching
+      } # end per tiger
       
+      ## then sub_species should only be preferred prey
+            if(sp_sub == "Panthera_pardus"){
+        # check which community models are present
+        comm = comm_sp[grepl('SUB-Panthera_pardus', comm_sp)]
+        # if species is not in the community results AND not preferred
+        if(!any(grepl(paste0("DOM-", sp_dom), comm)) &
+           sp_dom %in% traits$scientificNameStd[traits$leopard_pref != "Yes"]){
+          # skip to the next iterations
+          next
+        } # end per matching
+      } # end per leopard
+      
+      ## then sub_species should only be preferred prey
+            if(sp_sub == "Neofelis_genus"){
+        # check which community models are present
+        comm = comm_sp[grepl('SUB-Neofelis_genus', comm_sp)]
+        # if species is not in the community results AND not preferred
+        if(!any(grepl(paste0("DOM-", sp_dom), comm)) &
+           sp_dom %in% traits$scientificNameStd[traits$CL_pref != "Yes"]){
+          # skip to the next iterations
+          next
+        } # end per matching
+      } # end per clouded leopards 
+      
+    } # end preferred prey conditional 
     
     ##### Add a conditional to verify there are a combined total of 100 detections
     ##### shared across the landscapes where BOTH species were detected. 
@@ -1268,7 +1412,7 @@ for(i in 1:length(umfs)){ # repeat for each first speices
     sub_det = nrow(caps[caps$Species == sp_sub &
                           caps$Landscape %in% lands,])
     
-    ## if there are less than 100 detections of both species from shared landscapes, 
+   ## if there are less than 100 detections of both species from shared landscapes, 
     if(dom_det + sub_det < 100){
       # let us know
       print(paste("The species combo of", sp_sub, "~", sp_dom, 
@@ -1277,9 +1421,22 @@ for(i in 1:length(umfs)){ # repeat for each first speices
       next
       
     } # end 100 detection conditional 
-    rm(dom_det, sub_det, lands)
+    
     ## this conditional will also catch species pairs that dont spatially overlap, 
     ## where a conditonal does that below and isnt needed anymore, but leaving for saftey. 
+    
+    #
+    ##
+    ### Add a detection ratio cutoff (e.g., 50:1) to avoid highly skewed detections 
+    det_ratio <- max(dom_det, sub_det) / min(dom_det, sub_det)
+    if (det_ratio > 50) { 
+      # Let us know
+      print(paste("The species combo of", sp_sub, "~", sp_dom, 
+                  "have a detection ratio greater than 50:1! This pair was skipped."))
+      # Skip the problematic pair
+      next
+    }
+    rm(dom_det, sub_det)
     
     #
     ##
@@ -1753,27 +1910,52 @@ for(v in 1:length(vars)){
       
     } # end non-predator condition
     
-    ## if the dominant species is a predator 
-    if(sp_dom %in% c("Panthera_tigris", "Panthera_pardus", "Neofelis_genus", "Cuon_alpinus")){
+     ## if the dominant species is a predator 
+  if(sp_dom %in% c("Panthera_tigris", "Panthera_pardus", "Neofelis_genus", "Cuon_alpinus")){
+    
+    ## then sub_species should only be preferred prey
+    if(sp_dom == "Cuon_alpinus"){ 
+      all_else = traits$scientificNameStd[traits$dhole_pref == "Yes"]
       
-      ## then sub_species should only be preferred prey
-      if(sp_dom == "Cuon_alpinus"){ 
-        all_else = traits$scientificNameStd[traits$dhole_pref == "Yes"]
+      ## AND include the extra select members from the community that matched here
+      comm = comm_sp[grepl('DOM-Cuon_alpinus', comm_sp)]
+      # remove the fluff
+      extra = sub("SUB-([A-Za-z_]+)~DOM-.*", "\\1", comm)
+      # then append these to all_elese
+      all_else = c(all_else, extra)
+    }
+    ## then sub_species should only be preferred prey
+    if(sp_dom == "Panthera_tigris"){ 
+      all_else = traits$scientificNameStd[traits$tiger_pref == "Yes"]
+      ## AND include the extra select members from the community that matched here
+      comm = comm_sp[grepl('DOM-Panthera_tigris', comm_sp)]
+      # remove the fluff
+      extra = sub("SUB-([A-Za-z_]+)~DOM-.*", "\\1", comm)
+      # then append these to all_elese
+      all_else = c(all_else, extra)
       }
-      ## then sub_species should only be preferred prey
-      if(sp_dom == "Panthera_tigris"){ 
-        all_else = traits$scientificNameStd[traits$tiger_pref == "Yes"]
+    ## then sub_species should only be preferred prey
+    if(sp_dom == "Panthera_pardus"){ 
+      all_else = traits$scientificNameStd[traits$leopard_pref == "Yes"]
+      ## AND include the extra select members from the community that matched here
+      comm = comm_sp[grepl('DOM-Panthera_pardus', comm_sp)]
+      # remove the fluff
+      extra = sub("SUB-([A-Za-z_]+)~DOM-.*", "\\1", comm)
+      # then append these to all_elese
+      all_else = c(all_else, extra)
       }
-      ## then sub_species should only be preferred prey
-      if(sp_dom == "Panthera_pardus"){ 
-        all_else = traits$scientificNameStd[traits$leopard_pref == "Yes"]
+    ## then sub_species should only be preferred prey
+    if(sp_dom == "Neofelis_genus"){ 
+      all_else = traits$scientificNameStd[traits$CL_pref == "Yes"]
+      ## AND include the extra select members from the community that matched here
+      comm = comm_sp[grepl('DOM-Neofelis_genus', comm_sp)]
+      # remove the fluff
+      extra = sub("SUB-([A-Za-z_]+)~DOM-.*", "\\1", comm)
+      # then append these to all_elese
+      all_else = c(all_else, extra)
       }
-      ## then sub_species should only be preferred prey
-      if(sp_dom == "Neofelis_genus"){ 
-        all_else = traits$scientificNameStd[traits$CL_pref == "Yes"]
-      }
-      
-    } # end dominant predator condition
+    
+  } # end dominant predator condition
     
     temp = list() # store results per sp1 here 
     for(l in 1:length(all_else)){ # repeat for each second species
@@ -1787,25 +1969,52 @@ for(v in 1:length(vars)){
     if(sp_sub %in% c("Panthera_tigris", "Panthera_pardus", "Neofelis_genus", "Cuon_alpinus")){
       
       ## then sub_species should only be preferred prey
-      if(sp_sub == "Cuon_alpinus" & sp_dom %in% traits$scientificNameStd[traits$dhole_pref != "Yes"]){ 
-        # skip to the next iterations
-        next
-      }
+      if(sp_sub == "Cuon_alpinus"){
+        # check which community models are present
+        comm = comm_sp[grepl('SUB-Cuon_alpinus', comm_sp)]
+        # if species is not in the community results AND not preferred
+        if(!any(grepl(paste0("DOM-", sp_dom), comm)) &
+           sp_dom %in% traits$scientificNameStd[traits$dhole_pref != "Yes"]){
+          # skip to the next iterations
+          next
+        } # end per matching
+      } # end per dhole 
+        
       ## then sub_species should only be preferred prey
-      if(sp_sub == "Panthera_tigris" & sp_dom %in% traits$scientificNameStd[traits$tiger_pref != "Yes"]){ 
-        # skip to the next iterations
-        next
-      }
+      if(sp_sub == "Panthera_tigris"){
+        # check which community models are present
+        comm = comm_sp[grepl('SUB-Panthera_tigris', comm_sp)]
+        # if species is not in the community results AND not preferred
+        if(!any(grepl(paste0("DOM-", sp_dom), comm)) &
+           sp_dom %in% traits$scientificNameStd[traits$tiger_pref != "Yes"]){
+          # skip to the next iterations
+          next
+        } # end per matching
+      } # end per tiger
+      
       ## then sub_species should only be preferred prey
-      if(sp_sub == "Panthera_pardus" & sp_dom %in% traits$scientificNameStd[traits$leopard_pref != "Yes"]){ 
-        # skip to the next iterations
-        next
-      }
+            if(sp_sub == "Panthera_pardus"){
+        # check which community models are present
+        comm = comm_sp[grepl('SUB-Panthera_pardus', comm_sp)]
+        # if species is not in the community results AND not preferred
+        if(!any(grepl(paste0("DOM-", sp_dom), comm)) &
+           sp_dom %in% traits$scientificNameStd[traits$leopard_pref != "Yes"]){
+          # skip to the next iterations
+          next
+        } # end per matching
+      } # end per leopard
+      
       ## then sub_species should only be preferred prey
-      if(sp_sub == "Neofelis_genus" & sp_dom %in% traits$scientificNameStd[traits$CL_pref != "Yes"]){ 
-        # skip to the next iterations
-        next
-      }
+            if(sp_sub == "Neofelis_genus"){
+        # check which community models are present
+        comm = comm_sp[grepl('SUB-Neofelis_genus', comm_sp)]
+        # if species is not in the community results AND not preferred
+        if(!any(grepl(paste0("DOM-", sp_dom), comm)) &
+           sp_dom %in% traits$scientificNameStd[traits$CL_pref != "Yes"]){
+          # skip to the next iterations
+          next
+        } # end per matching
+      } # end per clouded leopards 
       
     } # end preferred prey conditional 
       
@@ -1843,17 +2052,30 @@ for(v in 1:length(vars)){
                             caps$Landscape %in% lands,])
       
       ## if there are less than 100 detections of both species from shared landscapes, 
-      if(dom_det + sub_det < 100){
-        # let us know
-        print(paste("The species combo of", sp_sub, "~", sp_dom, 
-                    "have less than 100 detections in shared landscapes! This pair was skipped."))
-        # and skip the probelmatic pair
-        next
-        
-      } # end 100 detection conditional 
-      rm(dom_det, sub_det)
-      ## this conditional will also catch species pairs that dont spatially overlap, 
-      ## where a conditonal does that below and isnt needed anymore, but leaving for saftey. 
+    if(dom_det + sub_det < 100){
+      # let us know
+      print(paste("The species combo of", sp_sub, "~", sp_dom, 
+                  "have less than 100 detections in shared landscapes! This pair was skipped."))
+      # and skip the probelmatic pair
+      next
+      
+    } # end 100 detection conditional 
+    
+    ## this conditional will also catch species pairs that dont spatially overlap, 
+    ## where a conditonal does that below and isnt needed anymore, but leaving for saftey. 
+    
+    #
+    ##
+    ### Add a detection ratio cutoff (e.g., 50:1) to avoid highly skewed detections 
+    det_ratio <- max(dom_det, sub_det) / min(dom_det, sub_det)
+    if (det_ratio > 50) { 
+      # Let us know
+      print(paste("The species combo of", sp_sub, "~", sp_dom, 
+                  "have a detection ratio greater than 50:1! This pair was skipped."))
+      # Skip the problematic pair
+      next
+    }
+    rm(dom_det, sub_det) 
       
       #
       ##
@@ -2282,7 +2504,9 @@ saveRDS(counterf_vars_bdata_list$Avg_human_footprint_5km, paste(wd, "/Bundled_da
 
 ```
 
-```{r Ultra loop to generate data bundles for counterfactual test 6}
+```{r Ultra loop to generate data bundles for counterfactual test 6, eval=FALSE}
+
+## NO LONGER RUNNING THIS SECTION BECAUSE THIS IS NOW THE MAIN MOD! 
 
 ## This test is examining the 66 preferred prey co-abundance models, 
 ## but adding a new variable that is the sum of independent detections per site (except for the two species being examined in the model)
@@ -2738,9 +2962,12 @@ length(counterf7_bdata_list) #all 66 combos, good!
 
 6) What would happen if we **did not include our new variable community_detections**? Therefore, we assume that we are not accounting for unmeasured variation as well as we might be able to, so we would expect to see more spurious correations. 
 
- If this variable legitimetly tracks unmeasured variation, we predict that large positive unsupported top-down in the original test will now produce either small and unsupported if not an important interaction or a negative interaction if real. Conversely, small positive supported bottom-up in the original test should now produce either no change and remain significant if a legitimate interaction, or become unsupported if unmeasured variation was driving a spurious positive correlation. For clarity and organization sake' this new test will be called counterfactual 7. **In this co-abundance model test with the new community detections, we are running a total of `r length(counterf7_bdata_list)` co-abundance models**. 
+ If this variable legitimetly tracks unmeasured variation, we predict that large positive unsupported top-down in the original test will now produce either small and unsupported if not an important interaction or a negative interaction if real. Conversely, small positive supported bottom-up in the original test should now produce either no change and remain significant if a legitimate interaction, or become unsupported if unmeasured variation was driving a spurious positive correlation. For clarity and organization sake' this new test will be called counterfactual 7. 
 
 ```{r Save bundled data for counterfactual test 6}
+
+### MOVING the last line of the previous paragrah hashed out here for a clean knit
+# **In this co-abundance model test with the new community detections, we are running a total of `r length(counterf7_bdata_list)` co-abundance models**. **In this co-abundance model test with the new community detections, we are running a total of `r length(counterf7_bdata_list)` co-abundance models**. 
 
 ## grab today's date 
 day<-str_sub(Sys.Date(),-2)
@@ -2750,6 +2977,6 @@ date = paste(year,month,day, sep = "")
 rm(day,month,year)
  
 # Save data 
-saveRDS(counterf7_bdata_list, paste(wd, "/Bundled_data_for_Bayes_co-abundance_mods_counterfactual6_no_community_detections_", length(counterf7_bdata_list), "_species_pairs_", scale, "_", date, ".RDS", sep = ""))
+# saveRDS(counterf7_bdata_list, paste(wd, "/Bundled_data_for_Bayes_co-abundance_mods_counterfactual6_no_community_detections_", length(counterf7_bdata_list), "_species_pairs_", scale, "_", date, ".RDS", sep = ""))
 ```
 

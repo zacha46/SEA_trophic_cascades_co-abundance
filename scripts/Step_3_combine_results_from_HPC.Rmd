@@ -116,6 +116,16 @@ files = files[grepl(time, files)]
 # Grab all coefficent dataframe files
 files = files[grepl("/coefficent_dataframes/", files)]
 
+## since we have reduced the number of viable species pairs w/ the detection ratio
+# thin files to the relevant combos in all_combos
+
+# Extract species pairs from the filenames in `files`
+sp_pair = sub(".*coefficents_(SUB-.*DOM-.*)_\\d{8}\\.csv$", "\\1", files)
+
+# Thin the `files` vector by keeping only those that match `all_combos`
+files = files[sp_pair %in% all_combos]
+rm(sp_pair)
+
 # store results here
 coeff.res = list()
 
@@ -139,7 +149,6 @@ for(i in 1:length(files)){
     file = files[i]
   }# end multiple file conditon
 
-  
   # import 
   d = read.csv(paste(wd, "results/", file, sep = ""))
   
@@ -159,7 +168,7 @@ for(i in 1:length(files)){
 rm(d,i, files, file)
 
 ## bind together and inspect
-coeff = do.call(rbind, coeff.res)
+coeff = distinct(do.call(rbind, coeff.res))
 
 ## quick inspection
 str(coeff)
@@ -174,9 +183,9 @@ coeff$dom_sp = gsub("DOM-", "", coeff$dom_sp)
 coeff$sub_sp = gsub("SUB-", "", coeff$sub_sp)
 
 
-### Inspect which species pairs are present/missing, 20241220, LONG settings
+### Inspect which species pairs are present/missing, 20250124, LONG settings
 setdiff(all_combos, coeff$Species_Pair) 
-## 195 models missing, replace w/ middle settings. 
+## 4 models missing --> currently running on HPC. 
 
 # save the missing mods 
 missing = setdiff(all_combos, coeff$Species_Pair)
@@ -316,6 +325,11 @@ table(preform$mod_completion)
 # completed = 67 (preferred)
 # uncompleted = 195 (community mods) --> sent to re-run on HPC
 
+## January 9th, 2025, Long @ 5km w/ comm_det
+# completed = 253 
+# uncompleted = 9
+
+
 
 ```
 
@@ -341,6 +355,16 @@ files = files[grepl(time, files)]
 files = files[grepl("/PPC_dataframes/", files)]
 # and dont want plotting data 
 files = files[!grepl("plotdata", files)] 
+
+## since we have reduced the number of viable species pairs w/ the detection ratio
+# thin files to the relevant combos in all_combos
+
+# Extract species pairs from the filenames in `files`
+sp_pair = sub(".*BPV_and_Chat_values_(SUB-.*DOM-.*)_\\d{8}\\.csv$", "\\1", files)
+
+# Thin the `files` vector by keeping only those that match `all_combos`
+files = files[sp_pair %in% all_combos]
+rm(sp_pair)
 
 # store results here
 ppc_res = list()
@@ -390,7 +414,7 @@ rm(d,i, files, file)
 # head(ppc_plotdat) 
 
 ## bind together and inspect
-ppc_values = do.call(rbind, ppc_res$values)
+ppc_values = distinct(do.call(rbind, ppc_res$values))
 str(ppc_values) # looks mostly good! 
 ppc_values$X = NULL # damn row names 
 
@@ -702,11 +726,11 @@ If there are any __uncompleted preferred models__, the names of those species-pa
 
 It is important to inspect the diagnostics of the models before we interpret results, and there are four key diagnostic features to inspect. 
 
-1) The first key value we are interested in is the __parameter convergence (known as R-hat) around the species interaction value (SIV)__, where parameters are converged if values are between 1 and 1.2. **The median Rhat for the SIV is `r round(median(preform$Rhat, na.rm = T), 3)` with a standard deviation of `r round(sd(preform$Rhat, na.rm = T), 3)`**. In total, `r length(unique(preform$Species_Pair[preform$parameter_valid == "No"]))` models failed to generate a convergent SIV. This is composed of `r length(unique(preform$Species_Pair[preform$parameter_valid == "No" & preform$preference == "preferred"]))` preferred models and `r length(unique(preform$Species_Pair[preform$parameter_valid == "No" & preform$preference == "community"]))` community models.
+1) The first key value we are interested in is the __parameter convergence (known as R-hat) around the species interaction value (SIV)__, where parameters are converged if values are between 1 and 1.2. **The median Rhat for the SIV is `r round(median(preform$Rhat, na.rm = T), 3)` with a standard deviation of `r round(sd(preform$Rhat, na.rm = T), 3)`**. In total, `r length(unique(preform$Species_Pair[preform$parameter_valid == "No"]))` models failed to generate a convergent SIV. This is composed of `r length(unique(preform$Species_Pair[preform$parameter_valid == "No" & preform$preference == "preferred" & !is.na(preform$Interaction_Estimate)]))` preferred models and `r length(unique(preform$Species_Pair[preform$parameter_valid == "No" & preform$preference == "community" & !is.na(preform$Interaction_Estimate)]))` community models.
 
-2) The second key value is the __Bayesian p-value denoting model goodness-of-fit__, where models are deemed to be a good fit if values are between 0.15 to 0.85, with values outside of this range being considered a bad fit. **Across all models `r round(as.numeric(table(preform$BPV_valid[!is.na(preform$Interaction_Estimate)])[1]/ length(preform$Species_Pair[!is.na(preform$Interaction_Estimate)]) * 100), 2)` percent of models are considered a bad fit**. This is composed of `r length(preform$Species_Pair[preform$BPV_valid == "No" & preform$preference == "preferred"])` preferred models and `r length(preform$Species_Pair[preform$BPV_valid == "No" & preform$preference == "community"])` community models. 
+2) The second key value is the __Bayesian p-value denoting model goodness-of-fit__, where models are deemed to be a good fit if values are between 0.15 to 0.85, with values outside of this range being considered a bad fit. **Across all models `r round(as.numeric(table(preform$BPV_valid[!is.na(preform$Interaction_Estimate)])[1]/ length(preform$Species_Pair[!is.na(preform$Interaction_Estimate)]) * 100), 2)` percent of models are considered a bad fit**. This is composed of `r length(preform$Species_Pair[preform$BPV_valid == "No" & preform$preference == "preferred" &  !is.na(preform$Interaction_Estimate)])` preferred models and `r length(preform$Species_Pair[preform$BPV_valid == "No" & preform$preference == "community" &  !is.na(preform$Interaction_Estimate)])` community models. 
 
-3) The third key value is the __C-hat overdispersion value__, where models are deemed to not have any overdispersion in detections if values are between 0.95 and 1.3. **Across all models `r round(as.numeric(table(preform$OD_valid[!is.na(preform$Interaction_Estimate)])[1]/ length(preform$Species_Pair[!is.na(preform$Interaction_Estimate)]) * 100), 2)` percent of models over remaining overdispersion of detections not accounted for in the detection formula**. This is composed of `r length(preform$Species_Pair[preform$OD_valid == "No" & preform$preference == "preferred"])` preferred models and `r length(preform$Species_Pair[preform$OD_valid == "No" & preform$preference == "community"])` community models. 
+3) The third key value is the __C-hat overdispersion value__, where models are deemed to not have any overdispersion in detections if values are between 0.95 and 1.3. **Across all models `r round(as.numeric(table(preform$OD_valid[!is.na(preform$Interaction_Estimate)])[1]/ length(preform$Species_Pair[!is.na(preform$Interaction_Estimate)]) * 100), 2)` percent of models contain remaining overdispersion of detections not accounted for in the detection formula**. This is composed of `r length(preform$Species_Pair[preform$OD_valid == "No" & preform$preference == "preferred" & !is.na(preform$Interaction_Estimate)])` preferred models and `r length(preform$Species_Pair[preform$OD_valid == "No" & preform$preference == "community" &  !is.na(preform$Interaction_Estimate)])` community models. 
 
 4) The fourth value is __the direction of the SIV based on our hypotheses__, where top-down models should have a significant negative relationship and bottom-up models should have a significant positive relationship. As a reminder, top-down models are when large carnivores are the dominant species and bottom-up models are where large carnivores are the subordinate species. For the preferred top-down models, `r length(preform$Species_Pair[preform$Significance == "Significant" & preform$direction == "top-down" & preform$Interaction_Estimate <= 0 & preform$preference == "preferred" ])` models meet these conditions. For the preferred bottom-up models, `r length(preform$Species_Pair[preform$Significance == "Significant" & preform$direction == "bottom-up" & preform$Interaction_Estimate >= 0 & preform$preference == "preferred" ])` models meet these conditions. For the community top-down models, `r length(preform$Species_Pair[preform$Significance == "Significant" & preform$direction == "top-down" & preform$Interaction_Estimate <= 0 & preform$preference == "community" ])` models meet these conditions. For the community bottom-up models, `r length(preform$Species_Pair[preform$Significance == "Significant" & preform$direction == "bottom-up" & preform$Interaction_Estimate >= 0 & preform$preference == "community" ])` models meet these conditions.
 
@@ -724,7 +748,62 @@ In interpreting our supported results, we can split them between top-down and bo
 
 * **For the supported top-down results, we had a total of `r length(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported"])` models. This is composed of `r length(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported" & preform$preference == "preferred"])` preferred models and `r length(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported" & preform$preference == "community"])` community models.** __Tigers__ showed `r length(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported" & preform$preference == "preferred" & grepl("tigris", preform$dom_species)])` top-down relationships with their preferred prey and `r length(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported" & preform$preference == "community" & grepl("tigris", preform$dom_species)])` top-down relationships with the overall community. __Leopards__ showed `r length(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported" & preform$preference == "preferred" & grepl("pardus", preform$dom_species)])` top-down relationships with their preferred prey and `r length(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported" & preform$preference == "community" & grepl("pardus", preform$dom_species)])` top-down relationships with the overall community. __Dholes__ showed `r length(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported" & preform$preference == "preferred" & grepl("Cuon", preform$dom_species)])` top-down relationships with their preferred prey and `r length(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported" & preform$preference == "community" & grepl("Cuon", preform$dom_species)])` top-down relationships with the overall community. Finally, __clouded leopards__ showed `r length(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported" & preform$preference == "preferred" & grepl("Neofelis", preform$dom_species)])` top-down relationships with their preferred prey and `r length(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported" & preform$preference == "community" & grepl("Neofelis", preform$dom_species)])` top-down relationships with the overall community. 
 
-* **For the supported bottom-up results, we had a total of `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported"])` models. This is composed of `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "preferred"])` preferred models and `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "community"])` community models.** __Tigers__ showed `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "preferred" & grepl("tigris", preform$sub_species)])` bottom-up relationships with their preferred prey and `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "community" & grepl("tigris", preform$sub_species)])` bottom-up relationships with the overall community. __Leopards__ showed `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "preferred" & grepl("pardus", preform$sub_species)])` bottom-up relationships with their preferred prey and `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "community" & grepl("pardus", preform$sub_species)])` bottom-up relationships with the overall community. __Dholes__ showed `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "preferred" & grepl("Cuon", preform$sub_species)])` bottom-up relationships with their preferred prey and `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "community" & grepl("Cuon", preform$sub_species)])` bottom-up relationships with the overall community. Finally, __clouded leopards__ showed `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "preferred" & grepl("Neofelis", preform$sub_species)])` bottom-up relationships with their preferred prey and `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "community" & grepl("Neofelis", preform$sub_species)])` bottom-up relationships with the overall community. 
+* **For the supported bottom-up results, we had a total of `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported"])` models. This is composed of `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "preferred"])` preferred models and `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "community"])` community models.** __Tigers__ showed `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "preferred" & grepl("tigris", preform$sub_species)])` bottom-up relationships with their preferred prey and `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "community" & grepl("tigris", preform$sub_species)])` bottom-up relationships with the overall community. __Leopards__ showed `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "preferred" & grepl("pardus", preform$sub_species)])` bottom-up relationships with their preferred prey and `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "community" & grepl("pardus", preform$sub_species)])` bottom-up relationships with the overall community. __Dholes__ showed `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "preferred" & grepl("Cuon", preform$sub_species)])` bottom-up relationships with their preferred prey and `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "community" & grepl("Cuon", preform$sub_species)])` bottom-up relationships with the overall community. __Clouded leopards__ showed `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "preferred" & grepl("Neofelis", preform$sub_species)])` bottom-up relationships with their preferred prey and `r length(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "community" & grepl("Neofelis", preform$sub_species)])` bottom-up relationships with the overall community.
+
+1) __Tigers preferred bottom-up relationships__ were: `r paste(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "preferred" & grepl("tigris", preform$sub_species)], sep = ", ")`, and the __preferred top-down relationships__ were: `r paste(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported" & preform$preference == "preferred" & grepl("tigris", preform$dom_species)], sep = ", ")`. The __community bottom-up relationships__ were: `r paste(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "community" & grepl("tigris", preform$sub_species)], sep = ", ")`, and the __community top-down relationships__ were: `r paste(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported" & preform$preference == "community" & grepl("tigris", preform$dom_species)], sep = ", ")`. 
+
+2) __Leopards preferred bottom-up relationships__ were: `r paste(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "preferred" & grepl("pardus", preform$sub_species)], sep = ", ")`, and the __preferred top-down relationships__ were: `r paste(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported" & preform$preference == "preferred" & grepl("pardus", preform$dom_species)], sep = ", ")`. The __community bottom-up relationships__ were: `r paste(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "community" & grepl("pardus", preform$sub_species)], sep = ", ")`, and the __community top-down relationships__ were: `r paste(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported" & preform$preference == "community" & grepl("pardus", preform$dom_species)], sep = ", ")`. 
+
+3) __Dholes preferred bottom-up relationships__ were: `r paste(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "preferred" & grepl("Cuon", preform$sub_species)], sep = ", ")`, and the __preferred top-down relationships__ were: `r paste(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported" & preform$preference == "preferred" & grepl("Cuon", preform$dom_species)], sep = ", ")`. The __community bottom-up relationships__ were: `r paste(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "community" & grepl("Cuon", preform$sub_species)], sep = ", ")`, and the __community top-down relationships__ were: `r paste(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported" & preform$preference == "community" & grepl("Cuon", preform$dom_species)], sep = ", ")`. 
+
+4) __Clouded leopards preferred bottom-up relationships__ were: `r paste(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "preferred" & grepl("Neofelis", preform$sub_species)], sep = ", ")`, and the __preferred top-down relationships__ were: `r paste(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported" & preform$preference == "preferred" & grepl("Neofelis", preform$dom_species)], sep = ", ")`. The __community bottom-up relationships__ were: `r paste(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported" & preform$preference == "community" & grepl("Neofelis", preform$sub_species)], sep = ", ")`, and the __community top-down relationships__ were: `r paste(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported" & preform$preference == "community" & grepl("Neofelis", preform$dom_species)], sep = ", ")`. 
+
+```{r Inpsect new significant top-down results, eval=FALSE}
+
+## who is who 
+preform[preform$direction == "top-down" & 
+          preform$preference == "preferred" &
+          preform$support == "Supported", ]
+## Dhole and bearded pigs are new. And they have a large negative effect size, almost triple the next largest ES 
+
+preform[preform$direction == "top-down" & 
+          preform$preference == "preferred" &
+          preform$support_conserv == "Supported", ] # dhole is still significant here. 
+
+## inpsect old preform dataframe for results (without new variable)
+old_preform = read.csv(paste(wd, "data/step3_output_combined_results/OLD_20241021/compiled_co-abundance_preformance_and_support_dataframe_178_completed_models_20241021.csv", sep = ""))
+
+# check the sp pair 
+old_preform[old_preform$Species_Pair == "SUB-Sus_barbatus~DOM-Cuon_alpinus",]
+## interaction estimate is much lower at -0.39, but with a SD at 1.4 and a bad Rhat value (14)
+preform[preform$Species_Pair == "SUB-Sus_barbatus~DOM-Cuon_alpinus",]
+## interaction estimate is -1.3, and the SD is 0.2, and all other checks are fine. 
+
+## inspect the original data 
+# dhole detections
+dho = og_resamp_captures[og_resamp_captures$Species == "Cuon_alpinus",]
+# and bearded pig 
+bp = og_resamp_captures[og_resamp_captures$Species == "Sus_barbatus",] # many more detections here
+# which landscapes were they both detected at?
+bp_land = unique(og_resamp_meta$Landscape[og_resamp_meta$cell_id %in% bp$cell_id])
+dho_land = unique(og_resamp_meta$Landscape[og_resamp_meta$cell_id %in% dho$cell_id])
+# where do they match?
+bp_land[bp_land %in% dho_land] # only kerinci! 
+
+## how many detections of each species at kerinci?
+sum(dho$independent_events[grepl("KSNP", dho$cell_id)]) # 4 dhole detections??
+sum(bp$independent_events[grepl("KSNP", bp$cell_id)]) # 959 BP detections 
+## NOT A FAIR COMPARISON! 
+
+## were they ever detected at the same camera?
+length(unique(dho$cell_id[grepl("KSNP", dho$cell_id)])) # 4 cams 
+unique(dho$cell_id[dho$cell_id %in% bp$cell_id]) # both were oonly detected at one camera
+
+
+
+
+```
+
 
 ## Counter-factual results 
 
@@ -747,6 +826,17 @@ files = files[grepl(time, files)]
 # Grab all coefficent dataframe files
 files = files[grepl("/counterfactual_coefficent_dataframes/", files)]
 
+## since we have reduced the number of viable species pairs w/ the detection ratio
+# thin files to the relevant combos in all_combos
+
+# Extract species pairs from the filenames in `files`
+sp_pair = sub(".*coefficents_(SUB-.*DOM-.*)_\\d{8}\\.csv$", "\\1", files)
+
+# Thin the `files` vector by keeping only those that match `all_combos`
+files = files[sp_pair %in% all_combos]
+rm(sp_pair)
+
+
 ## split apart different tests
 f1 = files[grepl("counterfactual1", files)]
 f2 = files[grepl("counterfactual2", files)]
@@ -761,7 +851,7 @@ files_list = list("counterfactual1" = f1,
                   "counterfactual4" = f4,
                   "counterfactual5" = f5,
                   "counterfactual6" = f6)
-rm(f2,f3,f4,f5,f6, files)
+rm(f1,f2,f3,f4,f5,f6, files)
 
 # import them all
 res = list()
@@ -885,6 +975,16 @@ files = files[grepl(setting, files)]
 # Grab all coefficent dataframe files
 files = files[grepl("/counterfactual_PPC_dataframes/", files)]
 
+## since we have reduced the number of viable species pairs w/ the detection ratio
+# thin files to the relevant combos in all_combos
+
+# Extract species pairs from the filenames in `files`
+sp_pair = sub(".*BPV_and_Chat_values_(SUB-.*DOM-.*)_\\d{8}\\.csv$", "\\1", files)
+
+# Thin the `files` vector by keeping only those that match `all_combos`
+files = files[sp_pair %in% all_combos]
+rm(sp_pair)
+
 ## split apart different tests
 f1 = files[grepl("counterfactual1", files)]
 f2 = files[grepl("counterfactual2", files)]
@@ -990,6 +1090,46 @@ ppc_pref = ppc_pref[, names(ppc_values_cf)]
 # And finally rbind the rest! 
 ppc_values_cf = rbind(ppc_pref, ppc_values_cf)
 rm(ppc_pref)
+
+```
+
+```{r Import counter-factual data}
+## The idea is to track which models are completed vs not
+cf_data_files = list.files(paste(wd, "data/step2_output_CoA_bundles/counterfactual_testing/", sep = ""), recursive = T)
+## remove old files
+cf_data_files = cf_data_files[! grepl("OLD/", cf_data_files)]
+
+## import and save in a dataframe of results
+cf_mods = data.frame(matrix(NA, ncol = 2))
+names(cf_mods) = c("counter_factual_test", "Species_Pair")
+for(i in 1:length(cf_data_files)){
+  # grab empty df
+  df = cf_mods[0,]
+  # make a path
+  path = paste(wd, "data/step2_output_CoA_bundles/counterfactual_testing/", cf_data_files[i], sep = "")
+  # import
+  dat = readRDS(path)
+  # grab the names
+  sp = names(dat)
+  # add to df
+  df[1:length(sp), "Species_Pair"] = sp
+  # re-name to match format
+  if(grepl("counterfactual1", cf_data_files[i])){ df$counter_factual_test = "isolate_extirpations" }
+  if(grepl("counterfactual2", cf_data_files[i])){ df$counter_factual_test = "site_matching_ThaiEFC" }
+  if(grepl("counterfactual3", cf_data_files[i])){ df$counter_factual_test = "isolate_altitude" }
+  if(grepl("counterfactual4", cf_data_files[i])){ df$counter_factual_test = "isolate_FLII" }
+  if(grepl("counterfactual5", cf_data_files[i])){ df$counter_factual_test = "isolate_HFP" }
+  if(grepl("counterfactual6", cf_data_files[i])){ df$counter_factual_test = "remove_community_detections" }
+  # and rbind with final res
+  cf_mods = rbind(cf_mods, df)
+}
+rm(i, sp, df, path, dat)
+
+# verify were distinct
+cf_mods = distinct(cf_mods)
+
+# and remove any NA 
+cf_mods = cf_mods[!is.na(cf_mods$Species_Pair), ]
 
 ```
 
@@ -1123,17 +1263,17 @@ We implemented a total of `r length(unique(ppc_values_cf$counter_factual_test)) 
 
 * The first test, **`r paste(unique(ppc_values_cf$counter_factual_test)[1])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[1]]))` models. Based on the same criteria above for the original tests, there were `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[1]])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[1]])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[1]])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[1]])` supported models**.
 
-* The second test, **`r paste(unique(ppc_values_cf$counter_factual_test)[2])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2]]))` models. Based on the same criteria above for the original tests, there were `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2]])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2]])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2]])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2]])` supported models**.
+* The second test, **`r paste(unique(ppc_values_cf$counter_factual_test)[2])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2]]))` models. Based on the same criteria above for the original tests, there were `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2]])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2]])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2]])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2]])` supported models**. There are **`r length(setdiff(cf_mods$Species_Pair[cf_mods$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2]], ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2]]))` remaining models** that still need to be completed. 
 
-* The third test, **`r paste(unique(ppc_values_cf$counter_factual_test)[3])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3]]))` models. Based on the same criteria above for the original tests, there were `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3]])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3]])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3]])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3]])` supported models**.
+* The third test, **`r paste(unique(ppc_values_cf$counter_factual_test)[3])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3]]))` models. Based on the same criteria above for the original tests, there were `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3]])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3]])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3]])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3]])` supported models**. There are **`r length(setdiff(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3]], cf_mods$Species_Pair[cf_mods$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3]]))` remaining models** that still need to be completed. 
 
-* The fourth test, **`r paste(unique(ppc_values_cf$counter_factual_test)[4])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4]]))` models. Based on the same criteria above for the original tests, there were `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4]])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4]])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4]])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4]])` supported models**.
+* The fourth test, **`r paste(unique(ppc_values_cf$counter_factual_test)[4])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4]]))` models. Based on the same criteria above for the original tests, there were `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4]])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4]])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4]])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4]])` supported models**. There are **`r length(setdiff(cf_mods$Species_Pair[cf_mods$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4]], ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4]]))` remaining models** that still need to be completed. 
 
-* The fifth test, **`r paste(unique(ppc_values_cf$counter_factual_test)[5])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5]]))` models. Based on the same criteria above for the original tests, there were `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5]])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5]])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5]])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5]])` supported models**.
+* The fifth test, **`r paste(unique(ppc_values_cf$counter_factual_test)[5])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5]]))` models. Based on the same criteria above for the original tests, there were `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5]])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5]])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5]])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5]])` supported models**. There are **`r length(setdiff(cf_mods$Species_Pair[cf_mods$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5]], ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5]]))` remaining models** that still need to be completed. 
 
-* The sixth test, **`r paste(unique(ppc_values_cf$counter_factual_test)[6])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6]]))` models. Based on the same criteria above for the original tests, there were `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6]])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6]])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6]])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6]])` supported models**.
+* The sixth test, **`r paste(unique(ppc_values_cf$counter_factual_test)[6])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6]]))` models. Based on the same criteria above for the original tests, there were `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6]])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6]])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6]])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6]])` supported models**. There are **`r length(setdiff(cf_mods$Species_Pair[cf_mods$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6]], ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6]]))` remaining models** that still need to be completed. 
 
-* The seventh test, **`r paste(unique(ppc_values_cf$counter_factual_test)[7])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[7]]))` models. Based on the same criteria above for the original tests, there were `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[7]])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[7]])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[7]])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[7]])` supported models**.
+* The seventh test, **`r paste(unique(ppc_values_cf$counter_factual_test)[7])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[7]]))` models. Based on the same criteria above for the original tests, there were `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[7]])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[7]])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[7]])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[7]])` supported models**. There are **`r length(setdiff(cf_mods$Species_Pair[cf_mods$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[7]], ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[7]]))` remaining models** that still need to be completed. 
 
 Finally, we assessed which species pairs agreed across the different tests and this resulted in `r length(preform$Species_Pair[preform$Species_Pair %in% agree & preform$direction == "top-down"])` top-down model and `r length(preform$Species_Pair[preform$Species_Pair %in% agree & preform$direction == "bottom-up"])` bottom-up models. **The `r length(agree)` specific species pairs that agree across different counter-factual tests are: `r paste(agree, collapse = ", ")`**.
 
@@ -1306,3 +1446,23 @@ saveRDS(save, path)
 
 ```
 
+```{r Also save supported community results for further counter-factual testing}
+# We assume that the community models are least-likely to be interacting IRL
+# but we can test this by putting them against the counter factual tests
+
+## if a community-level result passes all tests, then maybe thats a species interaction
+## that deserves much more attention than is currently being given! 
+
+## grab which community species pairs were supported
+comm_sp = preform$Species_Pair[preform$support == "Supported" & 
+                                 preform$preference == "community"]
+length(comm_sp)
+31* 6  # will be an additional 186 models on the HPC. 
+# probably takes 2-3 weeks to complete, but this is for curiosity (mainly, pending results)
+
+## save this vector as an RDS object, which will then be loaded in to step 2
+saveRDS(comm_sp, paste(wd, "/supported_community_", length(comm_sp),
+                       "_species_pairs_vector_for_counterfactual_testing_", 
+                       date, ".csv", sep = ""))
+
+```

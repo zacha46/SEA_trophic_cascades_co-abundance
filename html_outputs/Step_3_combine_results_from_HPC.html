@@ -351,7 +351,7 @@ display: none;
 
 <h1 class="title toc-ignore">Step 3 combine results from HPC</h1>
 <h4 class="author">Zachary Amir</h4>
-<h4 class="date">2024-12-20 15:28:56</h4>
+<h4 class="date">2025-01-24 13:48:01</h4>
 
 </div>
 
@@ -372,21 +372,19 @@ from the model on the HPC.</p>
 </div>
 <div id="description-of-results" class="section level2">
 <h2>Description of results</h2>
-<p>A total of 67 co-abundance models out of 262 were successfully
+<p>A total of 255 co-abundance models out of 258 were successfully
 completed and downloaded from the HPC. The models are composed of
-<strong>5 ‘community models’</strong> across the entire eligible
+<strong>191 ‘community models’</strong> across the entire eligible
 community, and <strong>64 ‘preferred models’</strong> based on large
-carnivore dietary preferences. There were a total of 118 community
-top-down models and 33 preferred top-down models. There were a total of
-78 community bottom-up models and 33 preferred bottom-up models.</p>
-<p>These completed models are composed of 64 preferred models and 3
+carnivore dietary preferences. There were a total of 117 community
+top-down models and 32 preferred top-down models. There were a total of
+77 community bottom-up models and 32 preferred bottom-up models.</p>
+<p>These completed models are composed of 64 preferred models and 191
 community models. The settings used on the HPC to complete these models
-are composed of 69 models with long settings, 0 models with middle
+are composed of 255 models with long settings, 0 models with middle
 settings, and 0 models with short settings.</p>
 <p>If there are any <strong>uncompleted preferred models</strong>, the
-names of those species-pairs will appear here:
-<strong>SUB-Panthera_tigris~DOM-Rusa_unicolor,
-SUB-Rusa_unicolor~DOM-Neofelis_genus</strong>.</p>
+names of those species-pairs will appear here: ****.</p>
 <p>It is important to inspect the diagnostics of the models before we
 interpret results, and there are four key diagnostic features to
 inspect.</p>
@@ -394,32 +392,32 @@ inspect.</p>
 <li><p>The first key value we are interested in is the <strong>parameter
 convergence (known as R-hat) around the species interaction value
 (SIV)</strong>, where parameters are converged if values are between 1
-and 1.2. <strong>The median Rhat for the SIV is 1 with a standard
-deviation of 4.26</strong>. In total, 203 models failed to generate a
-convergent SIV. This is composed of 12 preferred models and 191
-community models.</p></li>
+and 1.2. <strong>The median Rhat for the SIV is 1.001 with a standard
+deviation of 6.208</strong>. In total, 41 models failed to generate a
+convergent SIV. This is composed of 11 preferred models and 27 community
+models.</p></li>
 <li><p>The second key value is the <strong>Bayesian p-value denoting
 model goodness-of-fit</strong>, where models are deemed to be a good fit
 if values are between 0.15 to 0.85, with values outside of this range
-being considered a bad fit. <strong>Across all models 14.49 percent of
-models are considered a bad fit</strong>. This is composed of 12
-preferred models and 191 community models.</p></li>
+being considered a bad fit. <strong>Across all models 16.47 percent of
+models are considered a bad fit</strong>. This is composed of 11
+preferred models and 31 community models.</p></li>
 <li><p>The third key value is the <strong>C-hat overdispersion
 value</strong>, where models are deemed to not have any overdispersion
 in detections if values are between 0.95 and 1.3. <strong>Across all
-models 100 percent of models over remaining overdispersion of detections
-not accounted for in the detection formula</strong>. This is composed of
-2 preferred models and 191 community models.</p></li>
+models 100 percent of models contain remaining overdispersion of
+detections not accounted for in the detection formula</strong>. This is
+composed of 0 preferred models and 0 community models.</p></li>
 <li><p>The fourth value is <strong>the direction of the SIV based on our
 hypotheses</strong>, where top-down models should have a significant
 negative relationship and bottom-up models should have a significant
 positive relationship. As a reminder, top-down models are when large
 carnivores are the dominant species and bottom-up models are where large
 carnivores are the subordinate species. For the preferred top-down
-models, 4 models meet these conditions. For the preferred bottom-up
+models, 2 models meet these conditions. For the preferred bottom-up
 models, 14 models meet these conditions. For the community top-down
-models, 116 models meet these conditions. For the community bottom-up
-models, 78 models meet these conditions.</p></li>
+models, 15 models meet these conditions. For the community bottom-up
+models, 27 models meet these conditions.</p></li>
 </ol>
 <p>In combining these different diagnostic tools, we can determine
 different levels of support for our results. Models that had unsuitable
@@ -437,80 +435,150 @@ species responding positively to fruit availability in top-down models
 previous criteria, then we can determine the model as supported. The
 resulst from each level are provided below:</p>
 <ol style="list-style-type: decimal">
-<li><p>There were a total of 17 unsupported_3 models. This is composed
-of 17 preferred models and 0 community models.</p></li>
-<li><p>There were a total of 22 unsupported_2 models. This is composed
-of 21 preferred models and 1 community models.</p></li>
-<li><p>There were a total of 13 unsupported_1 models. This is composed
-of 12 preferred models and 1 community models.</p></li>
-<li><p>There were a total of 17 supported models. This is composed of 14
-preferred models and 3 community models.</p></li>
+<li><p>There were a total of 65 unsupported_3 models. This is composed
+of 18 preferred models and 47 community models.</p></li>
+<li><p>There were a total of 89 unsupported_2 models. This is composed
+of 20 preferred models and 69 community models.</p></li>
+<li><p>There were a total of 56 unsupported_1 models. This is composed
+of 12 preferred models and 44 community models.</p></li>
+<li><p>There were a total of 45 supported models. This is composed of 14
+preferred models and 31 community models.</p></li>
 </ol>
 <p>In interpreting our supported results, we can split them between
 top-down and bottom-up results.</p>
 <ul>
-<li><p><strong>For the supported top-down results, we had a total of 4
-models. This is composed of 3 preferred models and 1 community
+<li><p><strong>For the supported top-down results, we had a total of 16
+models. This is composed of 2 preferred models and 14 community
 models.</strong> <strong>Tigers</strong> showed 1 top-down relationships
-with their preferred prey and 0 top-down relationships with the overall
+with their preferred prey and 8 top-down relationships with the overall
 community. <strong>Leopards</strong> showed 1 top-down relationships
-with their preferred prey and 1 top-down relationships with the overall
-community. <strong>Dholes</strong> showed 1 top-down relationships with
-their preferred prey and 0 top-down relationships with the overall
+with their preferred prey and 2 top-down relationships with the overall
+community. <strong>Dholes</strong> showed 0 top-down relationships with
+their preferred prey and 4 top-down relationships with the overall
 community. Finally, <strong>clouded leopards</strong> showed 0 top-down
 relationships with their preferred prey and 0 top-down relationships
 with the overall community.</p></li>
-<li><p><strong>For the supported bottom-up results, we had a total of 13
-models. This is composed of 11 preferred models and 2 community
-models.</strong> <strong>Tigers</strong> showed 1 bottom-up
-relationships with their preferred prey and 0 bottom-up relationships
+<li><p><strong>For the supported bottom-up results, we had a total of 29
+models. This is composed of 12 preferred models and 17 community
+models.</strong> <strong>Tigers</strong> showed 2 bottom-up
+relationships with their preferred prey and 3 bottom-up relationships
 with the overall community. <strong>Leopards</strong> showed 2 bottom-up
-relationships with their preferred prey and 1 bottom-up relationships
+relationships with their preferred prey and 5 bottom-up relationships
 with the overall community. <strong>Dholes</strong> showed 1 bottom-up
-relationships with their preferred prey and 1 bottom-up relationships
-with the overall community. Finally, <strong>clouded leopards</strong>
-showed 7 bottom-up relationships with their preferred prey and 0
-bottom-up relationships with the overall community.</p></li>
+relationships with their preferred prey and 4 bottom-up relationships
+with the overall community. <strong>Clouded leopards</strong> showed 7
+bottom-up relationships with their preferred prey and 5 bottom-up
+relationships with the overall community.</p></li>
 </ul>
+<ol style="list-style-type: decimal">
+<li><p><strong>Tigers preferred bottom-up relationships</strong> were:
+SUB-Panthera_tigris~DOM-Rusa_unicolor,
+SUB-Panthera_tigris~DOM-Sus_scrofa, and the <strong>preferred top-down
+relationships</strong> were: SUB-Muntiacus_genus~DOM-Panthera_tigris.
+The <strong>community bottom-up relationships</strong> were:
+SUB-Panthera_tigris~DOM-Arctictis_binturong,
+SUB-Panthera_tigris~DOM-Macaca_arctoides,
+SUB-Panthera_tigris~DOM-Paguma_larvata, and the <strong>community
+top-down relationships</strong> were:
+SUB-Atherurus_macrourus~DOM-Panthera_tigris,
+SUB-Lophura_nycthemera~DOM-Panthera_tigris,
+SUB-Macaca_nemestrina~DOM-Panthera_tigris,
+SUB-Manis_javanica~DOM-Panthera_tigris,
+SUB-Neofelis_genus~DOM-Panthera_tigris,
+SUB-Trichys_fasciculata~DOM-Panthera_tigris,
+SUB-Viverra_megaspila~DOM-Panthera_tigris,
+SUB-Viverra_zibetha~DOM-Panthera_tigris.</p></li>
+<li><p><strong>Leopards preferred bottom-up relationships</strong> were:
+SUB-Panthera_pardus~DOM-Muntiacus_genus,
+SUB-Panthera_pardus~DOM-Sus_scrofa, and the <strong>preferred top-down
+relationships</strong> were: SUB-Macaca_nemestrina~DOM-Panthera_pardus.
+The <strong>community bottom-up relationships</strong> were:
+SUB-Panthera_pardus~DOM-Atherurus_macrourus,
+SUB-Panthera_pardus~DOM-Bos_gaurus,
+SUB-Panthera_pardus~DOM-Paradoxurus_hermaphroditus,
+SUB-Panthera_pardus~DOM-Rusa_unicolor,
+SUB-Panthera_pardus~DOM-Tapirus_indicus, and the <strong>community
+top-down relationships</strong> were:
+SUB-Catopuma_temminckii~DOM-Panthera_pardus,
+SUB-Varanus_salvator~DOM-Panthera_pardus.</p></li>
+<li><p><strong>Dholes preferred bottom-up relationships</strong> were:
+SUB-Cuon_alpinus~DOM-Rusa_unicolor, and the <strong>preferred top-down
+relationships</strong> were: . The <strong>community bottom-up
+relationships</strong> were: SUB-Cuon_alpinus~DOM-Arctictis_binturong,
+SUB-Cuon_alpinus~DOM-Lophura_diardi,
+SUB-Cuon_alpinus~DOM-Paradoxurus_hermaphroditus,
+SUB-Cuon_alpinus~DOM-Viverra_zibetha, and the <strong>community top-down
+relationships</strong> were: SUB-Arctonyx_collaris~DOM-Cuon_alpinus,
+SUB-Catopuma_temminckii~DOM-Cuon_alpinus,
+SUB-Helarctos_malayanus~DOM-Cuon_alpinus,
+SUB-Macaca_fascicularis~DOM-Cuon_alpinus.</p></li>
+<li><p><strong>Clouded leopards preferred bottom-up
+relationships</strong> were: SUB-Neofelis_genus~DOM-Arctictis_binturong,
+SUB-Neofelis_genus~DOM-Arctonyx_collaris,
+SUB-Neofelis_genus~DOM-Capricornis_genus,
+SUB-Neofelis_genus~DOM-Muntiacus_genus,
+SUB-Neofelis_genus~DOM-Sus_scrofa,
+SUB-Neofelis_genus~DOM-Viverra_tangalunga,
+SUB-Neofelis_genus~DOM-Viverra_zibetha, and the <strong>preferred
+top-down relationships</strong> were: . The <strong>community bottom-up
+relationships</strong> were:
+SUB-Neofelis_genus~DOM-Herpestes_brachyurus,
+SUB-Neofelis_genus~DOM-Lophura_bulweri,
+SUB-Neofelis_genus~DOM-Paguma_larvata,
+SUB-Neofelis_genus~DOM-Tapirus_indicus,
+SUB-Neofelis_genus~DOM-Trichys_fasciculata, and the <strong>community
+top-down relationships</strong> were: .</p></li>
+</ol>
 </div>
 <div id="counter-factual-results" class="section level2">
 <h2>Counter-factual results</h2>
-<p>We implemented a total of 4 counter-factual tests that will be
-compared with the original tests for a total of 5 tests. The key
+<p>We implemented a total of 6 counter-factual tests that will be
+compared with the original tests for a total of 7 tests. The key
 inference here will be determining which species pairs agree across all
 possible tests, noting that not every species pairing was able to be
 tested in every way. Currently, all tests have been run with the
 <strong>MCMC setting LONG</strong>.</p>
 <ul>
 <li><p>The first test, <strong>original_test</strong>, included a total
-of 66 models. Based on the same criteria above for the original tests,
-there were 19 unsupported_3 models, 21 unsupported_2 models, 12
+of 64 models. Based on the same criteria above for the original tests,
+there were 18 unsupported_3 models, 20 unsupported_2 models, 12
 unsupported_1 models, <strong>and 14 supported models</strong>.</p></li>
 <li><p>The second test, <strong>isolate_extirpations</strong>, included
-a total of 66 models. Based on the same criteria above for the original
-tests, there were 23 unsupported_3 models, 18 unsupported_2 models, 10
-unsupported_1 models, <strong>and 15 supported models</strong>.</p></li>
+a total of 64 models. Based on the same criteria above for the original
+tests, there were 21 unsupported_3 models, 18 unsupported_2 models, 10
+unsupported_1 models, <strong>and 15 supported models</strong>. There
+are <strong>31 remaining models</strong> that still need to be
+completed.</p></li>
 <li><p>The third test, <strong>site_matching_ThaiEFC</strong>, included
 a total of 40 models. Based on the same criteria above for the original
 tests, there were 6 unsupported_3 models, 11 unsupported_2 models, 12
-unsupported_1 models, <strong>and 11 supported models</strong>.</p></li>
+unsupported_1 models, <strong>and 11 supported models</strong>. There
+are <strong>0 remaining models</strong> that still need to be
+completed.</p></li>
 <li><p>The fourth test, <strong>isolate_altitude</strong>, included a
-total of 33 models. Based on the same criteria above for the original
-tests, there were 11 unsupported_3 models, 11 unsupported_2 models, 6
-unsupported_1 models, <strong>and 5 supported models</strong>.</p></li>
-<li><p>The fifth test, <strong>remove_community_detections</strong>,
-included a total of 66 models. Based on the same criteria above for the
-original tests, there were 21 unsupported_3 models, 18 unsupported_2
+total of 55 models. Based on the same criteria above for the original
+tests, there were 14 unsupported_3 models, 19 unsupported_2 models, 11
+unsupported_1 models, <strong>and 11 supported models</strong>. There
+are <strong>39 remaining models</strong> that still need to be
+completed.</p></li>
+<li><p>The fifth test, <strong>isolate_FLII</strong>, included a total
+of 64 models. Based on the same criteria above for the original tests,
+there were 16 unsupported_3 models, 20 unsupported_2 models, 15
+unsupported_1 models, <strong>and 13 supported models</strong>. There
+are <strong>31 remaining models</strong> that still need to be
+completed.</p></li>
+<li><p>The sixth test, <strong>isolate_HFP</strong>, included a total of
+63 models. Based on the same criteria above for the original tests,
+there were 16 unsupported_3 models, 23 unsupported_2 models, 9
+unsupported_1 models, <strong>and 15 supported models</strong>. There
+are <strong>31 remaining models</strong> that still need to be
+completed.</p></li>
+<li><p>The seventh test, <strong>remove_community_detections</strong>,
+included a total of 64 models. Based on the same criteria above for the
+original tests, there were 20 unsupported_3 models, 17 unsupported_2
 models, 10 unsupported_1 models, <strong>and 17 supported
-models</strong>.</p></li>
-<li><p>The sixth test, <strong>NA</strong>, included a total of 1
-models. Based on the same criteria above for the original tests, there
-were 80 unsupported_3 models, 79 unsupported_2 models, 50 unsupported_1
-models, <strong>and 62 supported models</strong>.</p></li>
-<li><p>The seventh test, <strong>NA</strong>, included a total of 1
-models. Based on the same criteria above for the original tests, there
-were 80 unsupported_3 models, 79 unsupported_2 models, 50 unsupported_1
-models, <strong>and 62 supported models</strong>.</p></li>
+models</strong>. There are <strong>2 remaining models</strong> that
+still need to be completed.</p></li>
 </ul>
 <p>Finally, we assessed which species pairs agreed across the different
 tests and this resulted in 2 top-down model and 9 bottom-up models.
@@ -522,9 +590,9 @@ SUB-Neofelis_genus~DOM-Arctictis_binturong,
 SUB-Neofelis_genus~DOM-Arctonyx_collaris,
 SUB-Neofelis_genus~DOM-Capricornis_genus,
 SUB-Neofelis_genus~DOM-Sus_scrofa,
-SUB-Neofelis_genus~DOM-Viverra_tangalunga,
 SUB-Neofelis_genus~DOM-Viverra_zibetha,
 SUB-Panthera_pardus~DOM-Muntiacus_genus,
+SUB-Panthera_tigris~DOM-Rusa_unicolor,
 SUB-Panthera_tigris~DOM-Sus_scrofa</strong>.</p>
 </div>
 <div id="save-results" class="section level2">

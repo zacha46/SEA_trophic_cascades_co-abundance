@@ -23,7 +23,7 @@
 #SBATCH --time=336:00:00
 
 # SPECIFY THE JOB ARRAY-
-#SBATCH --array=1-66
+#SBATCH --array=1-94
 
 # SPECIFY THE JOB NAME
 #SBATCH --job-name=CF5

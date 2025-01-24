@@ -224,9 +224,10 @@ og_caps = og_caps[og_caps$survey_id %in% caps$survey_id, ]
 rm(files, og_wd)
 
 
-## Also need SU per landscape
+## Also need SU and num polygons per landscape
 land_sum = ddply(meta, .(Landscape), summarize,
-                 num_su = (length(unique(cell_id))))
+                 num_su = (length(unique(cell_id))),
+                 num_polygon = length(unique(Polygon5km)))
 
 
 
@@ -237,7 +238,7 @@ land_sum = ddply(meta, .(Landscape), summarize,
 
 The camera trap data used in this analysis comes from **`r length(unique(meta$source))` data providers** that sampled **`r length(unique(meta$Landscape))` spatially distinct landscapes** from a total of **`r length(unique(meta$survey_id))` temporally distinct survey_ids** that have been defined to be a maximum of 100 days long. This data is comprised of **`r length(unique(og_meta$deployment_id))` single-season camera deployments**. The single-season surveys ranged in duration from `r as.numeric(min(surv_summary$dur[!surv_summary$survey_id %in% rm]))` to `r as.numeric(max(surv_summary$dur[!surv_summary$survey_id %in% rm]))` days, with an average of `r round(as.numeric(mean(surv_summary$dur[!surv_summary$survey_id %in% rm])),2)` and SD of `r round(as.numeric(sd(surv_summary$dur[!surv_summary$survey_id %in% rm])),2)` days. In terms of trap-nights (*i.e.*, number of deployments multiplied by duration), the average sampling effort per survey had `r as.numeric(min(surv_summary$trap_nights[!surv_summary$survey_id %in% rm]))` to `r as.numeric(max(surv_summary$trap_nights[!surv_summary$survey_id %in% rm]))` trap-nights, with an average of `r round(as.numeric(mean(surv_summary$trap_nights[!surv_summary$survey_id %in% rm])),2)` and SD of `r round(as.numeric(sd(surv_summary$trap_nights[!surv_summary$survey_id %in% rm])),2)` trap-nights. 
 
-We have spatially re-sampled the camera trap captures and covariates to the **`r scale` spatial scale**, meaning that any cameras within a `r scale` hexagon had their captures aggregated. There are a total of **`r paste(length(unique(meta$cell_id)), scale, "sampling units")`** available for analysis, and each **landscape contains between `r min(land_sum$num_su)` to `r max(land_sum$num_su)`** sampling units, with an average of `r round(mean(land_sum$num_su),2)` and SD of `r round(sd(land_sum$num_su),2)` per landscape.
+We have spatially re-sampled the camera trap captures and covariates to the **`r scale` spatial scale**, meaning that any cameras within a `r scale` hexagon had their captures aggregated. There are a total of **`r paste(length(unique(meta$cell_id)), scale, "sampling units")`** available for analysis, and each **landscape contains between `r min(land_sum$num_su)` to `r max(land_sum$num_su)`** sampling units, with an average of `r round(mean(land_sum$num_su),2)` and SD of `r round(sd(land_sum$num_su),2)` per landscape. But remember, sampling units are temporal, so the same location can be repeated multiple times thru time. Therefore, to assess sizes, its better to inspect the number of `r scale` polygons sampled. **Each landscapes contains between `r min(land_sum$num_polygon)` to `r max(land_sum$num_polygon)` polygons**, with an average of `r round(mean(land_sum$num_polygon), 2)` and SD of `r round(sd(land_sum$num_polygon),2)` per landscape.
 
 As part of ensuring we are using robust data, a landscape needs be at least 9 km2 to provide spatial variation and a survey needs to contain at least 100 trap-nights. Therefore, a total of __`r length(rm)` surveys have been removed__ that do not meet these standards, and this represents __`r paste(round(dat_rm,1), "%", sep = "")` of the captures__. For the remaining `r length(unique(meta$survey_id))` valid surveys, the __median number of `r scale` sampling units is `r median(surv_summary$num_SU[!surv_summary$survey_id %in% rm])` with a range from `r paste(min(surv_summary$num_SU[!surv_summary$survey_id %in% rm]), max(surv_summary$num_SU[!surv_summary$survey_id %in% rm]), sep = " - ")`__, and the __median sampling effort per survey is `r as.numeric(median(surv_summary$trap_nights[!surv_summary$survey_id %in% rm]))` trap-nights, with a range from `r paste(as.numeric(min(surv_summary$trap_nights[!surv_summary$survey_id %in% rm])), as.numeric(max(surv_summary$trap_nights[!surv_summary$survey_id %in% rm])), sep = " - ")`__.
 

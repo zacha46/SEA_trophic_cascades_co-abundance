@@ -12,7 +12,7 @@
 <meta name="author" content="Zachary Amir" />
 
 
-<title>Step 1 Prepare data to make count history matrix</title>
+<title>Step 3 combine results from HPC</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -349,175 +349,258 @@ display: none;
 
 
 
-<h1 class="title toc-ignore">Step 1 Prepare data to make count history
-matrix</h1>
+<h1 class="title toc-ignore">Step 3 combine results from HPC</h1>
 <h4 class="author">Zachary Amir</h4>
-<h4 class="date">2025-01-24 19:11:22</h4>
+<h4 class="date">2025-01-20 11:44:53</h4>
 
 </div>
 
 
 <div id="introduction" class="section level2">
 <h2>Introduction</h2>
-<p>This code will prepare camera trap data to create count history
-matrices and the associated covariates. This is a necessary first step
-towards preparing the data to implement Zachary Amir’s co-abundance
-models on the High Performance Computers (HPC).</p>
-<p>This code works off the spatially re-sampled captures and covariates
-that are generated in the 4-step Southeast Asian camera trap data
-standardization pipeline. To learn more about this Southeast Asian
-camera trap data standardization pipeline, please contact Zachary Amir
-(<a href="mailto:z.amir@uq.edu.au" class="email">z.amir@uq.edu.au</a>)
-or Matthew Luskin (<a href="mailto:m.luskin@uq.edu.au" class="email">m.luskin@uq.edu.au</a>) to request access to the following
-relevant <a href="https://github.com/EcologicalCascadesLab/AsianCaptureHistories">GitHub
-repository</a>.</p>
+<p>This R Markdown file is used to bring together all of the results
+generated from the High Performance Computer <a href="https://rcc.uq.edu.au/systems/high-performance-computing/bunya">(HPC)</a>
+that will then be saved as combined spreadsheets saved to dropbox. Some
+of the basic numeric results will be included in this markdown, but all
+of the data visualization will be left for the 4th and final step of
+this analysis.</p>
+<p>As a reminder, the co-abundance models were implemented on this R
+script: scripts/HPC_code/HPC_co-abundance_model_final.R. However, the
+each JAGS model with long MCMC settings is too heavy to download
+(<em>i.e.</em>, several GB per model), so we only saved spreadsheets
+from the model on the HPC.</p>
 </div>
-<div id="camera-trap-data-included-for-analysis" class="section level2">
-<h2>Camera trap data included for analysis</h2>
-<p>The camera trap data used in this analysis comes from <strong>13 data
-providers</strong> that sampled <strong>45 spatially distinct
-landscapes</strong> from a total of <strong>282 temporally distinct
-survey_ids</strong> that have been defined to be a maximum of 100 days
-long. This data is comprised of <strong>10503 single-season camera
-deployments</strong>. The single-season surveys ranged in duration from
-13 to 107 days, with an average of 85.77 and SD of 23.92 days. In terms
-of trap-nights (<em>i.e.</em>, number of deployments multiplied by
-duration), the average sampling effort per survey had 100 to 6237
-trap-nights, with an average of 1247.89 and SD of 1139.98
-trap-nights.</p>
-<p>We have spatially re-sampled the camera trap captures and covariates
-to the <strong>5km spatial scale</strong>, meaning that any cameras
-within a 5km hexagon had their captures aggregated. There are a total of
-<strong>4062 5km sampling units</strong> available for analysis, and
-each <strong>landscape contains between 3 to 723</strong> sampling
-units, with an average of 90.27 and SD of 127.08 per landscape. But
-remember, sampling units are temporal, so the same location can be
-repeated multiple times thru time. Therefore, to assess sizes, its
-better to inspect the number of 5km polygons sampled. <strong>Each
-landscapes contains between 3 to 168 polygons</strong>, with an average
-of 31.64 and SD of 37.6 per landscape.</p>
-<p>As part of ensuring we are using robust data, a landscape needs be at
-least 9 km2 to provide spatial variation and a survey needs to contain
-at least 100 trap-nights. Therefore, a total of <strong>68 surveys have
-been removed</strong> that do not meet these standards, and this
-represents <strong>5.4% of the captures</strong>. For the remaining 282
-valid surveys, the <strong>median number of 5km sampling units is 12
-with a range from 3 - 63</strong>, and the <strong>median sampling
-effort per survey is 891 trap-nights, with a range from 100 -
-6237</strong>.</p>
+<div id="description-of-results" class="section level2">
+<h2>Description of results</h2>
+<p>A total of 258 co-abundance models out of 262 were successfully
+completed and downloaded from the HPC. The models are composed of
+<strong>192 ‘community models’</strong> across the entire eligible
+community, and <strong>66 ‘preferred models’</strong> based on large
+carnivore dietary preferences. There were a total of 118 community
+top-down models and 33 preferred top-down models. There were a total of
+78 community bottom-up models and 33 preferred bottom-up models.</p>
+<p>These completed models are composed of 66 preferred models and 192
+community models. The settings used on the HPC to complete these models
+are composed of 258 models with long settings, 0 models with middle
+settings, and 0 models with short settings.</p>
+<p>If there are any <strong>uncompleted preferred models</strong>, the
+names of those species-pairs will appear here: ****.</p>
+<p>It is important to inspect the diagnostics of the models before we
+interpret results, and there are four key diagnostic features to
+inspect.</p>
+<ol style="list-style-type: decimal">
+<li><p>The first key value we are interested in is the <strong>parameter
+convergence (known as R-hat) around the species interaction value
+(SIV)</strong>, where parameters are converged if values are between 1
+and 1.2. <strong>The median Rhat for the SIV is 1.001 with a standard
+deviation of 6.226</strong>. In total, 43 models failed to generate a
+convergent SIV. This is composed of 11 preferred models and 28 community
+models.</p></li>
+<li><p>The second key value is the <strong>Bayesian p-value denoting
+model goodness-of-fit</strong>, where models are deemed to be a good fit
+if values are between 0.15 to 0.85, with values outside of this range
+being considered a bad fit. <strong>Across all models 16.28 percent of
+models are considered a bad fit</strong>. This is composed of 11
+preferred models and 31 community models.</p></li>
+<li><p>The third key value is the <strong>C-hat overdispersion
+value</strong>, where models are deemed to not have any overdispersion
+in detections if values are between 0.95 and 1.3. <strong>Across all
+models 100 percent of models contain remaining overdispersion of
+detections not accounted for in the detection formula</strong>. This is
+composed of 0 preferred models and 0 community models.</p></li>
+<li><p>The fourth value is <strong>the direction of the SIV based on our
+hypotheses</strong>, where top-down models should have a significant
+negative relationship and bottom-up models should have a significant
+positive relationship. As a reminder, top-down models are when large
+carnivores are the dominant species and bottom-up models are where large
+carnivores are the subordinate species. For the preferred top-down
+models, 3 models meet these conditions. For the preferred bottom-up
+models, 14 models meet these conditions. For the community top-down
+models, 15 models meet these conditions. For the community bottom-up
+models, 28 models meet these conditions.</p></li>
+</ol>
+<p>In combining these different diagnostic tools, we can determine
+different levels of support for our results. Models that had unsuitable
+parameter convergence or Bayes p-values and remaining over-dispersion
+are likely due to insufficient data or excessive residual noise from
+weakly interacting species (Fig. S2, unsupported_3). Models that had
+insignificant SIVs are likely due to the inclusion of covariates in the
+model being more informative than species interactions (Fig. S2,
+unsupported_2). Models with significant SIVs in the opposite direction
+as we hypothesized are likely due to shared responses to unexplained
+variation in covariates not included in the model, such as both predator
+and prey responding negatively to hunting in bottom-up models, or both
+species responding positively to fruit availability in top-down models
+(Fig. S2, unsupported_1). Finally, when a model meets all of the
+previous criteria, then we can determine the model as supported. The
+resulst from each level are provided below:</p>
+<ol style="list-style-type: decimal">
+<li><p>There were a total of 66 unsupported_3 models. This is composed
+of 18 preferred models and 48 community models.</p></li>
+<li><p>There were a total of 91 unsupported_2 models. This is composed
+of 21 preferred models and 70 community models.</p></li>
+<li><p>There were a total of 55 unsupported_1 models. This is composed
+of 12 preferred models and 43 community models.</p></li>
+<li><p>There were a total of 46 supported models. This is composed of 15
+preferred models and 31 community models.</p></li>
+</ol>
+<p>In interpreting our supported results, we can split them between
+top-down and bottom-up results.</p>
+<ul>
+<li><p><strong>For the supported top-down results, we had a total of 17
+models. This is composed of 3 preferred models and 14 community
+models.</strong> <strong>Tigers</strong> showed 1 top-down relationships
+with their preferred prey and 8 top-down relationships with the overall
+community. <strong>Leopards</strong> showed 1 top-down relationships
+with their preferred prey and 2 top-down relationships with the overall
+community. <strong>Dholes</strong> showed 1 top-down relationships with
+their preferred prey and 4 top-down relationships with the overall
+community. Finally, <strong>clouded leopards</strong> showed 0 top-down
+relationships with their preferred prey and 0 top-down relationships
+with the overall community.</p></li>
+<li><p><strong>For the supported bottom-up results, we had a total of 29
+models. This is composed of 12 preferred models and 17 community
+models.</strong> <strong>Tigers</strong> showed 2 bottom-up
+relationships with their preferred prey and 3 bottom-up relationships
+with the overall community. <strong>Leopards</strong> showed 2 bottom-up
+relationships with their preferred prey and 5 bottom-up relationships
+with the overall community. <strong>Dholes</strong> showed 1 bottom-up
+relationships with their preferred prey and 4 bottom-up relationships
+with the overall community. <strong>Clouded leopards</strong> showed 7
+bottom-up relationships with their preferred prey and 5 bottom-up
+relationships with the overall community.</p></li>
+</ul>
+<ol style="list-style-type: decimal">
+<li><p><strong>Tigers preferred bottom-up relationships</strong> were:
+SUB-Panthera_tigris~DOM-Rusa_unicolor,
+SUB-Panthera_tigris~DOM-Sus_scrofa, and the <strong>preferred top-down
+relationships</strong> were: SUB-Muntiacus_genus~DOM-Panthera_tigris.
+The <strong>community bottom-up relationships</strong> were:
+SUB-Panthera_tigris~DOM-Arctictis_binturong,
+SUB-Panthera_tigris~DOM-Macaca_arctoides,
+SUB-Panthera_tigris~DOM-Paguma_larvata, and the <strong>community
+top-down relationships</strong> were:
+SUB-Atherurus_macrourus~DOM-Panthera_tigris,
+SUB-Lophura_nycthemera~DOM-Panthera_tigris,
+SUB-Macaca_nemestrina~DOM-Panthera_tigris,
+SUB-Manis_javanica~DOM-Panthera_tigris,
+SUB-Neofelis_genus~DOM-Panthera_tigris,
+SUB-Trichys_fasciculata~DOM-Panthera_tigris,
+SUB-Viverra_megaspila~DOM-Panthera_tigris,
+SUB-Viverra_zibetha~DOM-Panthera_tigris.</p></li>
+<li><p><strong>Leopards preferred bottom-up relationships</strong> were:
+SUB-Panthera_pardus~DOM-Muntiacus_genus,
+SUB-Panthera_pardus~DOM-Sus_scrofa, and the <strong>preferred top-down
+relationships</strong> were: SUB-Macaca_nemestrina~DOM-Panthera_pardus.
+The <strong>community bottom-up relationships</strong> were:
+SUB-Panthera_pardus~DOM-Atherurus_macrourus,
+SUB-Panthera_pardus~DOM-Bos_gaurus,
+SUB-Panthera_pardus~DOM-Paradoxurus_hermaphroditus,
+SUB-Panthera_pardus~DOM-Rusa_unicolor,
+SUB-Panthera_pardus~DOM-Tapirus_indicus, and the <strong>community
+top-down relationships</strong> were:
+SUB-Catopuma_temminckii~DOM-Panthera_pardus,
+SUB-Varanus_salvator~DOM-Panthera_pardus.</p></li>
+<li><p><strong>Dholes preferred bottom-up relationships</strong> were:
+SUB-Cuon_alpinus~DOM-Rusa_unicolor, and the <strong>preferred top-down
+relationships</strong> were: SUB-Sus_barbatus~DOM-Cuon_alpinus. The
+<strong>community bottom-up relationships</strong> were:
+SUB-Cuon_alpinus~DOM-Arctictis_binturong,
+SUB-Cuon_alpinus~DOM-Lophura_diardi,
+SUB-Cuon_alpinus~DOM-Paradoxurus_hermaphroditus,
+SUB-Cuon_alpinus~DOM-Viverra_zibetha, and the <strong>community top-down
+relationships</strong> were: SUB-Arctonyx_collaris~DOM-Cuon_alpinus,
+SUB-Catopuma_temminckii~DOM-Cuon_alpinus,
+SUB-Helarctos_malayanus~DOM-Cuon_alpinus,
+SUB-Macaca_fascicularis~DOM-Cuon_alpinus.</p></li>
+<li><p><strong>Clouded leopards preferred bottom-up
+relationships</strong> were: SUB-Neofelis_genus~DOM-Arctictis_binturong,
+SUB-Neofelis_genus~DOM-Arctonyx_collaris,
+SUB-Neofelis_genus~DOM-Capricornis_genus,
+SUB-Neofelis_genus~DOM-Muntiacus_genus,
+SUB-Neofelis_genus~DOM-Sus_scrofa,
+SUB-Neofelis_genus~DOM-Viverra_tangalunga,
+SUB-Neofelis_genus~DOM-Viverra_zibetha, and the <strong>preferred
+top-down relationships</strong> were: . The <strong>community bottom-up
+relationships</strong> were:
+SUB-Neofelis_genus~DOM-Herpestes_brachyurus,
+SUB-Neofelis_genus~DOM-Lophura_bulweri,
+SUB-Neofelis_genus~DOM-Paguma_larvata,
+SUB-Neofelis_genus~DOM-Tapirus_indicus,
+SUB-Neofelis_genus~DOM-Trichys_fasciculata, and the <strong>community
+top-down relationships</strong> were: .</p></li>
+</ol>
 </div>
-<div id="determine-which-species-to-analyze" class="section level2">
-<h2>Determine which species to analyze</h2>
-<p>In these code chunks, I will determine which species have
-<strong>sufficient captures (n = 100)</strong>, standardize similar
-species to the genera level (<em>e.g.</em>, clouded leopards in the
-genus <em>Neofelis</em>), and remove non-relevant ‘species’
-(e.g. blanks).</p>
-<p>I will also gather species traits from the
-<code>library(speciestraits)</code> databases. Each species will have 1)
-a trophic level (<em>i.e.</em>, carnivore, omnivore, herbivore), 2) body
-mass (in grams), and 3) home range size (in km2). Finally, I have also
-added dietary preferences for the four large carnivores species that are
-the focus of this analysis.</p>
-<p>Before any standardization there are a total of 106 ‘species’ with
-100 captures ready for analysis, but after removing domestic species
-(<em>e.g.</em>, <em>Canis lupus familiaris</em> &amp; <em>Bos
-taurus</em>), primarily arboreal species (<em>e.g.</em>, <em>Pongo
-pygmaeus</em> &amp; <em>Presbytis rubicunda</em>), species less than 1kg
-or greater than 1000 kg, or species lacking any trait data, we are left
-with a <strong>total of 44 species ready for analysis</strong>.
-Therefore, the total number of independent captures for these species is
-133694.</p>
-<p>A total of 6 trophic guilds were constructed based on trophic level
-and body mass. Unfortunately, <strong>home-range data was lacking for 32
-species</strong>, but for the known home-range values. For the remaining
-values, the median value is 3.515 with a range of 0.46 - 64.89 square
-kilometers.</p>
-<p>There are a <strong>total of 15 herbivores</strong>, split between
-<strong>11 small herbivores</strong> and <strong>4 large
-herbivores</strong> using a 100 kg cut-off.</p>
-<p>There are a <strong>total of 17 omnivores</strong>, split between
-<strong>13 small omnivores</strong> and <strong>4 large
-omnivores</strong> using a 50 kg cut-off.</p>
-<p>There are a <strong>total of 12 carnivores</strong>, split between
-<strong>8 small carnivores</strong> and <strong>4 large
-carnivores</strong> using a 15 kg cut-off.</p>
-<p><strong>Tigers (<em>Panthera tigris</em>)</strong> were generated 0
-independent detections from 0 landscapes. They were deemed to prefer any
-other species that is not a large carnivore and above 17 kg. This
-includes a total of <strong>9 species composed of Helarctos_malayanus,
-Rusa_unicolor, Sus_barbatus, Sus_scrofa, Tapirus_indicus,
-Ursus_thibetanus, Bos_gaurus, Capricornis_genus,
-Muntiacus_genus</strong>.</p>
-<p><strong>Leopards (<em>Panthera pardus</em>)</strong> were generated 0
-independent detections from 0 landscapes. They were deemed to prefer any
-other species that is not a large carnivore and with a weight range of
-10-40 kg. Also, all primates were included as preferred prey. This
-includes a total of <strong>7 species composed of Arctictis_binturong,
-Arctonyx_collaris, Macaca_arctoides, Macaca_fascicularis,
-Macaca_nemestrina, Sus_scrofa, Muntiacus_genus</strong>.</p>
-<p><strong>Dholes (<em>Cuon alpinus</em>)</strong> were generated 0
-independent detections from 0 landscapes. They were deemed to prefer any
-other species that is not a large carnivore and with a weight range of
-40-190 kg. Also, all bear species were removed as preferred prey and
-muntjac deer were included. This includes a total of <strong>5 species
-composed of Rusa_unicolor, Sus_barbatus, Sus_scrofa, Capricornis_genus,
-Muntiacus_genus</strong>.</p>
-<p><strong>Clouded leopards (<em>Neofelis</em> genus)</strong> were
-generated 646 independent detections from 24 landscapes. They were
-deemed to prefer any other species that is not a large carnivore and
-with a weight range of 7-190 kg. Also, all bear species and golden cats
-were removed as preferred prey. This includes a total of <strong>12
-species composed of Arctictis_binturong, Arctonyx_collaris,
-Hystrix_brachyura, Macaca_arctoides, Macaca_nemestrina, Rusa_unicolor,
-Sus_barbatus, Sus_scrofa, Viverra_tangalunga, Viverra_zibetha,
-Capricornis_genus, Muntiacus_genus</strong>.</p>
+<div id="counter-factual-results" class="section level2">
+<h2>Counter-factual results</h2>
+<p>We implemented a total of 6 counter-factual tests that will be
+compared with the original tests for a total of 7 tests. The key
+inference here will be determining which species pairs agree across all
+possible tests, noting that not every species pairing was able to be
+tested in every way. Currently, all tests have been run with the
+<strong>MCMC setting LONG</strong>.</p>
+<ul>
+<li><p>The first test, <strong>original_test</strong>, included a total
+of 66 models. Based on the same criteria above for the original tests,
+there were 18 unsupported_3 models, 21 unsupported_2 models, 12
+unsupported_1 models, <strong>and 15 supported models</strong>.</p></li>
+<li><p>The second test, <strong>isolate_extirpations</strong>, included
+a total of 66 models. Based on the same criteria above for the original
+tests, there were 23 unsupported_3 models, 18 unsupported_2 models, 10
+unsupported_1 models, <strong>and 15 supported models</strong>. There
+are <strong>0 remaining models</strong> that still need to be
+completed.</p></li>
+<li><p>The third test, <strong>site_matching_ThaiEFC</strong>, included
+a total of 40 models. Based on the same criteria above for the original
+tests, there were 6 unsupported_3 models, 11 unsupported_2 models, 12
+unsupported_1 models, <strong>and 11 supported models</strong>. There
+are <strong>0 remaining models</strong> that still need to be
+completed.</p></li>
+<li><p>The fourth test, <strong>isolate_altitude</strong>, included a
+total of 49 models. Based on the same criteria above for the original
+tests, there were 14 unsupported_3 models, 18 unsupported_2 models, 8
+unsupported_1 models, <strong>and 9 supported models</strong>. There are
+<strong>17 remaining models</strong> that still need to be
+completed.</p></li>
+<li><p>The fifth test, <strong>isolate_FLII</strong>, included a total
+of 65 models. Based on the same criteria above for the original tests,
+there were 17 unsupported_3 models, 21 unsupported_2 models, 15
+unsupported_1 models, <strong>and 12 supported models</strong>. There
+are <strong>1 remaining models</strong> that still need to be
+completed.</p></li>
+<li><p>The sixth test, <strong>isolate_HFP</strong>, included a total of
+65 models. Based on the same criteria above for the original tests,
+there were 16 unsupported_3 models, 24 unsupported_2 models, 9
+unsupported_1 models, <strong>and 16 supported models</strong>. There
+are <strong>1 remaining models</strong> that still need to be
+completed.</p></li>
+<li><p>The seventh test, <strong>remove_community_detections</strong>,
+included a total of 66 models. Based on the same criteria above for the
+original tests, there were 21 unsupported_3 models, 18 unsupported_2
+models, 10 unsupported_1 models, <strong>and 17 supported
+models</strong>. There are <strong>0 remaining models</strong> that
+still need to be completed.</p></li>
+</ul>
+<p>Finally, we assessed which species pairs agreed across the different
+tests and this resulted in 2 top-down model and 9 bottom-up models.
+<strong>The 11 specific species pairs that agree across different
+counter-factual tests are: SUB-Macaca_nemestrina~DOM-Panthera_pardus,
+SUB-Muntiacus_genus~DOM-Panthera_tigris,
+SUB-Cuon_alpinus~DOM-Rusa_unicolor,
+SUB-Neofelis_genus~DOM-Arctictis_binturong,
+SUB-Neofelis_genus~DOM-Arctonyx_collaris,
+SUB-Neofelis_genus~DOM-Capricornis_genus,
+SUB-Neofelis_genus~DOM-Sus_scrofa,
+SUB-Neofelis_genus~DOM-Viverra_zibetha,
+SUB-Panthera_pardus~DOM-Muntiacus_genus,
+SUB-Panthera_tigris~DOM-Rusa_unicolor,
+SUB-Panthera_tigris~DOM-Sus_scrofa</strong>.</p>
 </div>
-<div id="prepare-data-to-be-saved" class="section level2">
-<h2>Prepare data to be saved</h2>
-<p>Now that relevant species have been determined and species traits are
-sorted, I will finalize preparing the data by generating a sampling
-occasion index to create count history matrices for each species using
-the formatted captures and metadata files. Instead of creating a
-detection history matrix based on the date a photo was taken, I make all
-cameras start on the same ‘day’ (based around start/end dates) to
-increase model speed and efficiency.</p>
-<p>By adding the observation sequence to the captures, we lost 5% of the
-captures. This is an acceptable amount.</p>
-<p>I have also determined which species need to be analyzed as groups
-instead of inviduals because of very large group sizes cause N-mixture
-models to crash and create unrealistic estimates. <strong>This includes
-9 species: Bos_gaurus, Cuon_alpinus, Macaca_arctoides,
-Macaca_fascicularis, Macaca_nemestrina, Muntiacus_genus, Rusa_unicolor,
-Sus_barbatus, Sus_scrofa</strong>.</p>
-<p>The key spatial variables that will get included in each species’
-N-mixture model to account for habitat filtering are:
-<strong>Avg_FLLI_5km, Avg_altitude_5km,
-Avg_human_footprint_5km</strong>. The correlation coefficient between
-forest integrity and human footprint is <strong>-0.564</strong>. The
-correlation coefficient between elevation and human footprint is
-<strong>-0.366</strong>. The correlation coefficient between forest
-integrity and elevation is <strong>0.432</strong>.</p>
-</div>
-<div id="save-data" class="section level2">
-<h2>Save data</h2>
-<p>Generating the count histories and covariates for each species on a
-regular computer takes hours, so instead I will send the information to
-the High Performance Computers (HPC) to run much faster. The data is
-saved in my personal Dropbox folder, but will move to GitHub
-eventually.</p>
-</div>
-<div id="hpc-matrix-and-covariate-creation-code" class="section level2">
-<h2>HPC matrix and covariate creation code</h2>
-<p>The next section of analysis relies on the HPC, where we convert our
-covariates and metadata into a count history matrix with the proper
-associated observation- and site-level covariates. We use the HPC to
-iterate the process per species with more computational power which
-vastly speeds up the process.</p>
-<p>The separate R script is called:
-<strong>scripts/HPC_code/HPC_matrix_generator_SEA_TC.R</strong>.</p>
-<p>To make that code run on the HPC, I use the SLURM script called:
-<strong>scripts/SLURM_code/SLURM_generate_matricies.txt</strong>.</p>
+<div id="save-results" class="section level2">
+<h2>Save results</h2>
+<p>Save these results to dropbox, in this file directory: Dropbox/Zach
+PhD/Ch3 Trophic release
+project/SEA_TC_GitHub_data_storage/data/step3_output_combined_results</p>
 </div>
 
 

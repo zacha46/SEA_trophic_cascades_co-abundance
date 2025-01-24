@@ -265,7 +265,7 @@ Before we create the graph, we can display the values produced in the regression
     * For unsupported top-down models, the overall effect size is `r round((es_final$estimate[es_final$var == vars[5] & es_final$support_pred_prey == "unsupported_top-down"]), 2)` with a standard error of `r round((es_final$SE[es_final$var == vars[5] & es_final$support_pred_prey == "unsupported_top-down"]), 2)` and a p-value of `r round(es_final$p_value[es_final$var == vars[5] & es_final$support_pred_prey == "unsupported_top-down"], 3)`.
     * For supported bottom-up models, the overall effect size is `r round((es_final$estimate[es_final$var == vars[5] & es_final$support_pred_prey == "supported_bottom-up"]), 2)` with a standard error of `r round((es_final$SE[es_final$var == vars[5] & es_final$support_pred_prey == "supported_bottom-up"]), 2)` and a p-value of `r round(es_final$p_value[es_final$var == vars[5] & es_final$support_pred_prey == "supported_bottom-up"], 3)`.
     * For unsupported bottom-up models, the overall effect size is `r round((es_final$estimate[es_final$var == vars[5] & es_final$support_pred_prey == "unsupported_bottom-up"]), 2)` with a standard error of `r round((es_final$SE[es_final$var == vars[5] & es_final$support_pred_prey == "unsupported_bottom-up"]), 2)` and a p-value of `r round(es_final$p_value[es_final$var == vars[5] & es_final$support_pred_prey == "unsupported_bottom-up"], 3)`.
-```{r Visualize using a forest plot }
+```{r Make the OG forest plot }
 ## prep the data for plotting 
 
 ## make an upper and lower CI
@@ -320,19 +320,30 @@ es_final$support_pred_prey = as.character(es_final$support_pred_prey)
 es_final$support_pred_prey = gsub("_", " & ", es_final$support_pred_prey)
 table(es_final$support_pred_prey)
 
+### CHANGE THE LABEL TO THIS!! to be more informative
+# pt1
+es_final$support_pred_prey[es_final$support_pred_prey == "supported & bottom-up"] = paste(length(unique(preform$sub_species[preform$direction == "bottom-up"])), "predator species from", length(unique(preform$Species_Pair[preform$direction == "bottom-up" & preform$support == "Supported"])), "supported bottom-up models")
+# pt2
+es_final$support_pred_prey[es_final$support_pred_prey == "unsupported & bottom-up"] = paste(length(unique(preform$sub_species[preform$direction == "bottom-up"])), "predator species from", length(unique(preform$Species_Pair[preform$direction == "bottom-up" & grepl("Unsupp", preform$support)])), "unsupported bottom-up models")
+# pt3
+es_final$support_pred_prey[es_final$support_pred_prey == "unsupported & top-down"] = paste(length(unique(preform$sub_species[preform$direction == "top-down"])), "prey species from", length(unique(preform$Species_Pair[preform$direction == "top-down" & grepl("Unsupp", preform$support)])), "unsupported top-down models")
+# pt4
+es_final$support_pred_prey[es_final$support_pred_prey == "supported & top-down"] = paste(length(unique(preform$sub_species[preform$direction == "top-down"])), "prey species from", length(unique(preform$Species_Pair[preform$direction == "top-down" & preform$support == "Supported"])), "supported top-down models")
+# inspect
+table(es_final$support_pred_prey)
+
 ### now reverse the factors b/c of coordinate flip 
-es_final$support_pred_prey = factor(es_final$support_pred_prey, levels = c("supported & bottom-up", "unsupported & bottom-up","supported & top-down","unsupported & top-down"))
+es_final$support_pred_prey = factor(es_final$support_pred_prey, levels = c("4 predator species from 12 supported bottom-up models", "4 predator species from 20 unsupported bottom-up models","17 prey species from 2 supported top-down models", "17 prey species from 30 unsupported top-down models"))
                                       
 ## Re-make the ggplot for the label 
 label =
 ggplot(es_final, aes(x = var, y = estimate, ymin=lower, ymax=upper))+
-  geom_pointrange(aes(color = support_pred_prey, shape = direction), size = 2, lwd = 2, #, size = mod_count), lwd = 2,
+  geom_pointrange(aes(color = support_pred_prey, shape = direction), size = 2, lwd = 2,
                   position= position_dodge(width=.7))+
-  # geom_text(aes(y = estimate+.3*sign(estimate), label = sig), position = position_dodge(width = .7), size = 8) + # manually add via ppt to be more clear
-  scale_color_manual(values = c( "supported & bottom-up" = "springgreen4",
-                                 "unsupported & bottom-up" = "gray32",
-                                 "supported & top-down" = "darkorange4",
-                                 "unsupported & top-down" = "gray32"))+
+  scale_color_manual(values = c( "4 predator species from 12 supported bottom-up models" = "springgreen4",
+                                 "4 predator species from 20 unsupported bottom-up models" = "gray32",
+                                 "17 prey species from 2 supported top-down models" = "darkorange4",
+                                 "17 prey species from 30 unsupported top-down models" = "gray32"))+
   scale_shape_manual(values = c("bottom-up" = 15, "top-down" = 18))+
   geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.6)+
   coord_flip() +  # flip coordinates (puts labels on y axis)
@@ -375,10 +386,245 @@ For reference, this is what variable each letter represents on the plot:
 forest_plot
 ```
 
+```{r Try a new variation of the plot}
+
+# make a new simple col for the label 
+es_final$support_pred_prey2 = paste(es_final$support, es_final$direction, sep = "_")
+unique(es_final$support_pred_prey2)
+# make these super short
+es_final$support_pred_prey_letter[es_final$support_pred_prey2 == "unsupported_top-down"] = "4)"
+es_final$support_pred_prey_letter[es_final$support_pred_prey2 == "supported_top-down"] = "3)"
+es_final$support_pred_prey_letter[es_final$support_pred_prey2 == "unsupported_bottom-up"] = "2)"
+es_final$support_pred_prey_letter[es_final$support_pred_prey2 == "supported_bottom-up"] = "1)"
+# and assign a factor level
+es_final$support_pred_prey_letter = factor(es_final$support_pred_prey_letter, 
+                                           levels = c("4)", "3)", "2)", "1)"))
+## re-name variables to be fancy 
+es_final$var_fancy = es_final$var # this captures elevation
+es_final$var_fancy[es_final$var == "FLII"] = "Forest Landscape Integrity Index"
+es_final$var_fancy[es_final$var == "HFP"] = "Human Footprint Index"
+es_final$var_fancy[es_final$var == "Community_detections"] = "Total wildlife capture rate"
+es_final$var_fancy[es_final$var == "SIV"] = "Species Interaction Value"
+
+# finally, assign facet wrap to variable for clear order
+es_final$var_fancy = factor(es_final$var_fancy, levels = c("Elevation","Forest Landscape Integrity Index","Human Footprint Index", "Total wildlife capture rate","Species Interaction Value"))
+
+## and try a facet wrap 
+facet_var = 
+ggplot(es_final, aes(x = support_pred_prey_letter, y = estimate, ymin=lower, ymax=upper))+
+  geom_pointrange(aes(color = support_pred_prey2, shape = direction), size = 2, lwd = 2, position= position_dodge(width=.7))+
+  scale_color_manual(values = c( "supported_bottom-up" = "springgreen4",
+                                 "unsupported_bottom-up" = "gray32",
+                                 "supported_top-down" = "darkorange4",
+                                 "unsupported_top-down" = "gray32"))+
+  scale_shape_manual(values = c("bottom-up" = 15, "top-down" = 18))+
+  geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.6)+
+  coord_flip() +  # flip coordinates (puts labels on y axis)
+  labs(y = "Weighted effect size", x = NULL, color= NULL, shape = NULL)+ 
+  theme_bw()+
+  facet_wrap(~var_fancy) +
+  theme(axis.text.x = element_text(size = 22), # change these to 28 if going with model size 
+        axis.text.y = element_text(size = 22),
+        axis.title.x = element_text(size = 22),
+        axis.text = element_text(color = "black"),
+        legend.title = element_text(size = 22, family = "Helvetica"),
+        legend.text = element_text(size = 22, family = "Helvetica"),
+        text = element_text(family = "Helvetica"),
+        legend.position = "none")
+### ehhhh, dont really like this one... 
+## but looks much better facetted per variable! 
+
+## see what it looks like only including three observed spatial vars
+es_subset = es_final[es_final$var %in% c("Elevation","FLII","HFP"), ]
+unique(es_subset$var_letter) # good! 
+
+## check the plot
+ggplot(es_subset, aes(x = var_letter, y = estimate, ymin=lower, ymax=upper))+
+  geom_pointrange(aes(color = support_pred_prey, shape = direction), size = 2, lwd = 2, position= position_dodge(width=.7))+
+    scale_color_manual(values = c( "supported & bottom-up" = "springgreen4",
+                                 "unsupported & bottom-up" = "gray32",
+                                 "supported & top-down" = "darkorange4",
+                                 "unsupported & top-down" = "gray32"))+
+  scale_shape_manual(values = c("bottom-up" = 15, "top-down" = 18))+
+  geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.6)+
+  coord_flip() +  # flip coordinates (puts labels on y axis)
+  labs(y = "Weighted effect size", x = NULL)+ 
+  theme_bw()+
+  # facet_wrap(~support_pred_prey2) +
+  theme(axis.text.x = element_text(size = 22), # change these to 28 if going with model size 
+        axis.text.y = element_text(size = 22),
+        axis.title.x = element_text(size = 22),
+        axis.text = element_text(color = "black"),
+        legend.title = element_text(size = 22, family = "Helvetica"),
+        legend.text = element_text(size = 22, family = "Helvetica"),
+        text = element_text(family = "Helvetica"))
+## again, dont love it, not as informative. 
+
+
+```
+
+I have also re-organized the exact same data from the previous forest plot, but used the facet_wrap to make one plot per variable included. The empty space in the bottom right section would be a good place to add the custom label. The color pattern follows the same pattern as the previous plot. The letter **A)** refers to `r unique(es_final$support_pred_prey[es_final$support_pred_prey_letter == "A)"])`, **B)** refers to `r unique(es_final$support_pred_prey[es_final$support_pred_prey_letter == "B)"])`, **C)** refers to `r unique(es_final$support_pred_prey[es_final$support_pred_prey_letter == "C)"])`, and **D)** refers to `r unique(es_final$support_pred_prey[es_final$support_pred_prey_letter == "D)"])`. 
+
+```{r Visualize the facet_wrap forest plot, include=TRUE, echo=FALSE, fig.width= 12, fig.height=10}
+facet_var
+```
+
+```{r Try a new regression}
+## examine what happens if we overwrite support vs unsupport and just go pred/prey?
+# but when we do this, we must remove poor fitting models
+## Also, this is similar to what we submitted in our first submission to Science (in supplement) 
+
+### first grab the relevant subset of data 
+dat = coeff[coeff$preference == "preferred"  &    ## only preferred models 
+              grepl("SUB", coeff$species) &       ## only interested in effect in subordinate species 
+              coeff$support != "Unsupported_3" &  ## only interested in models that converged
+              coeff$var %in% c(vars, "Species_Interaction"), ]
+
+## Create a new column to denote if the subordinate species is a predator or prey 
+dat$pred_prey = "prey" # assume prey 
+dat$pred_prey[dat$sub_sp %in% c("Panthera_pardus","Panthera_tigris",
+                                "Cuon_alpinus", "Neofelis_genus")] = "predator"
+
+### Will run regressions where the effect size is the response variable
+## and the different covariates are the factorial predictors. 
+# looped through each subset of data based on pred_prey
+
+## loop through so we dont have to code them all out 
+pred_prey = unique(dat$pred_prey)
+# store results here
+res = list()
+# loopin' 
+for(i in 1:length(pred_prey)){
+ 
+  # select a pred or prey
+  p = pred_prey[i]
+    
+    ## make the mod w/ the RE 
+  m = lmerTest::lmer(mean ~ var-1 + (1 | sub_sp), weights = 1/sd, #REML = FALSE, 
+                     data = dat[dat$pred_prey == p, ])
+  
+  ## extract values
+  m1 = as.data.frame(summary(m)$coefficients)
+  
+  ## clean up the df
+  m1$var = rownames(m1)
+  m1$var = gsub("var", "", m1$var)
+  names(m1) = c("estimate", "SE", "df", "t value", "p value", "var")
+  rownames(m1) = NULL
+  
+  ## let us know if the model converged or not.
+  if(is.null(m@optinfo$conv$lme4$messages)){
+    m1$warning = "none"
+  }else{
+    m1$warning = m@optinfo$conv$lme4$messages
+  }
+
+  ## explicitly note which model this was
+  m1$pred_prey = p
+
+  ## and save it 
+  res[[i]] = m1
+  
+} # end per pred prey 
+rm(i,p,m,m1,weights, pred_prey)
+
+## check results 
+es_new = do.call(rbind, res)
+str(es_new)
+tail(es_new)
+summary(es_new)
+unique(es_new$support_pred_prey[es_new$warning != "none"]) # When we remove REML in lmerTest, there are no more warnings! 
+
+# inspect
+summary(es_new$estimate) # narrow range is good! 
+summary(es_new$SE) # even smaller, great. 
+
+## update var to say SIV!
+vars[grepl("Species", vars)] = "SIV"
+# and make sure we match in ES! 
+es_new$var[grepl("Species", es_new$var)] = "SIV"
+
+# rename p value
+names(es_new)[grepl("p value", names(es_new))] = "p_value"
+
+
+```
+
+```{r Try a simplified new forest plot}
+## make an upper and lower CI
+es_new$upper = es_new$estimate + es_new$SE
+es_new$lower = es_new$estimate - es_new$SE
+
+## rename vars so they are just letters ordered for the graph
+es_new$var_letter[es_new$var == "HFP"] = "A)"
+es_new$var_letter[es_new$var == "FLII"] = "B)"
+es_new$var_letter[es_new$var == "Elevation"] = "C)"
+es_new$var_letter[es_new$var == "Community_detections"] = "D)"
+es_new$var_letter[es_new$var == "SIV"] = "E)"
+
+## set the factor order, putting SIV at the bottom
+es_new$var_letter = factor(es_new$var_letter, levels = c("E)","D)","C)","B)","A)"))
+
+## set the factor order of points on the graph 
+es_new$pred_prey = factor(es_new$pred_prey, levels = c("prey", "predator"))
+
+## check the plot
+simple_forest = 
+ggplot(es_new, aes(x = var_letter, y = estimate, ymin=lower, ymax=upper))+
+  geom_pointrange(aes(color = pred_prey), size = 2, lwd = 2, position= position_dodge(width=.7))+
+    scale_color_manual(values = c( "prey" = "springgreen4",
+                                 "predator" = "darkorange4"))+
+  # scale_shape_manual(values = c("bottom-up" = 15, "top-down" = 18))+
+  geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.6)+
+  coord_flip() +  # flip coordinates (puts labels on y axis)
+  labs(y = "Weighted effect size", x = NULL)+ 
+  theme_bw()+
+  # facet_wrap(~support_pred_prey2) +
+  theme(axis.text.x = element_text(size = 22), # change these to 28 if going with model size 
+        axis.text.y = element_text(size = 22),
+        axis.title.x = element_text(size = 22),
+        axis.text = element_text(color = "black"),
+        legend.title = element_text(size = 22, family = "Helvetica"),
+        legend.text = element_text(size = 22, family = "Helvetica"),
+        text = element_text(family = "Helvetica"))
+
+```
+
+Below is a simplified version of the forest plot, where supported and unsupported models have been combined to examine predator and prey groupings independently. To ensure the results are not skewed by poor models, **`r length(unique(coeff$Species_Pair[coeff$support == "Unsupported_3"]))` models with a poor goodness of fit or SIV parameters that did not converge (i.e., unsupported_3) have been removed** from this analysis. 
+
+Here are the numerical **results for predators**:
+
+* The variable **`r unique(es_new$var)[1]`** had an effect size of `r round(es_new$estimate[es_new$var == unique(es_new$var)[1] & es_new$pred_prey == "predator"], 3)` and a standard error of `r round(es_new$SE[es_new$var == unique(es_new$var)[1] & es_new$pred_prey == "predator"], 3)` and a p-value of `r round(es_new$p_value[es_new$var == unique(es_new$var)[1] & es_new$pred_prey == "predator"], 3)`
+
+* The variable **`r unique(es_new$var)[2]`** had an effect size of `r round(es_new$estimate[es_new$var == unique(es_new$var)[2] & es_new$pred_prey == "predator"], 3)` and a standard error of `r round(es_new$SE[es_new$var == unique(es_new$var)[2] & es_new$pred_prey == "predator"], 3)` and a p-value of `r round(es_new$p_value[es_new$var == unique(es_new$var)[2] & es_new$pred_prey == "predator"], 3)`
+
+* The variable **`r unique(es_new$var)[3]`** had an effect size of `r round(es_new$estimate[es_new$var == unique(es_new$var)[3] & es_new$pred_prey == "predator"], 3)` and a standard error of `r round(es_new$SE[es_new$var == unique(es_new$var)[3] & es_new$pred_prey == "predator"], 3)` and a p-value of `r round(es_new$p_value[es_new$var == unique(es_new$var)[3] & es_new$pred_prey == "predator"], 3)`
+
+* The variable **`r unique(es_new$var)[4]`** had an effect size of `r round(es_new$estimate[es_new$var == unique(es_new$var)[4] & es_new$pred_prey == "predator"], 3)` and a standard error of `r round(es_new$SE[es_new$var == unique(es_new$var)[4] & es_new$pred_prey == "predator"], 3)` and a p-value of `r round(es_new$p_value[es_new$var == unique(es_new$var)[4] & es_new$pred_prey == "predator"], 3)`
+
+* The variable **`r unique(es_new$var)[5]`** had an effect size of `r round(es_new$estimate[es_new$var == unique(es_new$var)[5] & es_new$pred_prey == "predator"], 3)` and a standard error of `r round(es_new$SE[es_new$var == unique(es_new$var)[5] & es_new$pred_prey == "predator"], 3)` and a p-value of `r round(es_new$p_value[es_new$var == unique(es_new$var)[5] & es_new$pred_prey == "predator"], 3)`
+
+Here are the numerical **results for prey**:
+
+* The variable **`r unique(es_new$var)[1]`** had an effect size of `r round(es_new$estimate[es_new$var == unique(es_new$var)[1] & es_new$pred_prey == "prey"], 3)` and a standard error of `r round(es_new$SE[es_new$var == unique(es_new$var)[1] & es_new$pred_prey == "prey"], 3)` and a p-value of `r round(es_new$p_value[es_new$var == unique(es_new$var)[1] & es_new$pred_prey == "prey"], 3)`
+
+* The variable **`r unique(es_new$var)[2]`** had an effect size of `r round(es_new$estimate[es_new$var == unique(es_new$var)[2] & es_new$pred_prey == "prey"], 3)` and a standard error of `r round(es_new$SE[es_new$var == unique(es_new$var)[2] & es_new$pred_prey == "prey"], 3)` and a p-value of `r round(es_new$p_value[es_new$var == unique(es_new$var)[2] & es_new$pred_prey == "prey"], 3)`
+
+* The variable **`r unique(es_new$var)[3]`** had an effect size of `r round(es_new$estimate[es_new$var == unique(es_new$var)[3] & es_new$pred_prey == "prey"], 3)` and a standard error of `r round(es_new$SE[es_new$var == unique(es_new$var)[3] & es_new$pred_prey == "prey"], 3)` and a p-value of `r round(es_new$p_value[es_new$var == unique(es_new$var)[3] & es_new$pred_prey == "prey"], 3)`
+
+* The variable **`r unique(es_new$var)[4]`** had an effect size of `r round(es_new$estimate[es_new$var == unique(es_new$var)[4] & es_new$pred_prey == "prey"], 3)` and a standard error of `r round(es_new$SE[es_new$var == unique(es_new$var)[4] & es_new$pred_prey == "prey"], 3)` and a p-value of `r round(es_new$p_value[es_new$var == unique(es_new$var)[4] & es_new$pred_prey == "prey"], 3)`
+
+* The variable **`r unique(es_new$var)[5]`** had an effect size of `r round(es_new$estimate[es_new$var == unique(es_new$var)[5] & es_new$pred_prey == "prey"], 3)` and a standard error of `r round(es_new$SE[es_new$var == unique(es_new$var)[5] & es_new$pred_prey == "prey"], 3)` and a p-value of `r round(es_new$p_value[es_new$var == unique(es_new$var)[5] & es_new$pred_prey == "prey"], 3)`
+
+
+```{r Visualize the simple forest plot, include=TRUE, echo=FALSE, fig.width= 12, fig.height=10}
+simple_forest
+```
+
 ## Save everything! 
 Its going here in dropbox: Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/figures/step5_output_forest_plot/
 
-```{r Save the plot!}
+```{r Save the plots!}
 # specify the working directory
 wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/figures/step5_output_forest_plot/"
 # Grab the date
@@ -388,7 +634,7 @@ year<-str_sub(Sys.Date(),-10,-7)
 date = paste(year,month,day, sep = "")
 rm(year,month,day)
 # make a path 
-path = paste(wd, "meta-regression_forest_plot_", date, ".png", sep = "")
+path = paste(wd, "meta-regression_forest_plot_OG_", date, ".png", sep = "")
 # save! 
 ggsave(path, forest_plot, width = 13, height = 9, units = "in")
 
@@ -396,6 +642,17 @@ ggsave(path, forest_plot, width = 13, height = 9, units = "in")
 path = paste(wd, "STEAL_THIS_LABEL_", date, ".png", sep = "")
 #save!
 ggsave(path, label, width = 13, height = 9, units = "in")
+
+# And now the new facet_wrap plot
+path = paste(wd, "meta-regression_forest_plot_facet_wrap_", date, ".png", sep = "")
+# save! 
+ggsave(path, facet_var, width = 15, height = 9, units = "in")
+
+## and even the silly simple plot
+path = paste(wd, "meta-regression_forest_plot_simple_", date, ".png", sep = "")
+# save! 
+ggsave(path, simple_forest, width = 13, height = 9, units = "in")
+
 
 ```
 

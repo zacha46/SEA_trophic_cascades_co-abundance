@@ -352,7 +352,7 @@ display: none;
 <h1 class="title toc-ignore">Step 2_generate co-abundance pairwise data
 bundles</h1>
 <h4 class="author">Zachary Amir</h4>
-<h4 class="date">2024-12-10 13:01:21</h4>
+<h4 class="date">2025-01-24 13:34:10</h4>
 
 </div>
 
@@ -389,7 +389,7 @@ are just better than other sampling units for a many different factors
 (including better cameras and deployment sites), which should manifest
 as more detections of more species at that sampling unit.</p>
 <p>After successfully generating the bundled data, we have a total of
-262 pairwise interactions composed of both top-down and bottom-up
+258 pairwise interactions composed of both top-down and bottom-up
 models.</p>
 </div>
 <div id="reorganize-list-for-efficent-analysis" class="section level2">
@@ -401,8 +401,8 @@ reorganize the list into 100, 250, or 500 GB lists. This process will be
 achieved by inspecting the OE (output or error) files extracted from the
 HPC when each job runs.</p>
 <p>After splitting and organizing the data bundles, we have a total of
-<strong>66 preferred co-abundance models</strong> and a total of
-<strong>196 co-abundance models across the larger
+<strong>64 preferred co-abundance models</strong> and a total of
+<strong>194 co-abundance models across the larger
 community</strong>.</p>
 </div>
 <div id="save-the-final-list-of-bundled-data" class="section level2">
@@ -448,9 +448,10 @@ realities, forces the researcher to imagine an alternative reality where
 the assumed causal forces are reversed or eliminated, such as testing if
 prey abundance increases in a world with no large carnivore
 extirpation.</p>
-<p>I will be running several counter-factual tests from the <strong>66
-preferred predator-prey models</strong> to examine the causal forces
-driving observed relationships. The tests include:</p>
+<p>I will be running several counter-factual tests from the <strong>64
+preferred predator-prey models</strong>, and the 31 supported results
+from the broader community, to examine the causal forces driving
+observed relationships. The tests include:</p>
 <ol style="list-style-type: decimal">
 <li><p><em>What if</em> prey abundance increases would not have happened
 if not for large carnivore extirpation (top-down test), AND <em>what
@@ -459,7 +460,7 @@ prey abundance extirpations (bottom-up test). This isolates the effect
 of species extirpations rather than declines, and is tested by only
 selecting landscapes where species co-occur w/ sufficient detections. By
 thinning the data to only include sites where species co-occur,
-<strong>we have a total of 66 co-abundance models for this
+<strong>we have a total of 95 co-abundance models for this
 counter-factual test</strong>.</p></li>
 <li><p>Would we observe trophic release in prey or bottom-up bolstering
 in predators when controlling for landscape variation that may be
@@ -469,7 +470,7 @@ the Thai Eastern Forest Complex</strong>. By thinning the data to only
 include the Thai Eastern Forest Complex and maintaining regular rules
 for making pair-wise co-abundance models (<em>i.e.,</em> &gt;100
 detections of both species from one landscape), <strong>we have a total
-of 40 co-abundance models for this counter-factual
+of 55 co-abundance models for this counter-factual
 test</strong>.</p></li>
 <li><p>Would we observe trophic release in prey and bottom-up bolstering
 in predators when controlling for observed elevation? This is tested by
@@ -480,7 +481,7 @@ standard deviation of wiggle room. For Forest Landscape Integrity Index,
 this ranges from values between 6.18 to 8.91. For Human Footprint Index,
 this ranges from values between 2.66 to 12.7. <strong>For the
 counter-factual co-abundance models examining the effect of
-Avg_altitude_5km, we have 66 models.</strong></p></li>
+Avg_altitude_5km, we have 94 models.</strong></p></li>
 <li><p>Would we observe trophic release in prey and bottom-up bolstering
 in predators when controlling for observed Forest Landscape Integrity
 Index? This is tested by creating pairwise co-abundance bundles where we
@@ -490,7 +491,7 @@ allowing for 1/2 standard deviation of wiggle room. For elevation, this
 ranges from values between 303.2 to 618.12. For Human Footprint Index,
 this ranges from values between 2.66 to 12.7. <strong>For the
 counter-factual co-abundance models examining the effect of
-Avg_FLLI_5km, we have 66 models.</strong></p></li>
+Avg_FLLI_5km, we have 95 models.</strong></p></li>
 <li><p>Would we observe trophic release in prey and bottom-up bolstering
 in predators when controlling for observed Human Footprint Index? This
 is tested by creating pairwise co-abundance bundles where we let this
@@ -500,7 +501,7 @@ for 1/2 standard deviation of wiggle room. For elevation, this ranges
 from values between 303.2 to 618.12. For Forest Landscape Integrity
 Index, this ranges from values between 6.18 to 8.91. <strong>For the
 counter-factual co-abundance models examining the effect of
-Avg_human_footprint_5km, we have 66 models.</strong></p></li>
+Avg_human_footprint_5km, we have 94 models.</strong></p></li>
 <li><p>What would happen if we <strong>did not include our new variable
 community_detections</strong>? Therefore, we assume that we are not
 accounting for unmeasured variation as well as we might be able to, so
@@ -514,9 +515,7 @@ bottom-up in the original test should now produce either no change and
 remain significant if a legitimate interaction, or become unsupported if
 unmeasured variation was driving a spurious positive correlation. For
 clarity and organization sake’ this new test will be called
-counterfactual 7. <strong>In this co-abundance model test with the new
-community detections, we are running a total of 66 co-abundance
-models</strong>.</p>
+counterfactual 7.</p>
 </div>
 
 

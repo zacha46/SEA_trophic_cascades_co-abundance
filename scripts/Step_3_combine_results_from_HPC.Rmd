@@ -804,7 +804,6 @@ unique(dho$cell_id[dho$cell_id %in% bp$cell_id]) # both were oonly detected at o
 
 ```
 
-
 ## Counter-factual results 
 
 ```{r Import counter-factual test coefficents}
@@ -830,7 +829,7 @@ files = files[grepl("/counterfactual_coefficent_dataframes/", files)]
 # thin files to the relevant combos in all_combos
 
 # Extract species pairs from the filenames in `files`
-sp_pair = sub(".*coefficents_(SUB-.*DOM-.*)_\\d{8}\\.csv$", "\\1", files)
+sp_pair = unique(sub(".*coefficents_(SUB-.*DOM-.*)_\\d{8}\\.csv$", "\\1", files))
 
 # Thin the `files` vector by keeping only those that match `all_combos`
 files = files[sp_pair %in% all_combos]
@@ -868,6 +867,12 @@ for(i in 1:length(files_list)){
     
     ## grab the matching species pair here
     match = all_combos[sapply(all_combos, grepl, x = fl[l])]
+    
+    ## but I removed one mod, so bypass this option if there are no matches. 
+    if(length(match) == 0){
+      next
+    } # end no match condition
+    
     ## verify there are no repeats here
     res_search = fl[grepl(match, fl)]
     ## if there are indeed repeats 
@@ -883,9 +888,9 @@ for(i in 1:length(files_list)){
       f = fl[l]
     }# end multiple file conditon
     
-    ## verify this is a preferred model
-    if(any(sapply(preform$Species_Pair[preform$preference == "preferred"], 
-                  function(x) grepl(x, f)))){
+    # ## verify this is a preferred model
+    # if(any(sapply(preform$Species_Pair[preform$preference == "preferred"], 
+    #               function(x) grepl(x, f)))){
       
           # import it
     dat = read.csv(paste(wd, "results/", f, sep = ""))
@@ -896,10 +901,10 @@ for(i in 1:length(files_list)){
     # save it
     temp[[l]] = dat
       
-    }else{
-      ## but if not, skip it! 
-      next
-    } # end preferred prey prefrerence 
+    # }else{
+    #   ## but if not, skip it! 
+    #   next
+    # } # end preferred prey prefrerence 
       
   } # end for loop with l
   }else{
@@ -1016,6 +1021,12 @@ for(i in 1:length(files_list)){
     
     ## grab the matching species pair here
     match = all_combos[sapply(all_combos, grepl, x = fl[l])]
+    
+    ## but I removed one mod, so bypass this option if there are no matches. 
+    if(length(match) == 0){
+      next
+    } # end no match condition
+    
     ## verify there are no repeats here
     res_search = fl[grepl(match, fl)]
     ## if there are indeed repeats 
@@ -1031,9 +1042,9 @@ for(i in 1:length(files_list)){
       f = fl[l]
     }# end multiple file conditon
     
-    ## verify this is a preferred model
-    if(any(sapply(preform$Species_Pair[preform$preference == "preferred"], 
-                  function(x) grepl(x, f)))){
+    # ## verify this is a preferred model
+    # if(any(sapply(preform$Species_Pair[preform$preference == "preferred"], 
+    #               function(x) grepl(x, f)))){
       
       # import it
       dat = read.csv(paste(wd, "results/", f, sep = ""))
@@ -1044,10 +1055,10 @@ for(i in 1:length(files_list)){
       # save it
       temp[[l]] = dat
       
-    }else{
-      ## but if not, skip it! 
-      next
-    } # end preferred prey prefrerence 
+    # }else{
+    #   ## but if not, skip it! 
+    #   next
+    # } # end preferred prey prefrerence 
     
      } # end loop per l
   }else{
@@ -1134,6 +1145,17 @@ cf_mods = cf_mods[!is.na(cf_mods$Species_Pair), ]
 ```
 
 ```{r Determine support for counter-factual tests}
+# 
+# ## Also, make sure ppc_values_cf has community results from the original test
+add = ppc_values[ppc_values$Species_Pair %in% preform$Species_Pair[preform$preference == "community" & preform$support == "Supported"], ]
+# check what cols are missing
+setdiff(names(ppc_values_cf), names(add))
+# just add the test! 
+add$counter_factual_test = "original_test"
+# do the rbind
+ppc_values_cf = rbind(ppc_values_cf, add)
+rm(add)
+
 
 #### Bayes p-value
 ## Add a column denoting if the BPV values converged based on a wide range to account for many mods 
@@ -1206,6 +1228,13 @@ ppc_values_cf$support[ppc_values_cf$BPV_valid == "Yes" &
 ## inspect
 table(ppc_values_cf$support);anyNA(ppc_values_cf$support) # must be F for NA! 
 
+## Since I have now added a handful of community models to the mix, make sure to assign preferred vs community mods. 
+pref_mods = preform$Species_Pair[preform$preference == "preferred"]
+ppc_values_cf$preference[ppc_values_cf$Species_Pair %in% pref_mods] = "preferred"
+ppc_values_cf$preference[! ppc_values_cf$Species_Pair %in% pref_mods] = "community"
+table(ppc_values_cf$preference)
+
+
 ```
 
 ```{r Determine agreement across counter-factual tests}
@@ -1242,40 +1271,59 @@ rm(i, dat)
 anyNA(ppc_values_cf$testing_agreement) # MUST BE F
 table(ppc_values_cf$testing_agreement) # There is agreement! 
 
-# Grab all mods that agree across methods, per direction
-a = sort(unique(ppc_values_cf$Species_Pair[ppc_values_cf$testing_agreement == "agreement" & ppc_values_cf$direction == "top-down"]))
-b = sort(unique(ppc_values_cf$Species_Pair[ppc_values_cf$testing_agreement == "agreement" & ppc_values_cf$direction == "bottom-up"]))
+# Grab all mods that agree across methods, per direction, per preference
+a = sort(unique(ppc_values_cf$Species_Pair[ppc_values_cf$testing_agreement == "agreement" & ppc_values_cf$direction == "top-down" & ppc_values_cf$preference == "preferred"]))
+b = sort(unique(ppc_values_cf$Species_Pair[ppc_values_cf$testing_agreement == "agreement" & ppc_values_cf$direction == "bottom-up" & ppc_values_cf$preference == "preferred"]))
 ## organize w/ top-down first, followed by bottom-up
-agree = c(a,b)
+agree_pref = c(a,b)
+
+## do the same for the community
+a = sort(unique(ppc_values_cf$Species_Pair[ppc_values_cf$testing_agreement == "agreement" & ppc_values_cf$direction == "top-down" & ppc_values_cf$preference == "community"]))
+b = sort(unique(ppc_values_cf$Species_Pair[ppc_values_cf$testing_agreement == "agreement" & ppc_values_cf$direction == "bottom-up" & ppc_values_cf$preference == "community"]))
+## organize w/ top-down first, followed by bottom-up
+agree_comm = c(a,b)
 rm(a,b)
 
 
-# ### Finally, add simple support for easier plotting
-# ppc_values_cf$support_simple[grepl("Unsuppor", ppc_values_cf$support)] = "unsupported"
-# ppc_values_cf$support_simple[ppc_values_cf$support == "Supported" & ppc_values_cf$direction == "top-down"] = "top-down"
-# ppc_values_cf$support_simple[ppc_values_cf$support == "Supported" & ppc_values_cf$direction == "bottom-up"] = "bottom-up"
-# table(ppc_values_cf$support_simple)
 
 
 ```
 
-We implemented a total of `r length(unique(ppc_values_cf$counter_factual_test)) - 1` counter-factual tests that will be compared with the original tests for a total of `r length(unique(ppc_values_cf$counter_factual_test))` tests. The key inference here will be determining which species pairs agree across all possible tests, noting that not every species pairing was able to be tested in every way. Currently, all tests have been run with the **MCMC setting `r paste(setting)`**. 
+We implemented a total of `r length(unique(ppc_values_cf$counter_factual_test)) - 1` counter-factual tests that will be compared with the original tests for a total of `r length(unique(ppc_values_cf$counter_factual_test))` tests. The key inference here will be determining which species pairs agree across all possible tests, noting that not every species pairing was able to be tested in every way. Currently, all tests have been run with the **MCMC setting `r paste(setting)`**. It is also important to note that while we ran counter factual tests for all `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$preference == "preferred"]))` preferred models, **we also ran counter factual tests for an additional `r length(unique(preform$Species_Pair[preform$preference == "community" & preform$support == "Supported"]))` community models that gereated supported results in the original test**. 
 
-* The first test, **`r paste(unique(ppc_values_cf$counter_factual_test)[1])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[1]]))` models. Based on the same criteria above for the original tests, there were `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[1]])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[1]])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[1]])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[1]])` supported models**.
+* The first test, **`r paste(unique(ppc_values_cf$counter_factual_test)[1])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[1] & ppc_values_cf$preference == "preferred"]))` preferred models and `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[1] & ppc_values_cf$preference == "community"]))` community models. 
+Based on the same criteria above for the original tests, the preferred models contained `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[1] & ppc_values_cf$preference == "preferred"])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[1] & ppc_values_cf$preference == "preferred"])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[1] & ppc_values_cf$preference == "preferred"])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[1] & ppc_values_cf$preference == "preferred"])` supported preferred models**.
+Based on the same criteria above for the original tests, the community models contained `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[1] & ppc_values_cf$preference == "community"])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[1] & ppc_values_cf$preference == "community"])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[1] & ppc_values_cf$preference == "community"])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[1] & ppc_values_cf$preference == "community"])` supported community models**.
 
-* The second test, **`r paste(unique(ppc_values_cf$counter_factual_test)[2])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2]]))` models. Based on the same criteria above for the original tests, there were `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2]])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2]])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2]])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2]])` supported models**. There are **`r length(setdiff(cf_mods$Species_Pair[cf_mods$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2]], ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2]]))` remaining models** that still need to be completed. 
+* The second test, **`r paste(unique(ppc_values_cf$counter_factual_test)[2])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2] & ppc_values_cf$preference == "preferred"]))` preferred models and `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2] & ppc_values_cf$preference == "community"]))` community models. 
+Based on the same criteria above for the original tests, the preferred models contained `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2] & ppc_values_cf$preference == "preferred"])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2] & ppc_values_cf$preference == "preferred"])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2] & ppc_values_cf$preference == "preferred"])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2] & ppc_values_cf$preference == "preferred"])` supported preferred models**.
+Based on the same criteria above for the original tests, the community models contained `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2] & ppc_values_cf$preference == "community"])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2] & ppc_values_cf$preference == "community"])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2] & ppc_values_cf$preference == "community"])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[2] & ppc_values_cf$preference == "community"])` supported community models**.
 
-* The third test, **`r paste(unique(ppc_values_cf$counter_factual_test)[3])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3]]))` models. Based on the same criteria above for the original tests, there were `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3]])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3]])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3]])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3]])` supported models**. There are **`r length(setdiff(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3]], cf_mods$Species_Pair[cf_mods$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3]]))` remaining models** that still need to be completed. 
+* The third test, **`r paste(unique(ppc_values_cf$counter_factual_test)[3])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3] & ppc_values_cf$preference == "preferred"]))` preferred models and `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3] & ppc_values_cf$preference == "community"]))` community models. 
+Based on the same criteria above for the original tests, the preferred models contained `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3] & ppc_values_cf$preference == "preferred"])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3] & ppc_values_cf$preference == "preferred"])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3] & ppc_values_cf$preference == "preferred"])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3] & ppc_values_cf$preference == "preferred"])` supported preferred models**.
+Based on the same criteria above for the original tests, the community models contained `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3] & ppc_values_cf$preference == "community"])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3] & ppc_values_cf$preference == "community"])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3] & ppc_values_cf$preference == "community"])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[3] & ppc_values_cf$preference == "community"])` supported community models**.
 
-* The fourth test, **`r paste(unique(ppc_values_cf$counter_factual_test)[4])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4]]))` models. Based on the same criteria above for the original tests, there were `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4]])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4]])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4]])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4]])` supported models**. There are **`r length(setdiff(cf_mods$Species_Pair[cf_mods$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4]], ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4]]))` remaining models** that still need to be completed. 
+* The fourth test, **`r paste(unique(ppc_values_cf$counter_factual_test)[4])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4] & ppc_values_cf$preference == "preferred"]))` preferred models and `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4] & ppc_values_cf$preference == "community"]))` community models. 
+Based on the same criteria above for the original tests, the preferred models contained `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4] & ppc_values_cf$preference == "preferred"])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4] & ppc_values_cf$preference == "preferred"])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4] & ppc_values_cf$preference == "preferred"])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4] & ppc_values_cf$preference == "preferred"])` supported preferred models**.
+Based on the same criteria above for the original tests, the community models contained `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4] & ppc_values_cf$preference == "community"])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4] & ppc_values_cf$preference == "community"])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4] & ppc_values_cf$preference == "community"])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[4] & ppc_values_cf$preference == "community"])` supported community models**.
 
-* The fifth test, **`r paste(unique(ppc_values_cf$counter_factual_test)[5])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5]]))` models. Based on the same criteria above for the original tests, there were `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5]])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5]])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5]])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5]])` supported models**. There are **`r length(setdiff(cf_mods$Species_Pair[cf_mods$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5]], ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5]]))` remaining models** that still need to be completed. 
+* The fifth test, **`r paste(unique(ppc_values_cf$counter_factual_test)[5])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5] & ppc_values_cf$preference == "preferred"]))` preferred models and `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5] & ppc_values_cf$preference == "community"]))` community models. 
+Based on the same criteria above for the original tests, the preferred models contained `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5] & ppc_values_cf$preference == "preferred"])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5] & ppc_values_cf$preference == "preferred"])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5] & ppc_values_cf$preference == "preferred"])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5] & ppc_values_cf$preference == "preferred"])` supported preferred models**.
+Based on the same criteria above for the original tests, the community models contained `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5] & ppc_values_cf$preference == "community"])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5] & ppc_values_cf$preference == "community"])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5] & ppc_values_cf$preference == "community"])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[5] & ppc_values_cf$preference == "community"])` supported community models**.
 
-* The sixth test, **`r paste(unique(ppc_values_cf$counter_factual_test)[6])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6]]))` models. Based on the same criteria above for the original tests, there were `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6]])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6]])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6]])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6]])` supported models**. There are **`r length(setdiff(cf_mods$Species_Pair[cf_mods$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6]], ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6]]))` remaining models** that still need to be completed. 
+* The sixth test, **`r paste(unique(ppc_values_cf$counter_factual_test)[6])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6] & ppc_values_cf$preference == "preferred"]))` preferred models and `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6] & ppc_values_cf$preference == "community"]))` community models. 
+Based on the same criteria above for the original tests, the preferred models contained `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6] & ppc_values_cf$preference == "preferred"])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6] & ppc_values_cf$preference == "preferred"])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6] & ppc_values_cf$preference == "preferred"])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6] & ppc_values_cf$preference == "preferred"])` supported preferred models**.
+Based on the same criteria above for the original tests, the community models contained `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6] & ppc_values_cf$preference == "community"])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6] & ppc_values_cf$preference == "community"])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6] & ppc_values_cf$preference == "community"])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[6] & ppc_values_cf$preference == "community"])` supported community models**.
 
-* The seventh test, **`r paste(unique(ppc_values_cf$counter_factual_test)[7])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[7]]))` models. Based on the same criteria above for the original tests, there were `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[7]])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[7]])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[7]])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[7]])` supported models**. There are **`r length(setdiff(cf_mods$Species_Pair[cf_mods$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[7]], ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[7]]))` remaining models** that still need to be completed. 
+* The seventh test, **`r paste(unique(ppc_values_cf$counter_factual_test)[7])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[7] & ppc_values_cf$preference == "preferred"]))` preferred models and `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[7] & ppc_values_cf$preference == "community"]))` community models. 
+Based on the same criteria above for the original tests, the preferred models contained `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[7] & ppc_values_cf$preference == "preferred"])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[7] & ppc_values_cf$preference == "preferred"])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[7] & ppc_values_cf$preference == "preferred"])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[7] & ppc_values_cf$preference == "preferred"])` supported preferred models**.
+Based on the same criteria above for the original tests, the community models contained `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_3" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[7] & ppc_values_cf$preference == "community"])` unsupported_3 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_2" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[7] & ppc_values_cf$preference == "community"])` unsupported_2 models, `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Unsupported_1" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[7] & ppc_values_cf$preference == "community"])` unsupported_1 models, **and `r length(ppc_values_cf$Species_Pair[ppc_values_cf$support == "Supported" & ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[7] & ppc_values_cf$preference == "community"])` supported community models**.
 
-Finally, we assessed which species pairs agreed across the different tests and this resulted in `r length(preform$Species_Pair[preform$Species_Pair %in% agree & preform$direction == "top-down"])` top-down model and `r length(preform$Species_Pair[preform$Species_Pair %in% agree & preform$direction == "bottom-up"])` bottom-up models. **The `r length(agree)` specific species pairs that agree across different counter-factual tests are: `r paste(agree, collapse = ", ")`**.
+Finally, we assessed which species pairs agreed across the different tests and this resulted in `r length(preform$Species_Pair[preform$Species_Pair %in% agree_pref & preform$direction == "top-down"])` preferred top-down model and `r length(preform$Species_Pair[preform$Species_Pair %in% agree_pref & preform$direction == "bottom-up"])` community bottom-up models. This also resulted in `r length(preform$Species_Pair[preform$Species_Pair %in% agree_comm & preform$direction == "top-down"])` community top-down model and `r length(preform$Species_Pair[preform$Species_Pair %in% agree_comm & preform$direction == "bottom-up"])` community bottom-up models. 
+
+* **The `r length(agree_pref)` preferred species pairs that agree across different counter-factual tests are: `r paste(agree_pref, collapse = ", ")`**. 
+
+* **The `r length(agree_comm)` community species pairs that agree across different counter-factual tests are: `r paste(agree_comm, collapse = ", ")`**.
 
 ```{r Inspect new counterfactual test 7, eval=FALSE}
 ### OLD CODE, leaving for now, but will not assess when knitting. 
@@ -1379,7 +1427,7 @@ summary(check2_new$Interaction_Estimate[check2_new$support == "Supported"])
 
 ## Save results
 
-Save these results to dropbox, in this file directory: Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step3_output_combined_results 
+Save these results to dropbox, in this file directory: Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step3_output_combined_results. It is important to note that Tables S3 (full model performance and SIVs) and S4 (supported counterfactual results) are generated from this script, so make sure to include these in the manuscript! 
 
 ```{r Save relevant dataframes}
 
@@ -1415,6 +1463,14 @@ path = paste(wd, "/compiled_co-abundance_preformance_and_support_dataframe_", le
 # and save it! 
 write.csv(preform, path)
 
+### Make a reduced column version of perform for the supplementary materials 
+preform_sub = select(preform, Species_Pair,	dom_species,	sub_species,	SUB_guild,	DOM_guild,	guild_pair,	Interaction_Estimate,	SD,	lower,	upper,	Rhat,	Significance,	BPV.dom,	BPV.sub,	Chat.dom,	Chat.sub,	BPV_valid,	OD_valid,	parameter_valid,	direction,	preference,	support)
+
+# make a path 
+path = paste(wd, "/model_performance_and_SIVs_", nrow(preform_sub), "_completed_models_", date, ".csv", sep = "")
+# save it
+write.csv(preform_sub, path, row.names = F)
+
 ### CF coefficients
 
 # make a saving path 
@@ -1429,24 +1485,33 @@ path = paste(wd, "/compiled_co-abundance_counter-factual_tests_PPC_preformance_a
 # and save it! 
 write.csv(ppc_values_cf, path)
 
-### 11 key mods for all CF tests
+### key mods for all CF tests
 
 # make a saving path 
-path = paste(wd, "/co-abundance_counter-factual_tests_PPC_preformance_and_support_for_", length(agree), "_supported_models_across_all_tests_", date, ".csv", sep = "")
+path = paste(wd, "/co-abundance_counter-factual_tests_PPC_preformance_and_support_for_", length(agree_pref), "_supported_preferred_models_and_", length(agree_comm), "_supported_community_models_across_all_tests_", date, ".csv", sep = "")
+# re-order cols and organize, since this will be a supplemental table 
+key_mods = ppc_values_cf[ppc_values_cf$Species_Pair %in% c(agree_pref, agree_comm), ]
+key_mods = select(key_mods, Species_Pair, dom_species, sub_species, direction, preference,  counter_factual_test, Interaction_Estimate, SD, lower, upper, Significance, Rhat, parameter_valid, BPV.dom, BPV.sub, BPV_valid, Chat.dom, Chat.sub, OD_valid, support)
+
+# Ensure "preferred" is sorted before "community" and top-down is sorted before bottom-up, then by species_pair
+key_mods_sorted <- key_mods %>%
+  arrange(factor(preference, levels = c("preferred", "community")), 
+          factor(direction, levels = c("top-down", "bottom-up")),
+          Species_Pair)
 # and save it! 
-write.csv(ppc_values_cf[ppc_values_cf$Species_Pair %in% agree, ], path)
+write.csv(key_mods_sorted, path, row.names = F)
 
 
 ### Also, good idea to save the 11 species we will need good prediciton graphs of later
-save = bdata[names(bdata)%in% agree]
+save = bdata[names(bdata)%in% c(agree_pref, agree_comm)]
 # make a path
-path = paste(wd, "/Bundled_data_for_co-abundance_predictions_", length(agree), "_key_species_pairs_",date, ".RDS", sep = "")
+path = paste(wd, "/Bundled_data_for_co-abundance_predictions_", length(c(agree_pref, agree_comm)), "_key_species_pairs_",date, ".RDS", sep = "")
 # and save it! 
 saveRDS(save, path)
 
 ```
 
-```{r Also save supported community results for further counter-factual testing}
+```{r Also save supported community results for further counter-factual testing, eval=FALSE}
 # We assume that the community models are least-likely to be interacting IRL
 # but we can test this by putting them against the counter factual tests
 

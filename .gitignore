@@ -54,6 +54,9 @@ figures/*~
 results/*~
 explore/*~
 
+# dont want to sync OLD html outputs, only the best! 
+html_outputs/OLD/*~
+
 # Some data files still seem to want to try to sync up, so be more specific
 data/import_UMF_from_HPC/*~
 data/send_to_HPC/*~

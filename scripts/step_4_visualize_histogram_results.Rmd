@@ -991,7 +991,7 @@ files = files[grepl("counter-factual", files)]
 # and only after PPC values
 files = files[grepl("PPC", files)]
 # but not just the 11 supported models!
-files = files[!grepl("11_supported_models", files)]
+files = files[!grepl("supported_preferred_models", files)]
 
 ## import the data! 
 ppc_values_cf = read.csv(paste(wd, files, sep = ""))
@@ -1008,17 +1008,23 @@ summary(ppc_values_cf$Interaction_Estimate) # there are a few biggies!
 # inspect further
 anyNA(ppc_values_cf$Interaction_Estimate) # must be F! 
 
+## thin results to only be preferred models 
+ppc_values_cf = ppc_values_cf[ppc_values_cf$preference == "preferred", ]
+
 ## condense support levels for easier plotting
 ppc_values_cf$support_simple[grepl("Unsuppor", ppc_values_cf$support)] = "unsupported"
 ppc_values_cf$support_simple[ppc_values_cf$support == "Supported" & ppc_values_cf$direction == "top-down"] = "top-down"
 ppc_values_cf$support_simple[ppc_values_cf$support == "Supported" & ppc_values_cf$direction == "bottom-up"] = "bottom-up"
 table(ppc_values_cf$support_simple)
 
+## and remove two tests that are no longer needed for visualization
+ppc_values_cf = ppc_values_cf[! ppc_values_cf$counter_factual_test %in% c("remove_community_detections"), ]
+
 ## Set the facet wrap factor levels for nice ordering
 ppc_values_cf$counter_factual_test = factor(ppc_values_cf$counter_factual_test,
                                             levels = c("original_test", "site_matching_ThaiEFC",
                                                        #"isolate_abundance_declines",
-                                                       "remove_community_detections",
+                                                       # "remove_community_detections",
                                                        "isolate_extirpations",
                                                        "isolate_altitude", "isolate_FLII",
                                                        "isolate_HFP"))
@@ -1033,7 +1039,7 @@ sum_table_cf$percent[sum_table_cf$counter_factual_test == "site_matching_ThaiEFC
 
 # sum_table_cf$percent[sum_table_cf$counter_factual_test == "isolate_abundance_declines"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "isolate_abundance_declines"] / length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "isolate_abundance_declines"]) * 100, 1)
 
-sum_table_cf$percent[sum_table_cf$counter_factual_test == "remove_community_detections"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "remove_community_detections"] / length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "remove_community_detections"]) * 100, 1)
+# sum_table_cf$percent[sum_table_cf$counter_factual_test == "remove_community_detections"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "remove_community_detections"] / length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "remove_community_detections"]) * 100, 1)
 
 sum_table_cf$percent[sum_table_cf$counter_factual_test == "isolate_extirpations"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "isolate_extirpations"] / length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "isolate_extirpations"]) * 100, 1)
 
@@ -1060,6 +1066,7 @@ counterfactual_siv_hist =
   theme(axis.text.x = element_text(size = 16),
         axis.text.y = element_text(size = 16),
         axis.text = element_text(color = "black"),
+        strip.text = element_text(size = 12),
         text = element_text(family = "Helvetica"))
 ## save it in the list! 
 all_plots[[length(all_plots)+1]] = counterfactual_siv_hist
@@ -1090,7 +1097,7 @@ all_plots$counterfactual_siv_hist
 
 The plots, and data used to inform this document, will be saved in dropbox at this directory: Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/figures/step4_output_figs/ & figures/step4_output_summarized_results_for_figs
 
-```{r Save everything!, }
+```{r Save everything! }
 
 ## specify the new working directory to save figures
 wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/figures/step4_output_figs/"

@@ -27,11 +27,11 @@ To learn more about this camera trap data standardization pipeline, please conta
 ### **Analysis Reports**
 The following reports summarize data transformations, statistics, and results at each step of analysis. Click on a report to view the full details:
 
-1. [Step 1: Data Preparation](https://zacha46.github.io/SEA_trophic_cascades_co-abundance/docs/Step_1_Prepare_data_to_make_count_history_matrix.html)
-2. [Step 2: Generate Co-Abundance Bundles](https://zacha46.github.io/SEA_trophic_cascades_co-abundance/docs/Step_2_Generate_co-abundance_pairwise_data_bundles.html)
-3. [Step 3: Combine Results From HPC](https://zacha46.github.io/SEA_trophic_cascades_co-abundance/docs/Step_3_combine_results_from_HPC.html)
-4. [Step 4: Visualize Histograms](https://zacha46.github.io/SEA_trophic_cascades_co-abundance/docs/Step_4_visualize_histogram_results.html)
-5. [Step 5: Meta-Regression](https://zacha46.github.io/SEA_trophic_cascades_co-abundance/docs/Step_5_meta-regression_and_visualization.html)
+1. [Step 1: Data Preparation](https://zacha46.github.io/SEA_trophic_cascades_co-abundance/Step_1_Prepare_data_to_make_count_history_matrix.html)
+2. [Step 2: Generate Co-Abundance Bundles](https://zacha46.github.io/SEA_trophic_cascades_co-abundance/Step_2_Generate_co-abundance_pairwise_data_bundles.html)
+3. [Step 3: Combine Results From HPC](https://zacha46.github.io/SEA_trophic_cascades_co-abundance/Step_3_combine_results_from_HPC.html)
+4. [Step 4: Visualize Histograms](https://zacha46.github.io/SEA_trophic_cascades_co-abundance/Step_4_visualize_histogram_results.html)
+5. [Step 5: Meta-Regression](https://zacha46.github.io/SEA_trophic_cascades_co-abundance/Step_5_meta-regression_and_visualization.html)
 
 - Alternatively, you can download the reports as `.html` files found in the `docs/` directory.  
 

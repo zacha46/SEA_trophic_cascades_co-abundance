@@ -1,0 +1,18 @@
+/scratch/user/uqzamir
+[1] "Begining to run co-abundance model for: SUB-Cuon_alpinus~DOM-Tapirus_indicus with MCMC settings: HALF_LONG_3Chain and is starting at 2023-11-17 17:17:24"
+
+Processing function input....... 
+
+Done. 
+ 
+Beginning parallel processing using 3 cores. Console output will be suppressed.
+
+Parallel processing completed.
+
+Calculating statistics....... 
+
+Done. 
+[1] "Finished running co-abundance model for: SUB-Cuon_alpinus~DOM-Tapirus_indicus at 2023-11-22 08:45:00. This model took 111.4601 hours to be completed. Beginning dataframe extractions now."
+[1] "Finished generating coefficent dataframe for: SUB-Cuon_alpinus~DOM-Tapirus_indicus at 2023-11-22 08:45:00. Beginning PPC dataframes now."
+[1] "Finished generating PPC plotdata dataframe for: SUB-Cuon_alpinus~DOM-Tapirus_indicus at 2023-11-22 08:45:01. Beginning PPC values dataframe now."
+[1] "Finished generating PPC plotdata dataframe for: SUB-Cuon_alpinus~DOM-Tapirus_indicus at 2023-11-22 08:45:01. All dataframe extractions are now complete."

@@ -1,0 +1,18 @@
+/scratch/user/uqzamir
+[1] "Begining to run co-abundance model for: SUB-Argusianus_argus~DOM-Panthera_pardus with MCMC settings: HALF_LONG_3Chain and is starting at 2023-10-20 16:02:19"
+
+Processing function input....... 
+
+Done. 
+ 
+Beginning parallel processing using 3 cores. Console output will be suppressed.
+
+Parallel processing completed.
+
+Calculating statistics....... 
+
+Done. 
+[1] "Finished running co-abundance model for: SUB-Argusianus_argus~DOM-Panthera_pardus at 2023-10-23 22:45:38. This model took 78.722 hours to be completed. Beginning dataframe extractions now."
+[1] "Finished generating coefficent dataframe for: SUB-Argusianus_argus~DOM-Panthera_pardus at 2023-10-23 22:45:38. Beginning PPC dataframes now."
+[1] "Finished generating PPC plotdata dataframe for: SUB-Argusianus_argus~DOM-Panthera_pardus at 2023-10-23 22:45:42. Beginning PPC values dataframe now."
+[1] "Finished generating PPC plotdata dataframe for: SUB-Argusianus_argus~DOM-Panthera_pardus at 2023-10-23 22:45:42. All dataframe extractions are now complete."

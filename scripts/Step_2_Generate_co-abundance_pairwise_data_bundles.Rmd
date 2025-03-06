@@ -25,7 +25,8 @@ Import count matrices for each species that was generated on the High Performanc
 ```{r import matricies generated on HPC via loop}
 
 ## specify where the data lives in dropbox 
-wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/UMFs/"
+# wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/UMFs/"
+wd = paste(getwd(),"/data_UMFs/", sep = "")
 
 ## Store imported data here
 umfs = list()
@@ -63,7 +64,9 @@ sort(names(umfs)) # looks good
 ### Also import data from step1 for comparison
 
 ## specify where the data lives
-wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step1_output/"
+# wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step1_output/"
+wd = paste(getwd(),"/data_GitHub/", sep = "")
+
 
 ## list all files that should be imported 
 files = list.files(wd)
@@ -90,11 +93,11 @@ rm(files, wd)
 
 ## Generate co-abundance data bundles 
 
-Now that the data is loaded in our environment, I will use a very large for-loop to generate co-abundance data bundles that will be ready to run on the HPC. Bundles will be generated for species pairs, where one species is explicitly assigned as a dominant species (predictor/independent variable), while the other is the subordinate species (response/dependent variable). 
+Now that the data is loaded in our environment, I will use a large for-loop to generate co-abundance data bundles that will be ready to run on the HPC. Despite the loop being very long and complex, it is mainly reorganizing and sorting data rather than running calculations. Therefore, it completes in < 5 min. 
 
-Bundles will be generated based on spatial associations. Each species pair needs to be present in at least one landscape and have at least 100 independent detection from a shared landscape. Despite the loop being very long and complex, it is mainly reorganizing and sorting data rather than running calculations. Therefore, it completes in < 5 min. 
+Bundles will be generated for species pairs, where one species is explicitly assigned as a dominant species (predictor/independent variable), while the other is the subordinate species (response/dependent variable). Bundles are generated based on spatial associations. **Each species pair must have ≥ 100 independent detections of both dominant and subordinate species from at least one shared landscape where both species were detected to ensure co-abundance model outputs are biologically meaningful. Furthermore, species pairs were excluded where the independent detection ratio between the two species exceeded 50:1 in a shared landscape to ensure our results are not skewed by sparse data in either dominant or subordinate species and that both species meaningfully contributed to the results.**
 
-We are now including a new variable called **community_detections** across all models, which is simply a site-level variable containing the sum number of all independent detections of all species detected at that sampling unit except for the two-species whose co-abundance is considered in the model. The variable has been log-transformed to better normalize outliers and, like all other variables, it has been standardized with a mean of 0 and standard deviation of 1. The idea behind this variable is that some sampling unit are just better than other sampling units for a many different factors (including better cameras and deployment sites), which should manifest as more detections of more species at that sampling unit.
+We have included a new variable called **community_detections** across all models, which is simply a site-level variable containing the sum number of independent detections of all `r length(unique(caps$Species))` species detected at that sampling unit except for the two-species whose co-abundance is considered in the model. The variable has been log-transformed to better normalize outliers and, like all other variables, it has been standardized with a mean of 0 and standard deviation of 1. This variable has been included to captures unmeasured variation in sampling locations, where  some sampling units are  better than others for a many different factors. This should manifest as more detections of more species at that sampling unit, resulting in a positive effect. 
 
 ```{r Ultra-Loop to generate data bundles based on guild-pairs, echo=FALSE }
 
@@ -562,7 +565,6 @@ rm(i,l,sp_dom,sp_sub, sp_dom_dat, sp_sub_dat, temp, z.dom, z.sub, rm_SU, dom_tg,
 ## flatten the list of lists into a single list
 bdata_list = unlist(bdata_list, recursive = FALSE)
 length(bdata_list) # 258 combos @ 5 km after implementing detection_ratio
-## This removed dholes <-> bearded pigs & dholes <-> argus pheasent
 names(bdata_list) # looks good! 
 
 ```
@@ -577,7 +579,8 @@ After some preliminary testing, I realized that all co-abundance models don't ne
 ```{r Use OE files to determine GB per list, echo=FALSE}
 
 ## specify where the OE files live 
-wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/results/LONG_OE_files_Oct_2023/"
+# wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/results/LONG_OE_files_Oct_2023/"
+wd = paste(getwd(), "/data_GitHub/LONG_OE_files_Oct_2023/", sep = "")
 
 
 ## First, examine how many OE files we have 
@@ -711,7 +714,7 @@ jobs_final$preference[jobs_final$sub_sp == "Neofelis_genus" &
                         jobs_final$dom_sp %in% 
                         traits$scientificNameStd[traits$CL_pref == "Yes"]] = "preferred"
 ## how many do we have?
-table(jobs_final$preference) # 66 preferred, 196 not. 66 + 194 = 262, all accounted for! 
+table(jobs_final$preference) # 64 preferred, 194 not. 64 + 194 = 258, all accounted for! 
 
 ## clean up
 rm(inspect, jobs, sp)
@@ -736,7 +739,8 @@ date = paste(year,month,day, sep = "")
 rm(day,month,year)
 
 ## specify where the data will be saved
-wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step2_output_CoA_bundles/"
+# wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step2_output_CoA_bundles/"
+wd = paste(getwd(), "/data_CoA_bundles/", sep = "")
 
 
 # Save data per preference AND GB requirements!
@@ -785,6 +789,7 @@ saveRDS(save, (paste(wd, "/Bundled_data_for_Bayes_co-abundance_mods_community_50
 # save = bdata_list[names(bdata_list) %in% sp_pairs]
 # saveRDS(save, here::here(paste("data_GitHub_CoA_bundles/Bundled_data_for_Bayes_co-abundance_mods_preferred_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
 
+# clean up 
 rm(sp_pairs, jobs_final, date)
 
 
@@ -792,11 +797,15 @@ rm(sp_pairs, jobs_final, date)
 
 ## Generate counterfactual data bundles 
 
-After submitting the manuscript and analysis to Science and receiving reviews from 3 expert reviewers, 2 reviewers revealed an appetite for causation that was lacking from the current analysis. Moreover, when presenting my findings at conferences and to colleagues, similar sentiments were voiced. __Structural Equation Models (SEM)__ was a logical starting place, but the limitations of the data (*i.e.,* lacking key variables like hunting pressure or resource availability) and inability to include a count history matrix as the response variable (and therefore propagate uncertainty) left me unsatisfied. 
+After submitting the manuscript and receiving reviews from 3 expert reviewers, 2 reviewers revealed an appetite for causation that was lacking from the current analysis. Moreover, when presenting my findings at conferences and to colleagues, similar sentiments were voiced. Structural Equation Models (SEM) was a logical starting place, but the limitations of the data (*i.e.,* lacking key variables like hunting pressure or resource availability) and inability to include a count history matrix as the response variable (and therefore propagate uncertainty) left me unsatisfied. 
 
-Instead, the new goal here is to examine counter-factual realities to understand if prey abundance increases would not have happened if not for large carnivore extirpation (top-down test), __AND__ if predator abundance increases would not have happened if not for prey abundance increases (bottom-up test). Additionally, we can run more variations of the same co-abundance model by sub-setting the co-occuring species data into locations that match in their measured covariates to help control for unmeasured variables. All counter-factual testing will occurr only with the 33 preferred prey species-pairs. 
+Instead, the new goal here is to examine **counterfactual realities** to understand if prey abundance increases would not have happened if not for large carnivore extirpation (top-down test), __AND__ if predator abundance increases would not have happened if not for prey abundance increases (bottom-up test). Additionally, we can run more variations of the same co-abundance model by sub-setting the cooccuring species data into locations that match in their measured covariates to help control for unmeasured variables. 
 
-This approach builds towards the top of the **'ladder of causation'** proposed by __Judea Pearl's Book of Why__. The first rung, associations from data, can be represented simply with a non-directional association between two species (*e.g.,* correlation between RAI of two species). The second run, conceptual causal diagrams, can be used to visualize the researchers hypotheses, assumptions, and biases where one variable directionally affects another variable, such as predators suppress prey or prey bolster predators. Finally, the third rung, testing counter-factual realities, forces the researcher to imagine an alternative reality where the assumed causal forces are reversed or eliminated, such as testing if prey abundance increases in a world with no large carnivore extirpation. 
+This approach builds towards the top of the **'ladder of causation'** proposed by [Judea Pearl's Book of Why](https://en.wikipedia.org/wiki/The_Book_of_Why). 
+
+- The **first rung**, simple associations from data, can be represented simply with a non-directional association between two species (*e.g.,* correlation between RAI of two species). 
+- The **second rung**, conceptual causal diagrams, can be used to visualize the researchers hypotheses, assumptions, and biases where one variable directionally affects another variable, such as predators suppress prey or prey bolster predators. 
+- The **third rung**, testing counter-factual realities, forces the researcher to imagine an alternative reality where the assumed causal forces are reversed or eliminated, such as testing if prey abundance increases in a world with no large carnivore extirpation. 
 
 ```{r Import vector of community species pairs}
 ## We will also be running counter-factual tests for the supported community models
@@ -808,8 +817,6 @@ This approach builds towards the top of the **'ladder of causation'** proposed b
 # change wd first
 wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step3_output_combined_results/"
 comm_sp = readRDS(paste(wd, "supported_community_31_species_pairs_vector_for_counterfactual_testing_20250124.csv", sep = ""))
-
-
 ```
 
 I will be running several counter-factual tests from the **64 preferred predator-prey models**, and the `r length(comm_sp)` supported results from the broader community, to examine the causal forces driving observed relationships. The tests include:
@@ -1261,7 +1268,8 @@ date = paste(year,month,day, sep = "")
 rm(day,month,year)
  
 ## specify where the data lives
-wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step2_output_CoA_bundles/counterfactual_testing/"
+# wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step2_output_CoA_bundles/counterfactual_testing/"
+wd = paste(getwd(), "/data_CoA_bundles/counterfactual_testing/", sep = "")
 
 # Save data 
 saveRDS(counterf2_bdata_list, paste(wd, "/Bundled_data_for_Bayes_co-abundance_mods_counterfactual1_isolate_extirpation_", length(counterf2_bdata_list), "_species_pairs_", scale, "_", date, ".RDS", sep = ""))
@@ -2508,6 +2516,14 @@ saveRDS(counterf_vars_bdata_list$Avg_human_footprint_5km, paste(wd, "/Bundled_da
 
 ## NO LONGER RUNNING THIS SECTION BECAUSE THIS IS NOW THE MAIN MOD! 
 
+## Adding Markdown text here for safe keeping, tho it wont be implemented. 
+
+
+# 6) What would happen if we **did not include our new variable community_detections**? Therefore, we assume that we are not accounting for unmeasured variation as well as we might be able to, so we would expect to see more spurious correations. 
+# 
+#  If this variable legitimetly tracks unmeasured variation, we predict that large positive unsupported top-down in the original test will now produce either small and unsupported if not an important interaction or a negative interaction if real. Conversely, small positive supported bottom-up in the original test should now produce either no change and remain significant if a legitimate interaction, or become unsupported if unmeasured variation was driving a spurious positive correlation. For clarity and organization sake' this new test will be called counterfactual 7. 
+
+
 ## This test is examining the 66 preferred prey co-abundance models, 
 ## but adding a new variable that is the sum of independent detections per site (except for the two species being examined in the model)
 
@@ -2960,13 +2976,9 @@ length(counterf7_bdata_list) #all 66 combos, good!
 
 ```
 
-6) What would happen if we **did not include our new variable community_detections**? Therefore, we assume that we are not accounting for unmeasured variation as well as we might be able to, so we would expect to see more spurious correations. 
+```{r Save bundled data for counterfactual test 6, eval=FALSE}
 
- If this variable legitimetly tracks unmeasured variation, we predict that large positive unsupported top-down in the original test will now produce either small and unsupported if not an important interaction or a negative interaction if real. Conversely, small positive supported bottom-up in the original test should now produce either no change and remain significant if a legitimate interaction, or become unsupported if unmeasured variation was driving a spurious positive correlation. For clarity and organization sake' this new test will be called counterfactual 7. 
-
-```{r Save bundled data for counterfactual test 6}
-
-### MOVING the last line of the previous paragrah hashed out here for a clean knit
+### MOVING the last line of the previous paragraph hashed out here for a clean knit
 # **In this co-abundance model test with the new community detections, we are running a total of `r length(counterf7_bdata_list)` co-abundance models**. **In this co-abundance model test with the new community detections, we are running a total of `r length(counterf7_bdata_list)` co-abundance models**. 
 
 ## grab today's date 

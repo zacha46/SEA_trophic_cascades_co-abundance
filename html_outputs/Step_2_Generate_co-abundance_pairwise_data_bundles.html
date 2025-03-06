@@ -352,7 +352,7 @@ display: none;
 <h1 class="title toc-ignore">Step 2_generate co-abundance pairwise data
 bundles</h1>
 <h4 class="author">Zachary Amir</h4>
-<h4 class="date">2025-01-24 13:34:10</h4>
+<h4 class="date">2025-03-06 12:27:49</h4>
 
 </div>
 
@@ -366,28 +366,35 @@ the readRDS function to import them into R.</p>
 </div>
 <div id="generate-co-abundance-data-bundles" class="section level2">
 <h2>Generate co-abundance data bundles</h2>
-<p>Now that the data is loaded in our environment, I will use a very
-large for-loop to generate co-abundance data bundles that will be ready
-to run on the HPC. Bundles will be generated for species pairs, where
-one species is explicitly assigned as a dominant species
-(predictor/independent variable), while the other is the subordinate
-species (response/dependent variable).</p>
-<p>Bundles will be generated based on spatial associations. Each species
-pair needs to be present in at least one landscape and have at least 100
-independent detection from a shared landscape. Despite the loop being
-very long and complex, it is mainly reorganizing and sorting data rather
-than running calculations. Therefore, it completes in &lt; 5 min.</p>
-<p>We are now including a new variable called
+<p>Now that the data is loaded in our environment, I will use a large
+for-loop to generate co-abundance data bundles that will be ready to run
+on the HPC. Despite the loop being very long and complex, it is mainly
+reorganizing and sorting data rather than running calculations.
+Therefore, it completes in &lt; 5 min.</p>
+<p>Bundles will be generated for species pairs, where one species is
+explicitly assigned as a dominant species (predictor/independent
+variable), while the other is the subordinate species
+(response/dependent variable). Bundles are generated based on spatial
+associations. <strong>Each species pair must have ≥ 100 independent
+detections of both dominant and subordinate species from at least one
+shared landscape where both species were detected to ensure co-abundance
+model outputs are biologically meaningful. Furthermore, species pairs
+were excluded where the independent detection ratio between the two
+species exceeded 50:1 in a shared landscape to ensure our results are
+not skewed by sparse data in either dominant or subordinate species and
+that both species meaningfully contributed to the results.</strong></p>
+<p>We have included a new variable called
 <strong>community_detections</strong> across all models, which is simply
-a site-level variable containing the sum number of all independent
-detections of all species detected at that sampling unit except for the
-two-species whose co-abundance is considered in the model. The variable
-has been log-transformed to better normalize outliers and, like all
-other variables, it has been standardized with a mean of 0 and standard
-deviation of 1. The idea behind this variable is that some sampling unit
-are just better than other sampling units for a many different factors
-(including better cameras and deployment sites), which should manifest
-as more detections of more species at that sampling unit.</p>
+a site-level variable containing the sum number of independent
+detections of all 44 species detected at that sampling unit except for
+the two-species whose co-abundance is considered in the model. The
+variable has been log-transformed to better normalize outliers and, like
+all other variables, it has been standardized with a mean of 0 and
+standard deviation of 1. This variable has been included to captures
+unmeasured variation in sampling locations, where some sampling units
+are better than others for a many different factors. This should
+manifest as more detections of more species at that sampling unit,
+resulting in a positive effect.</p>
 <p>After successfully generating the bundled data, we have a total of
 258 pairwise interactions composed of both top-down and bottom-up
 models.</p>
@@ -416,38 +423,40 @@ splitting it up.</p>
 </div>
 <div id="generate-counterfactual-data-bundles" class="section level2">
 <h2>Generate counterfactual data bundles</h2>
-<p>After submitting the manuscript and analysis to Science and receiving
-reviews from 3 expert reviewers, 2 reviewers revealed an appetite for
-causation that was lacking from the current analysis. Moreover, when
-presenting my findings at conferences and to colleagues, similar
-sentiments were voiced. <strong>Structural Equation Models
-(SEM)</strong> was a logical starting place, but the limitations of the
-data (<em>i.e.,</em> lacking key variables like hunting pressure or
-resource availability) and inability to include a count history matrix
-as the response variable (and therefore propagate uncertainty) left me
-unsatisfied.</p>
-<p>Instead, the new goal here is to examine counter-factual realities to
-understand if prey abundance increases would not have happened if not
-for large carnivore extirpation (top-down test), <strong>AND</strong> if
-predator abundance increases would not have happened if not for prey
-abundance increases (bottom-up test). Additionally, we can run more
-variations of the same co-abundance model by sub-setting the co-occuring
-species data into locations that match in their measured covariates to
-help control for unmeasured variables. All counter-factual testing will
-occurr only with the 33 preferred prey species-pairs.</p>
+<p>After submitting the manuscript and receiving reviews from 3 expert
+reviewers, 2 reviewers revealed an appetite for causation that was
+lacking from the current analysis. Moreover, when presenting my findings
+at conferences and to colleagues, similar sentiments were voiced.
+Structural Equation Models (SEM) was a logical starting place, but the
+limitations of the data (<em>i.e.,</em> lacking key variables like
+hunting pressure or resource availability) and inability to include a
+count history matrix as the response variable (and therefore propagate
+uncertainty) left me unsatisfied.</p>
+<p>Instead, the new goal here is to examine <strong>counterfactual
+realities</strong> to understand if prey abundance increases would not
+have happened if not for large carnivore extirpation (top-down test),
+<strong>AND</strong> if predator abundance increases would not have
+happened if not for prey abundance increases (bottom-up test).
+Additionally, we can run more variations of the same co-abundance model
+by sub-setting the cooccuring species data into locations that match in
+their measured covariates to help control for unmeasured variables.</p>
 <p>This approach builds towards the top of the <strong>‘ladder of
-causation’</strong> proposed by <strong>Judea Pearl’s Book of
-Why</strong>. The first rung, associations from data, can be represented
-simply with a non-directional association between two species
-(<em>e.g.,</em> correlation between RAI of two species). The second run,
-conceptual causal diagrams, can be used to visualize the researchers
-hypotheses, assumptions, and biases where one variable directionally
-affects another variable, such as predators suppress prey or prey
-bolster predators. Finally, the third rung, testing counter-factual
-realities, forces the researcher to imagine an alternative reality where
-the assumed causal forces are reversed or eliminated, such as testing if
+causation’</strong> proposed by <a href="https://en.wikipedia.org/wiki/The_Book_of_Why">Judea Pearl’s Book
+of Why</a>.</p>
+<ul>
+<li>The <strong>first rung</strong>, simple associations from data, can
+be represented simply with a non-directional association between two
+species (<em>e.g.,</em> correlation between RAI of two species).</li>
+<li>The <strong>second rung</strong>, conceptual causal diagrams, can be
+used to visualize the researchers hypotheses, assumptions, and biases
+where one variable directionally affects another variable, such as
+predators suppress prey or prey bolster predators.</li>
+<li>The <strong>third rung</strong>, testing counter-factual realities,
+forces the researcher to imagine an alternative reality where the
+assumed causal forces are reversed or eliminated, such as testing if
 prey abundance increases in a world with no large carnivore
-extirpation.</p>
+extirpation.</li>
+</ul>
 <p>I will be running several counter-factual tests from the <strong>64
 preferred predator-prey models</strong>, and the 31 supported results
 from the broader community, to examine the causal forces driving
@@ -502,20 +511,7 @@ from values between 303.2 to 618.12. For Forest Landscape Integrity
 Index, this ranges from values between 6.18 to 8.91. <strong>For the
 counter-factual co-abundance models examining the effect of
 Avg_human_footprint_5km, we have 94 models.</strong></p></li>
-<li><p>What would happen if we <strong>did not include our new variable
-community_detections</strong>? Therefore, we assume that we are not
-accounting for unmeasured variation as well as we might be able to, so
-we would expect to see more spurious correations.</p></li>
 </ol>
-<p>If this variable legitimetly tracks unmeasured variation, we predict
-that large positive unsupported top-down in the original test will now
-produce either small and unsupported if not an important interaction or
-a negative interaction if real. Conversely, small positive supported
-bottom-up in the original test should now produce either no change and
-remain significant if a legitimate interaction, or become unsupported if
-unmeasured variation was driving a spurious positive correlation. For
-clarity and organization sake’ this new test will be called
-counterfactual 7.</p>
 </div>
 
 

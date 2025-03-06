@@ -1,0 +1,18 @@
+/scratch/user/uqzamir
+[1] "Begining to run co-abundance model for: SUB-Neofelis_genus~DOM-Arctictis_binturong with MCMC settings: HALF_LONG_3Chain and is starting at 2023-10-13 22:14:40"
+
+Processing function input....... 
+
+Done. 
+ 
+Beginning parallel processing using 3 cores. Console output will be suppressed.
+
+Parallel processing completed.
+
+Calculating statistics....... 
+
+Done. 
+[1] "Finished running co-abundance model for: SUB-Neofelis_genus~DOM-Arctictis_binturong at 2023-10-19 19:21:41. This model took 141.1171 hours to be completed. Beginning dataframe extractions now."
+[1] "Finished generating coefficent dataframe for: SUB-Neofelis_genus~DOM-Arctictis_binturong at 2023-10-19 19:21:41. Beginning PPC dataframes now."
+[1] "Finished generating PPC plotdata dataframe for: SUB-Neofelis_genus~DOM-Arctictis_binturong at 2023-10-19 19:21:42. Beginning PPC values dataframe now."
+[1] "Finished generating PPC plotdata dataframe for: SUB-Neofelis_genus~DOM-Arctictis_binturong at 2023-10-19 19:21:42. All dataframe extractions are now complete."

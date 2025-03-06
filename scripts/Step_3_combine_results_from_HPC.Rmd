@@ -28,18 +28,15 @@ As a reminder, the co-abundance models were implemented on this R script: script
 ## this is the data that was used to create data bundles. Will be useful for comparisons later
 
 ## set WD to dropbox where the data lives
-wd = paste("/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/")
+# wd = paste("/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step1_output/")
+wd = paste(getwd(), "/data_GitHub/", sep = "") # update for github
 
 ## Import clean cam trap data here for referencing
 og_resamp_captures = read.csv(paste(wd,
-                          "data/step1_output/clean_captures_to_make_UMFs_5km_scale_20240928.csv", sep = ""))
+                     "clean_captures_to_make_UMFs_5km_scale_20250306.csv", sep = ""))
 
 og_resamp_meta = read.csv(paste(wd,
-                          "data/step1_output/clean_metadata_to_make_UMFs_5km_scale_20240928.csv", sep = ""))
-
-### Maybe we want non-resampled data as well??
-# og_captures = read.csv("/Users/zachary_amir/Dropbox/CT capture histories database/Asian ECL raw CT data/Step4_output_pre-resampling/Clean_independent_captures_20230610.csv")
-# og_meta = read.csv("/Users/zachary_amir/Dropbox/CT capture histories database/Asian ECL raw CT data/Step4_output_pre-resampling/Clean_independent_metadata_20230610.csv")
+                          "clean_metadata_to_make_UMFs_5km_scale_20250306.csv", sep = ""))
 
 #
 ##
@@ -47,7 +44,8 @@ og_resamp_meta = read.csv(paste(wd,
 
 ## first, I will import the bundled data to generate a vector of relevant species pairs 
 # but since I split the bundled data into multiple files, I must import them all. 
-files = list.files(paste(wd,"data/step2_output_CoA_bundles/", sep = ""))
+# files = list.files(paste(wd,"data/step2_output_CoA_bundles/", sep = ""))
+files = list.files(paste(getwd(),"/data_CoA_bundles/", sep = ""))
 files = files[grepl("Bundled", files)]
 files = files[!grepl("MISSING", files)] # avoid reading in repeated data 
 
@@ -56,7 +54,8 @@ res = list()
 for(i in 1:length(files)){
   
   # import
-  b = readRDS(paste(wd, "data/step2_output_CoA_bundles/", files[i], sep = ""))
+  # b = readRDS(paste(wd, "data/step2_output_CoA_bundles/", files[i], sep = ""))
+  b = readRDS(paste(getwd(),"/data_CoA_bundles/", files[i], sep = ""))
   
   # and save
   res[[i]] = b
@@ -90,8 +89,12 @@ all_combos = names(bdata)
 
 ```{r import coefficent dataframes}
 
+## set WD to dropbox where the data lives
+# wd = paste("/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/")
+wd = paste(getwd(), "/results_final/", sep = "") # update for github
+
 # First, list all result files
-files = list.files(paste(wd, "results/", sep = ""), recursive = T)
+files = list.files(wd, recursive = T)
 # We dont want OE files (that informed GB requirements)
 files = files[!grepl("OE", files)]
 files = files[!grepl("counterfactual1|counterfactual2|counterfactual3|counterfactual4|counterfactual5|counterfactual6|counterfactual7", files)]
@@ -150,7 +153,8 @@ for(i in 1:length(files)){
   }# end multiple file conditon
 
   # import 
-  d = read.csv(paste(wd, "results/", file, sep = ""))
+  # d = read.csv(paste(wd, "results/", file, sep = ""))
+  d = read.csv(paste("results_final/", file, sep = "")) # update for github
   
   ## if there are pesky row.names, remove em!
   d$X = NULL
@@ -329,14 +333,15 @@ table(preform$mod_completion)
 # completed = 253 
 # uncompleted = 9
 
-
+## Fully completed by Feb 2025
 
 ```
 
 ```{r Import PPC dataframes}
 
 # First, list all result files
-files = list.files(paste(wd, "results/", sep = ""), recursive = T)
+# files = list.files(paste(wd, "results/", sep = ""), recursive = T)
+files = list.files(wd, recursive = T) # update for github
 # We dont want OE files (that informed GB requirements) or counter-factuals
 files = files[!grepl("OE", files)]
 files = files[!grepl("counterfactual1|counterfactual2|counterfactual3|counterfactual4|counterfactual5|counterfactual6|counterfactual7", files)]
@@ -390,7 +395,9 @@ for(i in 1:length(files)){
   }# end multiple file conditon
   
   ## read the file 
-  d = read.csv(paste(wd, "results/", file, sep = ""))
+  # d = read.csv(paste(wd, "results/", file, sep = ""))
+  d = read.csv(paste("results_final/", file, sep = "")) # update for github
+
   
   ## add the MCMC setting
   d$MCMC_setting = setting
@@ -511,7 +518,9 @@ rm(missing, setting, ppc_res)
 ```{r Import trait data and add to preformance dataframe}
 
 #load guild data
-guilds = read.csv(paste(wd, "data/step1_output/clean_44_species_trait_data_20240928.csv", sep = ""))
+# guilds = read.csv(paste(wd, "data/step1_output/clean_44_species_trait_data_20240928.csv", sep = ""))
+guilds = read.csv("data_GitHub/clean_44_species_trait_data_20250306.csv") # update for github 
+
 str(guilds)
 ## looks good, dietary preferences are ready to go! 
 
@@ -799,9 +808,6 @@ sum(bp$independent_events[grepl("KSNP", bp$cell_id)]) # 959 BP detections
 length(unique(dho$cell_id[grepl("KSNP", dho$cell_id)])) # 4 cams 
 unique(dho$cell_id[dho$cell_id %in% bp$cell_id]) # both were oonly detected at one camera
 
-
-
-
 ```
 
 ## Counter-factual results 
@@ -809,7 +815,8 @@ unique(dho$cell_id[dho$cell_id %in% bp$cell_id]) # both were oonly detected at o
 ```{r Import counter-factual test coefficents}
 
 # First, list all result files
-files = list.files(paste(wd, "results/", sep = ""), recursive = T)
+# files = list.files(paste(wd, "results/", sep = ""), recursive = T)
+files = list.files(wd, recursive = T) # update for github
 # We dont want OE files (that informed GB requirements)
 files = files[!grepl("OE", files)]
 
@@ -893,7 +900,8 @@ for(i in 1:length(files_list)){
     #               function(x) grepl(x, f)))){
       
           # import it
-    dat = read.csv(paste(wd, "results/", f, sep = ""))
+    # dat = read.csv(paste(wd, "results/", f, sep = ""))
+    dat = read.csv(paste("results_final/", f, sep = "")) # update for github
     
     # add the MCMC setting
     dat$MCMC_setting = setting
@@ -966,7 +974,8 @@ rm(coeff_pref, pref_pairs)
 
 ```{r Import counter-factual test PPC values}
 # First, list all result files
-files = list.files(paste(wd, "results/", sep = ""), recursive = T)
+# files = list.files(paste(wd, "results/", sep = ""), recursive = T)
+files = list.files(wd, recursive = T) # update for github
 # We dont want OE files (that informed GB requirements)
 files = files[!grepl("OE", files)]
 
@@ -1047,7 +1056,8 @@ for(i in 1:length(files_list)){
     #               function(x) grepl(x, f)))){
       
       # import it
-      dat = read.csv(paste(wd, "results/", f, sep = ""))
+      # dat = read.csv(paste(wd, "results/", f, sep = ""))
+      dat = read.csv(paste("results_final/", f, sep = "")) # update for github
       
       # add the MCMC setting
       dat$MCMC_setting = setting
@@ -1106,7 +1116,8 @@ rm(ppc_pref)
 
 ```{r Import counter-factual data}
 ## The idea is to track which models are completed vs not
-cf_data_files = list.files(paste(wd, "data/step2_output_CoA_bundles/counterfactual_testing/", sep = ""), recursive = T)
+# cf_data_files = list.files(paste(wd, "data/step2_output_CoA_bundles/counterfactual_testing/", sep = ""), recursive = T)
+cf_data_files = list.files("data_CoA_bundles/counterfactual_testing/") # update for github 
 ## remove old files
 cf_data_files = cf_data_files[! grepl("OLD/", cf_data_files)]
 
@@ -1117,7 +1128,8 @@ for(i in 1:length(cf_data_files)){
   # grab empty df
   df = cf_mods[0,]
   # make a path
-  path = paste(wd, "data/step2_output_CoA_bundles/counterfactual_testing/", cf_data_files[i], sep = "")
+  # path = paste(wd, "data/step2_output_CoA_bundles/counterfactual_testing/", cf_data_files[i], sep = "")
+  path = paste("data_CoA_bundles/counterfactual_testing/", cf_data_files[i], sep = "")
   # import
   dat = readRDS(path)
   # grab the names
@@ -1288,7 +1300,6 @@ rm(a,b)
 
 
 ```
-
 We implemented a total of `r length(unique(ppc_values_cf$counter_factual_test)) - 1` counter-factual tests that will be compared with the original tests for a total of `r length(unique(ppc_values_cf$counter_factual_test))` tests. The key inference here will be determining which species pairs agree across all possible tests, noting that not every species pairing was able to be tested in every way. Currently, all tests have been run with the **MCMC setting `r paste(setting)`**. It is also important to note that while we ran counter factual tests for all `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$preference == "preferred"]))` preferred models, **we also ran counter factual tests for an additional `r length(unique(preform$Species_Pair[preform$preference == "community" & preform$support == "Supported"]))` community models that gereated supported results in the original test**. 
 
 * The first test, **`r paste(unique(ppc_values_cf$counter_factual_test)[1])`**, included a total of `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[1] & ppc_values_cf$preference == "preferred"]))` preferred models and `r length(unique(ppc_values_cf$Species_Pair[ppc_values_cf$counter_factual_test == unique(ppc_values_cf$counter_factual_test)[1] & ppc_values_cf$preference == "community"]))` community models. 
@@ -1427,12 +1438,13 @@ summary(check2_new$Interaction_Estimate[check2_new$support == "Supported"])
 
 ## Save results
 
-Save these results to dropbox, in this file directory: Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step3_output_combined_results. It is important to note that Tables S3 (full model performance and SIVs) and S4 (supported counterfactual results) are generated from this script, so make sure to include these in the manuscript! 
+Save these results to GitHub, in this file directory: **/results_final/step3_output_combined_results**. It is important to note that Tables S3 (full model performance and SIVs) and S4 (supported counterfactual results) are generated from this script, so make sure to include these in the manuscript! 
 
 ```{r Save relevant dataframes}
 
 ## first, set the working directory where we will save these files
-wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step3_output_combined_results"
+# wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step3_output_combined_results"
+wd = paste(getwd(), "/results_final/step3_output_combined_results", sep = "")
 
 ## and grab the date! 
 day<-str_sub(Sys.Date(),-2)

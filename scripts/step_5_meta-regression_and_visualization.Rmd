@@ -430,6 +430,7 @@ ggplot(es_final, aes(x = support_pred_prey_letter, y = estimate, ymin=lower, yma
         legend.title = element_text(size = 22, family = "Helvetica"),
         legend.text = element_text(size = 22, family = "Helvetica"),
         text = element_text(family = "Helvetica"),
+        strip.text = element_text(size = 12),
         legend.position = "none")
 ### ehhhh, dont really like this one... 
 ## but looks much better facetted per variable! 

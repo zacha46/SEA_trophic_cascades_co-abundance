@@ -27,7 +27,8 @@ This RMarkdown file will be used to implement a meta-regression on the coefficie
 ## Remember, this data was collated in step3!
 
 ## Set the working directory where the data lives
-wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step3_output_combined_results/"
+# wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step3_output_combined_results/"
+wd = paste(getwd(), "/results_final/step3_output_combined_results/", sep = "") #update for github
 
 ## list all relevant files
 files = list.files(wd)
@@ -227,7 +228,6 @@ es_final$var[grepl("Species", es_final$var)] = "SIV"
 
 # rename p value
 names(es_final)[grepl("p value", names(es_final))] = "p_value"
-
 
 ```
 
@@ -623,11 +623,13 @@ simple_forest
 ```
 
 ## Save everything! 
-Its going here in dropbox: Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/figures/step5_output_forest_plot/
+Its going here in the GitHub Repository here: `figures/step5_output_forest_plot/`
 
 ```{r Save the plots!}
 # specify the working directory
-wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/figures/step5_output_forest_plot/"
+# wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/figures/step5_output_forest_plot/"
+wd = paste(getwd(), "/figures/step5_output_forest_plot/", sep = "") # update for github
+
 # Grab the date
 day<-str_sub(Sys.Date(),-2)
 month<-str_sub(Sys.Date(),-5,-4)
@@ -635,14 +637,14 @@ year<-str_sub(Sys.Date(),-10,-7)
 date = paste(year,month,day, sep = "")
 rm(year,month,day)
 # make a path 
-path = paste(wd, "meta-regression_forest_plot_OG_", date, ".png", sep = "")
-# save! 
-ggsave(path, forest_plot, width = 13, height = 9, units = "in")
+# path = paste(wd, "meta-regression_forest_plot_OG_", date, ".png", sep = "")
+# # save! 
+# ggsave(path, forest_plot, width = 13, height = 9, units = "in")
 
 ## and dont forget the label! 
-path = paste(wd, "STEAL_THIS_LABEL_", date, ".png", sep = "")
-#save!
-ggsave(path, label, width = 13, height = 9, units = "in")
+# path = paste(wd, "STEAL_THIS_LABEL_", date, ".png", sep = "")
+# #save!
+# ggsave(path, label, width = 13, height = 9, units = "in")
 
 # And now the new facet_wrap plot
 path = paste(wd, "meta-regression_forest_plot_facet_wrap_", date, ".png", sep = "")
@@ -650,9 +652,9 @@ path = paste(wd, "meta-regression_forest_plot_facet_wrap_", date, ".png", sep = 
 ggsave(path, facet_var, width = 15, height = 9, units = "in")
 
 ## and even the silly simple plot
-path = paste(wd, "meta-regression_forest_plot_simple_", date, ".png", sep = "")
-# save! 
-ggsave(path, simple_forest, width = 13, height = 9, units = "in")
+# path = paste(wd, "meta-regression_forest_plot_simple_", date, ".png", sep = "")
+# # save! 
+# ggsave(path, simple_forest, width = 13, height = 9, units = "in")
 
 
 ```

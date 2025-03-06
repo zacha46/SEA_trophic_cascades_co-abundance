@@ -1,0 +1,18 @@
+/scratch/user/uqzamir
+[1] "Begining to run co-abundance model for: SUB-Macaca_nemestrina~DOM-Panthera_tigris with MCMC settings: HALF_LONG_3Chain and is starting at 2023-11-12 20:02:09"
+
+Processing function input....... 
+
+Done. 
+ 
+Beginning parallel processing using 3 cores. Console output will be suppressed.
+
+Parallel processing completed.
+
+Calculating statistics....... 
+
+Done. 
+[1] "Finished running co-abundance model for: SUB-Macaca_nemestrina~DOM-Panthera_tigris at 2023-11-20 08:32:51. This model took 180.5116 hours to be completed. Beginning dataframe extractions now."
+[1] "Finished generating coefficent dataframe for: SUB-Macaca_nemestrina~DOM-Panthera_tigris at 2023-11-20 08:32:51. Beginning PPC dataframes now."
+[1] "Finished generating PPC plotdata dataframe for: SUB-Macaca_nemestrina~DOM-Panthera_tigris at 2023-11-20 08:32:51. Beginning PPC values dataframe now."
+[1] "Finished generating PPC plotdata dataframe for: SUB-Macaca_nemestrina~DOM-Panthera_tigris at 2023-11-20 08:32:51. All dataframe extractions are now complete."

@@ -7,9 +7,9 @@ output: html_document
 
 ## Introduction
 
-This code will prepare camera trap data to create count history matrices and the associated covariates. This is a necessary first step towards preparing the data to implement Zachary Amir's co-abundance models on the High Performance Computers (HPC).
+This code will prepare camera trap data to create count history matrices and the associated covariates. This is a necessary first step towards preparing the data to implement Zachary Amir's co-abundance models on the [High-Performance Computers (HPC)](https://rcc.uq.edu.au/systems/high-performance-computing/bunya).
 
-This code works off the spatially re-sampled captures and covariates that are generated in the 4-step Southeast Asian camera trap data standardization pipeline. To learn more about this Southeast Asian camera trap data standardization pipeline, please contact Zachary Amir (z.amir@uq.edu.au) or Matthew Luskin (m.luskin@uq.edu.au) to request access to the following relevant [GitHub repository](https://github.com/EcologicalCascadesLab/AsianCaptureHistories).
+This code works off the spatially re-sampled captures and covariates that are generated in the 4-step Southeast Asian camera trap data standardization pipeline. To learn more about this Southeast Asian camera trap data standardization pipeline, please contact [Zachary Amir](mailto:z.amir@uq.edu.au) or [Matthew Luskin](mailto:m.luskin@uq.edu.au) to request access to the relevant [GitHub repository](https://github.com/EcologicalCascadesLab/AsianCaptureHistories).
 
 ```{r global-options, include=FALSE, warning=FALSE, error=FALSE}
 ## We can knit this into a nice document! but dont include all the code unless otherwise specified (i.e. include=TRUE)
@@ -28,7 +28,7 @@ library(traitdata)  # For species trait data (e.g. body mass, trophic guild, hom
 ```{r import captures}
 
 #### Re-sampled captures and metadata are saved per survey in a folder in the cap hist DB on DropBox
-### This raw data is not available for public usage, but a derived version will be hosted on DropBox. 
+### This raw data is not available for public usage, but a derived and de-identified version will be hosted on GitHub 
 
 ### captures first 
 
@@ -754,11 +754,11 @@ There are a **total of `r length(traits$scientificNameStd[traits$TrophicLevel ==
 
 There are a **total of `r length(traits$scientificNameStd[traits$TrophicLevel == "Carnivore"])` carnivores**, split between **`r length(traits$scientificNameStd[traits$TrophicGuild == "Small_Carnivore"])` small carnivores** and **`r length(traits$scientificNameStd[traits$TrophicGuild == "Large_Carnivore"])` large carnivores** using a 15 kg cut-off. 
 
-__Tigers (*Panthera tigris*)__ were generated `r nrow(og_caps[og_caps$Species == "Panthera tigris",])` independent detections from `r length(unique((og_caps$Landscape[og_caps$Species == "Panthera tigris"])))` landscapes. They were deemed to prefer any other species that is not a large carnivore and above 17 kg. This includes a total of **`r length(traits$scientificNameStd[traits$tiger_pref == "Yes"])` species composed of `r paste(traits$scientificNameStd[traits$tiger_pref == "Yes"], collapse = ", ")`**. 
+__Tigers (*Panthera tigris*)__ were generated `r nrow(og_caps[og_caps$Species == "Panthera_tigris",])` independent detections from `r length(unique((og_caps$Landscape[og_caps$Species == "Panthera_tigris"])))` landscapes. They were deemed to prefer any other species that is not a large carnivore and above 17 kg. This includes a total of **`r length(traits$scientificNameStd[traits$tiger_pref == "Yes"])` species composed of `r paste(traits$scientificNameStd[traits$tiger_pref == "Yes"], collapse = ", ")`**. 
 
-__Leopards (*Panthera pardus*)__ were generated `r nrow(og_caps[og_caps$Species == "Panthera pardus",])` independent detections from `r length(unique((og_caps$Landscape[og_caps$Species == "Panthera pardus"])))` landscapes. They were deemed to prefer any other species that is not a large carnivore and with a weight range of 10-40 kg. Also, all primates were included as preferred prey. This includes a total of **`r length(traits$scientificNameStd[traits$leopard_pref == "Yes"])` species composed of `r paste(traits$scientificNameStd[traits$leopard_pref == "Yes"], collapse = ", ")`**. 
+__Leopards (*Panthera pardus*)__ were generated `r nrow(og_caps[og_caps$Species == "Panthera_pardus",])` independent detections from `r length(unique((og_caps$Landscape[og_caps$Species == "Panthera_pardus"])))` landscapes. They were deemed to prefer any other species that is not a large carnivore and with a weight range of 10-40 kg. Also, all primates were included as preferred prey. This includes a total of **`r length(traits$scientificNameStd[traits$leopard_pref == "Yes"])` species composed of `r paste(traits$scientificNameStd[traits$leopard_pref == "Yes"], collapse = ", ")`**. 
 
-__Dholes (*Cuon alpinus*)__ were generated `r nrow(og_caps[og_caps$Species == "Cuon alpinus",])` independent detections from `r length(unique((og_caps$Landscape[og_caps$Species == "Cuon alpinus"])))` landscapes. They were deemed to prefer any other species that is not a large carnivore and with a weight range of 40-190 kg. Also, all bear species were removed as preferred prey and muntjac deer were included. This includes a total of **`r length(traits$scientificNameStd[traits$dhole_pref == "Yes"])` species composed of `r paste(traits$scientificNameStd[traits$dhole_pref == "Yes"], collapse = ", ")`**. 
+__Dholes (*Cuon alpinus*)__ were generated `r nrow(og_caps[og_caps$Species == "Cuon_alpinus",])` independent detections from `r length(unique((og_caps$Landscape[og_caps$Species == "Cuon_alpinus"])))` landscapes. They were deemed to prefer any other species that is not a large carnivore and with a weight range of 40-190 kg. Also, all bear species were removed as preferred prey and muntjac deer were included. This includes a total of **`r length(traits$scientificNameStd[traits$dhole_pref == "Yes"])` species composed of `r paste(traits$scientificNameStd[traits$dhole_pref == "Yes"], collapse = ", ")`**. 
 
 __Clouded leopards (*Neofelis* genus)__ were generated `r nrow(og_caps[grepl("Neofelis", og_caps$Species),])` independent detections from `r length(unique((og_caps$Landscape[grepl("Neofelis", og_caps$Species)])))` landscapes. They were deemed to prefer any other species that is not a large carnivore and with a weight range of 7-190 kg. Also, all bear species and golden cats were removed as preferred prey. This includes a total of **`r length(traits$scientificNameStd[traits$CL_pref == "Yes"])` species composed of `r paste(traits$scientificNameStd[traits$CL_pref == "Yes"], collapse = ", ")`**. 
 
@@ -915,28 +915,28 @@ month<-str_sub(Sys.Date(),-5,-4)
 year<-str_sub(Sys.Date(),-10,-7)
 date = paste(year,month,day, sep = "")
 
-## grab the WD where we want to save data 
-wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step1_output/"
+# ## grab the WD where we want to save data 
+# wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step1_output/"
 
 
 # ### Save all relevant files
-# saveRDS(keep, paste(wd, "/species_vector_", length(keep), "_species_", scale, "_scale_", date, ".RDS", sep = ""))
-# 
-# saveRDS(group_sp, paste(wd, "/group_living_", length(group_sp), "_species_", scale, "_scale_",  date, ".RDS", sep = ""))
-# 
-# write.csv(caps, paste(wd, "/clean_captures_to_make_UMFs_", scale, "_scale_",  date,".csv", sep = ""), row.names = F)
-# 
-# write.csv(meta, paste(wd, "/clean_metadata_to_make_UMFs_", scale, "_scale_",  date,".csv", sep = ""), row.names = F)
-# 
-# ## Also save trait data so I dont have to remake it later
-# write.csv(traits, paste(wd, "/clean_", nrow(traits), "_species_trait_data_", date, ".csv", sep = ""), row.names = F)
+saveRDS(keep, paste("data_GitHub/species_vector_", length(keep), "_species_", scale, "_scale_", date, ".RDS", sep = ""))
+
+saveRDS(group_sp, paste("data_GitHub/group_living_", length(group_sp), "_species_", scale, "_scale_",  date, ".RDS", sep = ""))
+
+write.csv(caps, paste("data_GitHub/clean_captures_to_make_UMFs_", scale, "_scale_",  date,".csv", sep = ""), row.names = F)
+
+write.csv(meta, paste("data_GitHub/clean_metadata_to_make_UMFs_", scale, "_scale_",  date,".csv", sep = ""), row.names = F)
+
+## Also save trait data so I dont have to remake it later
+write.csv(traits, paste("data_GitHub/clean_", nrow(traits), "_species_trait_data_", date, ".csv", sep = ""), row.names = F)
 
 
 
 
 ```
 
-## HPC matrix and covariate creation code
+## HPC matrix creation code
 
 The next section of analysis relies on the HPC, where we convert our covariates and metadata into a count history matrix with the proper associated observation- and site-level covariates. We use the HPC to iterate the process per species with more computational power which vastly speeds up the process. 
 

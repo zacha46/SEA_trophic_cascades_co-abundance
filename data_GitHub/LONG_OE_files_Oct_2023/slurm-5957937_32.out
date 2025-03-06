@@ -1,0 +1,18 @@
+/scratch/user/uqzamir
+[1] "Begining to run co-abundance model for: SUB-Cuon_alpinus~DOM-Arctonyx_collaris with MCMC settings: HALF_LONG_3Chain and is starting at 2023-10-14 13:52:33"
+
+Processing function input....... 
+
+Done. 
+ 
+Beginning parallel processing using 3 cores. Console output will be suppressed.
+
+Parallel processing completed.
+
+Calculating statistics....... 
+
+Done. 
+[1] "Finished running co-abundance model for: SUB-Cuon_alpinus~DOM-Arctonyx_collaris at 2023-10-18 03:55:23. This model took 86.0473 hours to be completed. Beginning dataframe extractions now."
+[1] "Finished generating coefficent dataframe for: SUB-Cuon_alpinus~DOM-Arctonyx_collaris at 2023-10-18 03:55:23. Beginning PPC dataframes now."
+[1] "Finished generating PPC plotdata dataframe for: SUB-Cuon_alpinus~DOM-Arctonyx_collaris at 2023-10-18 03:55:24. Beginning PPC values dataframe now."
+[1] "Finished generating PPC plotdata dataframe for: SUB-Cuon_alpinus~DOM-Arctonyx_collaris at 2023-10-18 03:55:24. All dataframe extractions are now complete."

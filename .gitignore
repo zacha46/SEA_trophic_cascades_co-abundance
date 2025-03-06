@@ -22,7 +22,6 @@
 .Rproj.user/
 
 # produced vignettes
-vignettes/*.html
 vignettes/*.pdf
 
 # OAuth2 token, see https://github.com/hadley/httr/releases/tag/v0.3
@@ -39,54 +38,19 @@ vignettes/*.pdf
 # R Environment Variables
 .Renviron
 
-# pkgdown site
-docs/
-
-# translation temp files
-po/*~
-
 # RStudio Connect folder
 rsconnect/
 
-# dont want to sync up data or results files 
-data/*~
-figures/*~
-results/*~
-explore/*~
-
 # dont want to sync OLD html outputs, only the best! 
-html_outputs/OLD/*~
-
-# Some data files still seem to want to try to sync up, so be more specific
-data/import_UMF_from_HPC/*~
-data/send_to_HPC/*~
-data/species_traits/*~
-
-
-# and OE files from HPC
-scripts/*.err
-scripts/*.out
-
-
-# Ignore figures
-figures/
-*.png
-*.pdf
+/html_outputs/OLD/
+# or old SLURM scripts 
+scripts/SLURM_code/OLD/
 
 #DS_Store must be ignored
-.DS_Store
-.DS_Store?
 **/.DS_Store
-data/.DS_Store
 
 # Ignore data files
-*.csv
 *.tif
 *.xlsx
-*.rds
 *.rdata
 *.nc
-
-# Ignore the Dropbox directory (if linked to the repo)
-/Dropbox/
-

@@ -22,7 +22,8 @@ library(cowplot)          ## For arranging plots
 ```{r Import collated model performance data from step 3}
 
 ### Set the working directory where the data lives
-wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step3_output_combined_results/"
+# wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step3_output_combined_results/"
+wd = paste(getwd(), "/results_final/step3_output_combined_results/", sep = "") #update for github
 
 ## list all relevant files
 files = list.files(wd)
@@ -918,7 +919,7 @@ The next plot is the pooled results from **preferred predator prey models** wher
 all_plots$preferred_siv_all_large_carns_hist
 ```
 
-The next plot includes all of the preferred predator prey models (same as above), but this time split between the four large carnivore species. **Note that one outlying species pair has been removed from the histogram to enhance the style.** The missing species pair is `r prob_pair_pref` with support level `r preform$support[preform$Species_Pair == prob_pair_pref]` and a SIV of `r preform$Interaction_Estimate[preform$Species_Pair == prob_pair_pref]` with a standard deviation of `r preform$SD[preform$Species_Pair == prob_pair_pref]`. 
+The next plot includes all of the preferred predator prey models (same as above), but this time split between the four large carnivore species. **Note that `r length(prob_pair_pref)` outlying species pair(s) may have been removed from the histogram to enhance the style.** The missing species pair is `r prob_pair_pref` with support level `r preform$support[preform$Species_Pair == prob_pair_pref]` and a SIV of `r preform$Interaction_Estimate[preform$Species_Pair == prob_pair_pref]` with a standard deviation of `r preform$SD[preform$Species_Pair == prob_pair_pref]`. 
 
 * The results for `r unique(res_table$rel_species)[4]` include `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[4] & res_table$support_levels == "top-down"]` supported top-down models (`r paste(res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[4] & res_table$support_levels == "top-down"], "%", sep = "")`), `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[4] & res_table$support_levels == "bottom-up"]` supported bottom-up models (`r paste(res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[4] & res_table$support_levels == "bottom-up"], "%", sep = "")`), and `r res_table$num_lvl[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[4] & res_table$support_levels == "unsupported"]` unsupported models (`r paste(res_table$percent[res_table$PPC_setting == "normal" & res_table$preference == "preferred" & res_table$rel_species == unique(res_table$rel_species)[4] & res_table$support_levels == "unsupported"], "%", sep = "")`). 
 
@@ -1095,12 +1096,13 @@ all_plots$counterfactual_siv_hist
 
 ## Save plots & data
 
-The plots, and data used to inform this document, will be saved in dropbox at this directory: Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/figures/step4_output_figs/ & figures/step4_output_summarized_results_for_figs
+The plots and data used to inform this document are saved in the GitHub Repository here: `figures/step4_output_figs/` & `figures/step4_output_summarized_results_for_figs/`.
 
 ```{r Save everything! }
 
 ## specify the new working directory to save figures
-wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/figures/step4_output_figs/"
+# wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/figures/step4_output_figs/"
+wd = paste(getwd(), "/figures/step4_output_figs/", sep = "") # update for github
 
 # Grab the date
 day<-str_sub(Sys.Date(),-2)
@@ -1144,7 +1146,9 @@ for(i in 1:length(all_plots)){
 rm(i, p, n, path)
 
 ## now save the summarized data with a new wd
-wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/figures/step4_output_summarized_results_for_figs/"
+# wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/figures/step4_output_summarized_results_for_figs/"
+wd = paste(getwd(), "/figures/step4_output_summarized_results_for_figs/", sep = "") # update for github
+
 
 ## main results
 #make a path
@@ -1164,9 +1168,4 @@ path = paste(wd, "percentages_for_counter-factual_histograms_", date, ".csv", se
 # and save! 
 write.csv(sum_table_cf, path, row.names = F)
 
-
-
 ```
-
-
-

@@ -1,0 +1,18 @@
+/scratch/user/uqzamir
+[1] "Begining to run co-abundance model for: SUB-Herpestes_brachyurus~DOM-Panthera_tigris with MCMC settings: HALF_LONG_3Chain and is starting at 2023-10-22 11:27:04"
+
+Processing function input....... 
+
+Done. 
+ 
+Beginning parallel processing using 3 cores. Console output will be suppressed.
+
+Parallel processing completed.
+
+Calculating statistics....... 
+
+Done. 
+[1] "Finished running co-abundance model for: SUB-Herpestes_brachyurus~DOM-Panthera_tigris at 2023-10-26 23:45:44. This model took 108.311 hours to be completed. Beginning dataframe extractions now."
+[1] "Finished generating coefficent dataframe for: SUB-Herpestes_brachyurus~DOM-Panthera_tigris at 2023-10-26 23:45:44. Beginning PPC dataframes now."
+[1] "Finished generating PPC plotdata dataframe for: SUB-Herpestes_brachyurus~DOM-Panthera_tigris at 2023-10-26 23:45:44. Beginning PPC values dataframe now."
+[1] "Finished generating PPC plotdata dataframe for: SUB-Herpestes_brachyurus~DOM-Panthera_tigris at 2023-10-26 23:45:44. All dataframe extractions are now complete."

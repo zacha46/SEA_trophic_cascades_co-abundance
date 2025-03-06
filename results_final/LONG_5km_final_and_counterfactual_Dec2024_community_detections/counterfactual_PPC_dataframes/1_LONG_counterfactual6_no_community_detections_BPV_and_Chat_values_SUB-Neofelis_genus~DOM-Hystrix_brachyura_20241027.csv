@@ -1,0 +1,2 @@
+"X","Interaction_Estimate","SD","lower","upper","Rhat","Significance","BPV.dom","BPV.sub","Chat.dom","Chat.sub","Species_Pair"
+"a5",0.0787831035039649,0.016272730693327,0.04673461191107,0.110429149334367,1.00009606105668,"Significant",0.0112,0.2007,1.04044862861328,1.03902310655306,"SUB-Neofelis_genus~DOM-Hystrix_brachyura"

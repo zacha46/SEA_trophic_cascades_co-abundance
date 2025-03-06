@@ -352,7 +352,7 @@ display: none;
 <h1 class="title toc-ignore">Step 1 Prepare data to make count history
 matrix</h1>
 <h4 class="author">Zachary Amir</h4>
-<h4 class="date">2025-01-24 19:11:22</h4>
+<h4 class="date">2025-03-06 11:35:31</h4>
 
 </div>
 
@@ -362,14 +362,13 @@ matrix</h1>
 <p>This code will prepare camera trap data to create count history
 matrices and the associated covariates. This is a necessary first step
 towards preparing the data to implement Zachary Amir’s co-abundance
-models on the High Performance Computers (HPC).</p>
+models on the <a href="https://rcc.uq.edu.au/systems/high-performance-computing/bunya">High-Performance
+Computers (HPC)</a>.</p>
 <p>This code works off the spatially re-sampled captures and covariates
 that are generated in the 4-step Southeast Asian camera trap data
 standardization pipeline. To learn more about this Southeast Asian
-camera trap data standardization pipeline, please contact Zachary Amir
-(<a href="mailto:z.amir@uq.edu.au" class="email">z.amir@uq.edu.au</a>)
-or Matthew Luskin (<a href="mailto:m.luskin@uq.edu.au" class="email">m.luskin@uq.edu.au</a>) to request access to the following
-relevant <a href="https://github.com/EcologicalCascadesLab/AsianCaptureHistories">GitHub
+camera trap data standardization pipeline, please contact <a href="mailto:z.amir@uq.edu.au">Zachary Amir</a> or <a href="mailto:m.luskin@uq.edu.au">Matthew Luskin</a> to request access to
+the relevant <a href="https://github.com/EcologicalCascadesLab/AsianCaptureHistories">GitHub
 repository</a>.</p>
 </div>
 <div id="camera-trap-data-included-for-analysis" class="section level2">
@@ -442,22 +441,22 @@ omnivores</strong> using a 50 kg cut-off.</p>
 <p>There are a <strong>total of 12 carnivores</strong>, split between
 <strong>8 small carnivores</strong> and <strong>4 large
 carnivores</strong> using a 15 kg cut-off.</p>
-<p><strong>Tigers (<em>Panthera tigris</em>)</strong> were generated 0
-independent detections from 0 landscapes. They were deemed to prefer any
-other species that is not a large carnivore and above 17 kg. This
-includes a total of <strong>9 species composed of Helarctos_malayanus,
-Rusa_unicolor, Sus_barbatus, Sus_scrofa, Tapirus_indicus,
-Ursus_thibetanus, Bos_gaurus, Capricornis_genus,
+<p><strong>Tigers (<em>Panthera tigris</em>)</strong> were generated
+1838 independent detections from 7 landscapes. They were deemed to
+prefer any other species that is not a large carnivore and above 17 kg.
+This includes a total of <strong>9 species composed of
+Helarctos_malayanus, Rusa_unicolor, Sus_barbatus, Sus_scrofa,
+Tapirus_indicus, Ursus_thibetanus, Bos_gaurus, Capricornis_genus,
 Muntiacus_genus</strong>.</p>
-<p><strong>Leopards (<em>Panthera pardus</em>)</strong> were generated 0
-independent detections from 0 landscapes. They were deemed to prefer any
-other species that is not a large carnivore and with a weight range of
-10-40 kg. Also, all primates were included as preferred prey. This
+<p><strong>Leopards (<em>Panthera pardus</em>)</strong> were generated
+230 independent detections from 4 landscapes. They were deemed to prefer
+any other species that is not a large carnivore and with a weight range
+of 10-40 kg. Also, all primates were included as preferred prey. This
 includes a total of <strong>7 species composed of Arctictis_binturong,
 Arctonyx_collaris, Macaca_arctoides, Macaca_fascicularis,
 Macaca_nemestrina, Sus_scrofa, Muntiacus_genus</strong>.</p>
-<p><strong>Dholes (<em>Cuon alpinus</em>)</strong> were generated 0
-independent detections from 0 landscapes. They were deemed to prefer any
+<p><strong>Dholes (<em>Cuon alpinus</em>)</strong> were generated 795
+independent detections from 9 landscapes. They were deemed to prefer any
 other species that is not a large carnivore and with a weight range of
 40-190 kg. Also, all bear species were removed as preferred prey and
 muntjac deer were included. This includes a total of <strong>5 species
@@ -507,8 +506,8 @@ the High Performance Computers (HPC) to run much faster. The data is
 saved in my personal Dropbox folder, but will move to GitHub
 eventually.</p>
 </div>
-<div id="hpc-matrix-and-covariate-creation-code" class="section level2">
-<h2>HPC matrix and covariate creation code</h2>
+<div id="hpc-matrix-creation-code" class="section level2">
+<h2>HPC matrix creation code</h2>
 <p>The next section of analysis relies on the HPC, where we convert our
 covariates and metadata into a count history matrix with the proper
 associated observation- and site-level covariates. We use the HPC to

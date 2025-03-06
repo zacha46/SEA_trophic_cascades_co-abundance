@@ -1,6 +1,9 @@
 # Large carnivores and predator-prey associations in tropical forests
 ## Last updated: March 6th, 2025
 
+[![GitHub Pages](https://img.shields.io/badge/GitHub-Pages-blue?logo=github)](https://zacha46.github.io/SEA_trophic_cascades_co-abundance/)
+
+
 ---
 
 ## **Background**
@@ -9,7 +12,7 @@ This GitHub repository includes code to implement Amir et al.'s co-abundance ana
 
 This analysis is implemented using three types of coding scripts:
 
-- **RMarkdown scripts** make up most of the analysis and are organized into five clearly labeled steps in the `scripts/` directory. Each RMarkdown file generates a `.html` summary of the information and results, which can be found in the `html_outputs/` directory.  
+- **RMarkdown scripts** make up most of the analysis and are organized into five clearly labeled steps in the `scripts/` directory. Each RMarkdown file generates a `.html` summary of the information and results, which can viewed on the Repository's [GitHub Pages](https://zacha46.github.io/SEA_trophic_cascades_co-abundance/) or be downloaded in the `docs/` directory.  
 - **R scripts** that run on [High-Performance Computers (HPC)](https://rcc.uq.edu.au/systems/high-performance-computing/bunya) are located in `scripts/HPC_code`.  
 - **SLURM scripts** that communicate with the HPC are found in `scripts/SLURM_code`.  
 
@@ -19,11 +22,22 @@ To learn more about this camera trap data standardization pipeline, please conta
 
 ---
 
-## **Data and Results**  
+## **Reports, data, and results**  
 
-Except for the cleaned camera trap data that originates from the [Asian Capture Histories GitHub Repository](https://github.com/EcologicalCascadesLab/AsianCaptureHistories) and is imported in `scripts/Step_1_Prepare_data_to_make_count_history_matrix.Rmd`, all data to reproduce our analysis is provided on this Github repository. Data are divided into several different folders. 
+### **Analysis Reports**
+The following reports summarize data transformations, statistics, and results at each step of analysis. Click on a report to view the full details:
+
+1. [Step 1: Data Preparation](https://zacha46.github.io/SEA_trophic_cascades_co-abundance/docs/Step_1_Prepare_data_to_make_count_history_matrix.html)
+2. [Step 2: Generate Co-Abundance Bundles](https://zacha46.github.io/SEA_trophic_cascades_co-abundance/docs/Step_2_Generate_co-abundance_pairwise_data_bundles.html)
+3. [Step 3: Combine Results From HPC](https://zacha46.github.io/SEA_trophic_cascades_co-abundance/docs/Step_3_combine_results_from_HPC.html)
+4. [Step 4: Visualize Histograms](https://zacha46.github.io/SEA_trophic_cascades_co-abundance/docs/Step_4_visualize_histogram_results.html)
+5. [Step 5: Meta-Regression](https://zacha46.github.io/SEA_trophic_cascades_co-abundance/docs/Step_5_meta-regression_and_visualization.html)
+
+- Alternatively, you can download the reports as `.html` files found in the `docs/` directory.  
 
 ### **Data Structure**
+Except for the cleaned camera trap data that originates from the [Asian Capture Histories GitHub Repository](https://github.com/EcologicalCascadesLab/AsianCaptureHistories) and is imported in `scripts/Step_1_Prepare_data_to_make_count_history_matrix.Rmd`, all data to reproduce our analysis is provided on this Github repository. Data are divided into several different folders. 
+
 - `data_GitHub/` is a directory containing the data cleaned in `scripts/Step_1_Prepare_data_to_make_count_history_matrix.Rmd` and a few additional small data files. This data is formatted into count history matrices and similarly structured covariates using the script `scripts/HPC_code/HPC_matrix_generator_SEA_TC.R`.
 - `data_GitHub_UMFs/` are the count history matrices and site- and observation-level covariates per species that were produced in the R script script `scripts/HPC_code/HPC_matrix_generator_SEA_TC.R`, saved as `.RDS files`. This information is fed into `scripts/Step_2_Generate_co-abundance_pairwise_data_bundles.Rmd` to create pairwise data bundles between two species, which are then used in the co-abundance models. 
 - `data_GitHub_CoA_bundles/` is the output from `scripts/Step_2_Generate_co-abundance_pairwise_data_bundles.Rmd` that combines relevant pairwise count histories and bundles them as a `.RDS file` to be implemented in co-abundance models using the script `scripts/HPC_code/HPC_co-abundance_model_new_var_comm_det.R` or `scripts/HPC_code/HPC_co-abundance_model_counterfactuals.R` for counterfactual testing.
@@ -31,9 +45,6 @@ Except for the cleaned camera trap data that originates from the [Asian Capture 
 ### **Results and Figures**
 - `results_final/` is a directory containing the `.csv` outputs from running co-abundance models on the HPC. Results from the HPC are stored in directories based on the MCMC settings used to implement the model and the approximate date they were submitted. Results extracted from the HPC are further sub-divided into directories for `/coefficent_dataframes` and `/PPC_dataframes`. There are sub-directories within this folder, like `results_final/step3_output_combined_results` that contains summarized spreadsheets of key results included in our manuscript. 
 - `figures/` is a directory containing `.png` outputs of figures and `.csv` data to inform figures from both `scripts/Step_4_visualize_histogram_results.Rmd` and `scripts/Step_5_meta-regression_and_visualization.Rmd`, each saved in their own labelled directory. 
-
-### **Key HTML Reports**
-- `html_outputs` is the directory containing five `.html` reports generated from each `RMarkdown` script. These reports summarize data transformations, statistics, and results implemented in the specific step of analysis. The `.html` reports were used to inform the results section of our resulting manuscript. 
 
 ## **Scripts**
 

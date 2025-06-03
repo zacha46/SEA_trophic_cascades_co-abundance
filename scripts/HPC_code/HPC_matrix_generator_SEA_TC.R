@@ -26,9 +26,9 @@ meta = read.csv(paste("data/UMF/",
 # species = readRDS(paste("data_GitHub/",
 #                         list.files("data_GitHub/")[grepl("species_vector", list.files("data_GitHub/"))],
 #                         sep = ""))
-# group_sp = readRDS(paste("data_GitHub/",
-#                          list.files("data_GitHub/")[grepl("group_living", list.files("data_GitHub/"))],
-#                          sep = ""))
+# # group_sp = readRDS(paste("data_GitHub/",
+# #                          list.files("data_GitHub/")[grepl("group_living", list.files("data_GitHub/"))],
+# #                          sep = ""))
 # caps = read.csv(paste("data_GitHub/",
 #                      list.files("data_GitHub/")[grepl("clean_captures", list.files("data_GitHub/"))],
 #                      sep = ""))
@@ -152,7 +152,9 @@ for(j in 1:length(unique(c$cell_id))){ #repeat for each sampling unit
       d = a$Date[s] #specify the sampling date
       
       # Grab the relevant count
-      fill_count = max(unique(a[["total_indiv_records"]][a$Date == d])) # max to be safe if there is more than one value, tho unlikely.
+      fill_count = round(max(unique(a[["total_indiv_records"]][a$Date == d]))) 
+      # max to be safe if there is more than one value, tho unlikely.
+      # round to be sure its a whole number, in case its not (pigs in sumatra!!)
       
       indx = a$seq[a$cell_id == su & a$Date == d] #specify the matching date index
       

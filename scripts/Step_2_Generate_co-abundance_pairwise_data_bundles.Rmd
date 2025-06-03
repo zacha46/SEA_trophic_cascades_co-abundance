@@ -99,6 +99,70 @@ Bundles will be generated for species pairs, where one species is explicitly ass
 
 We have included a new variable called **community_detections** across all models, which is simply a site-level variable containing the sum number of independent detections of all `r length(unique(caps$Species))` species detected at that sampling unit except for the two-species whose co-abundance is considered in the model. The variable has been log-transformed to better normalize outliers and, like all other variables, it has been standardized with a mean of 0 and standard deviation of 1. This variable has been included to captures unmeasured variation in sampling locations, where  some sampling units are  better than others for a many different factors. This should manifest as more detections of more species at that sampling unit, resulting in a positive effect. 
 
+```{r Determine maximum matrix fill value, echo=FALSE}
+# store results here
+res = data.frame(matrix(nrow = 0, ncol = 2))
+names(res) = c("species", "max_count")
+for(i in 1:length(umfs)){
+  
+  # select 1 umf
+  umf = umfs[[i]]
+  # extract matrix 
+  y = umf$y
+  y$SU = NULL
+  y = as.matrix(y)
+  # convert to vector of numbers
+  mat_counts = as.numeric(as.vector(y))
+  mat_counts = mat_counts[!is.na(mat_counts) & mat_counts > 0] # remove 0 and NAs 
+  # max and mean 
+  max_count = max(mat_counts)
+  mean_count = round(mean(mat_counts),2)
+  
+  sp = names(umfs)[i]
+  
+  # #can print a message for us 
+  # print(paste("The species", sp, "largest value in the matrix is", max_count, 
+  #             "and the mean value in the matrix is", mean_count))
+  r = res[0,]
+  r[1, "species"] = sp
+  r[1, "max_count"] = max_count
+  res = dplyr::distinct(rbind(r,res))
+  
+}
+rm(r, i, y, umf, mat_counts, max_count, mean_count, sp)
+
+## inspect
+summary(res$max_count) # median = 11, mean = 35. Max is crazy!! 
+hist(res$max_count, breaks = 100) # big drop after 50 
+hist(res$max_count[res$max_count<50], breaks = 100) # not much after 20
+
+# which species
+sort(res$species[res$max_count > 20]) # lots of group living species, no predators except dhole (makes sense), 18 sp
+sort(res$species[res$max_count > 25]) # 13 species
+sort(res$species[res$max_count > 30]) # 11 species
+
+## set the maximum to 25 
+cap_max = 25
+cap_sp = sort(res$species[res$max_count > 25])
+
+## loop thru each UMF 
+for(i in 1:length(umfs)){
+  # grab a umf and the dh matrix 
+  u = umfs[[i]]
+  y = u$y
+  # Apply the transformation only to numeric columns
+  y[ , sapply(y, is.numeric)] <- lapply(y[ , sapply(y, is.numeric)], function(col) {
+    col[col > cap_max] <- cap_max
+    return(col)
+  })
+  # resave
+  umfs[[i]]$y = y
+} # end per umf 
+
+```
+
+Finally, to limit over-dispersion in count history matrices, we have set the **maximum observed count in a 5-day sampling occasion window to `r cap_max`**, and this has been updated for the following species: `r paste(cap_sp, collapse = ", ")`.
+
 ```{r Ultra-Loop to generate data bundles based on guild-pairs, echo=FALSE }
 
 ## bind landscapes to captures to facilitate finding where critters are detected

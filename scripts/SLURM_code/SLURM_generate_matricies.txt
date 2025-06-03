@@ -26,8 +26,8 @@
 #SBATCH --job-name=UMFs
 
 # SPECIFY .err AND .out FILE LOCATIONS
-#SBATCH --output=OE/ZDA_UMF/slurm-%A_%a.out
-#SBATCH --error=OE/ZDA_UMF/slurm-%A_%a.err
+#SBATCH --output=OE/output/slurm-%A_%a.out
+#SBATCH --error=OE/error/slurm-%A_%a.err
 
 # LOAD THE RELEVANT MODULE
 module load rjags/4-10-foss-2021a-r-4.1.0 
@@ -40,5 +40,5 @@ fi
 cd $SLURM_SUBMIT_DIR
 pwd
 
-# LOAD THE R SCRIPT, SUBMIT JOB FROM /scratch/user/uqzamir/, AND SPECIFY THE ARRAY INDEX 
-Rscript code/ZDA_UMF/HPC_matrix_generator.R $SLURM_ARRAY_TASK_ID
+# LOAD THE R SCRIPT, SUBMIT JOB FROM /scratch/user/uqzamir/SEA_co-abundance, AND SPECIFY THE ARRAY INDEX 
+Rscript code/HPC_matrix_generator_SEA_TC.R $SLURM_ARRAY_TASK_ID

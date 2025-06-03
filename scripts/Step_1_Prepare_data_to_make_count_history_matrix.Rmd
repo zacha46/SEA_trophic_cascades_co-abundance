@@ -832,26 +832,63 @@ By adding the observation sequence to the captures, we lost `r paste(lost*100, "
 
 ```{r Determine species to be analyzed as a group}
 
-## first, determine which species will need to be analyzed as groups rather than individuals 
-# because of very large group sizes skewing results
-big = ddply(caps[caps$Species %in% keep,], .(Species), summarize,
-            max_count = max(total_indiv_records),
-            mean_count = mean(total_indiv_records),
-            mode_count = median(total_indiv_records))
+# ## first, determine which species will need to be analyzed as groups rather than individuals 
+# # because of very large group sizes skewing results
+# big = ddply(caps[caps$Species %in% keep,], .(Species), summarize,
+#             max_count = max(total_indiv_records),
+#             mean_count = mean(total_indiv_records),
+#             mode_count = median(total_indiv_records))
+# 
+# big$Species[big$mean_count >= 2] #this is probably it... 
+# # big$Species[big$max_count >= 10] #but this is concerning 
+# 
+# ## go w/ mean >= 2 for now and inspect for later
+# group_sp = big$Species[big$mean_count >= 2]
+# # adding muntjacs and ALL macaque species because they were probelmatic in the past 
+# group_sp = c(group_sp, "Muntiacus_genus", "Macaca_fascicularis" )
+# rm(big)
 
-big$Species[big$mean_count >= 2] #this is probably it... 
-# big$Species[big$max_count >= 10] #but this is concerning 
-
-## go w/ mean >= 2 for now and inspect for later
-group_sp = big$Species[big$mean_count >= 2]
-# adding muntjacs and ALL macaque species because they were probelmatic in the past 
-group_sp = c(group_sp, "Muntiacus_genus", "Macaca_fascicularis" )
-rm(big)
-
+### Re-imagining group sizes here --> limit group size bases on mean AND max counts 
+cap_counts = data.frame(matrix(nrow = 0, ncol = 2))
+names(cap_counts) = c("Species", "capped_total_count")
+for(sp in keep){
+  
+  # Grab all relevant counts for the current species
+  sp_counts <- caps[["total_indiv_records"]][caps$Species == sp]
+  sp_counts <- sp_counts[!is.na(sp_counts) & sp_counts > 0] # make sure no NA or zeros to skew calculations
+  
+  # Calculate mean and max counts
+  mean_count <- mean(sp_counts)
+  max_count <- max(sp_counts)
+  
+  # Determine species-specific cap limit based on rules (adjust as needed)
+  cap_val <- if (mean_count > 10 || max_count > 20) {
+    7
+  } else if (mean_count > 5 || max_count > 10) {
+    5
+  } else if (mean_count > 3 || max_count > 5) {
+    3
+  } else {
+    Inf
+  }
+  
+  ## save in results df 
+  res = cap_counts[0,]
+  res[1, "Species"] = sp
+  res[1, "capped_total_count"] = cap_val
+  # combine w/ the total 
+  cap_counts = distinct(rbind(res, cap_counts))
+  
+} # end per sp 
 
 ```
 
-I have also determined which species need to be analyzed as groups instead of inviduals because of very large group sizes cause N-mixture models to crash and create unrealistic estimates. __This includes `r length(group_sp)` species: `r paste(sort(group_sp), collapse = ", ")`__.
+I have also determined which species need to be analyzed as groups instead of inviduals because of very large group sizes cause N-mixture models to crash and create unrealistic estimates. 
+
+* Species with **mean counts greater than 10 or maximum counts greater than 20** were limited to 7 and this includes: `r paste(cap_counts$Species[cap_counts$capped_total_count == 7], collapse = ", ")`. 
+* Species with **mean counts greater than 5 or maximum counts greater than 10** were limited to 5 and this includes: `r paste(cap_counts$Species[cap_counts$capped_total_count == 5], collapse = ", ")`. 
+* Species with **mean counts greater than 3 or maximum counts greater than 5** were limited to 3 and this includes: `r paste(cap_counts$Species[cap_counts$capped_total_count == 3], collapse = ", ")`. 
+* All other species did not have their counts limited, and this includes: `r paste(cap_counts$Species[cap_counts$capped_total_count == Inf], collapse = ", ")`. 
 
 ```{r Prepare metadata and check for colinearity}
 
@@ -920,16 +957,16 @@ date = paste(year,month,day, sep = "")
 
 
 # ### Save all relevant files
-saveRDS(keep, paste("data_GitHub/species_vector_", length(keep), "_species_", scale, "_scale_", date, ".RDS", sep = ""))
+# saveRDS(keep, paste("data_GitHub/species_vector_", length(keep), "_species_", scale, "_scale_", date, ".RDS", sep = ""))
 
-saveRDS(group_sp, paste("data_GitHub/group_living_", length(group_sp), "_species_", scale, "_scale_",  date, ".RDS", sep = ""))
+# saveRDS(group_sp, paste("data_GitHub/group_living_", length(group_sp), "_species_", scale, "_scale_",  date, ".RDS", sep = ""))
 
-write.csv(caps, paste("data_GitHub/clean_captures_to_make_UMFs_", scale, "_scale_",  date,".csv", sep = ""), row.names = F)
+# write.csv(caps, paste("data_GitHub/clean_captures_to_make_UMFs_", scale, "_scale_",  date,".csv", sep = ""), row.names = F)
 
-write.csv(meta, paste("data_GitHub/clean_metadata_to_make_UMFs_", scale, "_scale_",  date,".csv", sep = ""), row.names = F)
+# write.csv(meta, paste("data_GitHub/clean_metadata_to_make_UMFs_", scale, "_scale_",  date,".csv", sep = ""), row.names = F)
 
 ## Also save trait data so I dont have to remake it later
-write.csv(traits, paste("data_GitHub/clean_", nrow(traits), "_species_trait_data_", date, ".csv", sep = ""), row.names = F)
+# write.csv(traits, paste("data_GitHub/clean_", nrow(traits), "_species_trait_data_", date, ".csv", sep = ""), row.names = F)
 
 
 

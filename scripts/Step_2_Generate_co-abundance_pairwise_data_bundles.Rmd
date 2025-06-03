@@ -785,9 +785,9 @@ saveRDS(save, (paste(wd, "/Bundled_data_for_Bayes_co-abundance_mods_community_50
 
 ### However, if you are just going for testing (MIDDLE settings) with preferred models, 
 ## we can save all preferred models as one list. 
-# sp_pairs = names(bdata_list)[names(bdata_list) %in% jobs_final$Species_Pair[jobs_final$preference == "preferred"]]
-# save = bdata_list[names(bdata_list) %in% sp_pairs]
-# saveRDS(save, here::here(paste("data_GitHub_CoA_bundles/Bundled_data_for_Bayes_co-abundance_mods_preferred_", length(save), "_species_pairs_", date, ".RDS", sep = "")))
+sp_pairs = names(bdata_list)[names(bdata_list) %in% jobs_final$Species_Pair[jobs_final$preference == "preferred"]]
+save = bdata_list[names(bdata_list) %in% sp_pairs]
+saveRDS(save, paste(wd, "Bundled_data_for_Bayes_co-abundance_mods_preferred_", length(save), "_species_pairs_", date, ".RDS", sep = ""))
 
 # clean up 
 rm(sp_pairs, jobs_final, date)

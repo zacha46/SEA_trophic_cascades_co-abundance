@@ -94,9 +94,9 @@ if(grepl("SUB-Panthera_tigris|SUB-Panthera_pardus|SUB-Cuon_alpinus||SUB-Neofelis
 # Set truncation bounds for species interaction parameter
 if (interaction_type == "top-down") {
   a5_lower <- -3   # -3 is smallest it can be
-  a5_upper <- 0    # cant be above zero
+  a5_upper <- .1    # cant be above zero, but needs wiggle room to be non-significant!
 } else if (interaction_type == "bottom-up") {
-  a5_lower <- 0    # cant be below zero
+  a5_lower <- -.1    # cant be below zero, but needs wiggle room to be non-significant!
   a5_upper <- 3    # 3 is largest it can be
 } else {
   stop("interaction_type must be either 'top-down' or 'bottom-up'")

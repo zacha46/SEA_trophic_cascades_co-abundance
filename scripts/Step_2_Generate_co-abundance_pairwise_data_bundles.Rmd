@@ -137,13 +137,14 @@ hist(res$max_count, breaks = 100) # big drop after 50
 hist(res$max_count[res$max_count<50], breaks = 100) # not much after 20
 
 # which species
-sort(res$species[res$max_count > 20]) # lots of group living species, no predators except dhole (makes sense), 18 sp
+sort(res$species[res$max_count > 10]) # 24 species! no predators except dhole (makes sense)
+sort(res$species[res$max_count > 20]) # 18 species, lots of group living species, no predators except dhole (makes sense)
 sort(res$species[res$max_count > 25]) # 13 species
 sort(res$species[res$max_count > 30]) # 11 species
 
-## set the maximum to 25 
-cap_max = 25
-cap_sp = sort(res$species[res$max_count > 25])
+## set the maximum to 10
+cap_max = 10
+cap_sp = sort(res$species[res$max_count > cap_max])
 
 ## loop thru each UMF 
 for(i in 1:length(umfs)){

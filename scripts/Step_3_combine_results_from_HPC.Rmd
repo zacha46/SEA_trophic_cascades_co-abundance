@@ -111,7 +111,7 @@ scale = "5km"
 
 ## Specify the specific iteration of tests were interested in
 # options are "Jan_2024", "Sep_2024" "Oct2024", "Dec2024", and "June_2025"
-time = "June_2025"
+time = "June_2025_v2"
 
 # Subset for the MCMC settings were interested in 
 files = files[grepl(setting, files)]

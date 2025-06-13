@@ -142,8 +142,8 @@ sort(res$species[res$max_count > 20]) # 18 species, lots of group living species
 sort(res$species[res$max_count > 25]) # 13 species
 sort(res$species[res$max_count > 30]) # 11 species
 
-## set the maximum to 10
-cap_max = 10
+## set the maximum to 7
+cap_max = 7 #revert to 2 for testing if 7 is shit! 
 cap_sp = sort(res$species[res$max_count > cap_max])
 
 ## loop thru each UMF 
@@ -151,6 +151,8 @@ for(i in 1:length(umfs)){
   # grab a umf and the dh matrix 
   u = umfs[[i]]
   y = u$y
+  # Convert all columns except SU to numeric
+  y[ , -which(names(y) == "SU")] <- lapply(y[ , -which(names(y) == "SU")], as.numeric)
   # Apply the transformation only to numeric columns
   y[ , sapply(y, is.numeric)] <- lapply(y[ , sapply(y, is.numeric)], function(col) {
     col[col > cap_max] <- cap_max
@@ -804,8 +806,8 @@ date = paste(year,month,day, sep = "")
 rm(day,month,year)
 
 ## specify where the data will be saved
-# wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step2_output_CoA_bundles/"
-wd = paste(getwd(), "/data_CoA_bundles/", sep = "")
+wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step2_output_CoA_bundles/"
+# wd = paste(getwd(), "/data_CoA_bundles/", sep = "")
 
 
 # Save data per preference AND GB requirements!

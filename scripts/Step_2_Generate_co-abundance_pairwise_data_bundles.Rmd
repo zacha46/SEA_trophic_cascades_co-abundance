@@ -796,7 +796,7 @@ Now that all species pairs are established, the data is properly formatted, and 
 
 Alternatively, I could save the list as a single object rather than splitting it up. 
 
-```{r save bundled data!, echo=FALSE}
+```{r save bundled data!}
 
 ## grab today's date
 day<-str_sub(Sys.Date(),-2)
@@ -851,10 +851,10 @@ saveRDS(save, (paste(wd, "/Bundled_data_for_Bayes_co-abundance_mods_community_50
 
 
 ### However, if you are just going for testing (MIDDLE settings) with preferred models, 
-## we can save all preferred models as one list. 
-sp_pairs = names(bdata_list)[names(bdata_list) %in% jobs_final$Species_Pair[jobs_final$preference == "preferred"]]
-save = bdata_list[names(bdata_list) %in% sp_pairs]
-saveRDS(save, paste(wd, "Bundled_data_for_Bayes_co-abundance_mods_preferred_", length(save), "_species_pairs_", date, ".RDS", sep = ""))
+# ## we can save all preferred models as one list. 
+# sp_pairs = names(bdata_list)[names(bdata_list) %in% jobs_final$Species_Pair[jobs_final$preference == "preferred"]]
+# save = bdata_list[names(bdata_list) %in% sp_pairs]
+# saveRDS(save, paste(wd, "Bundled_data_for_Bayes_co-abundance_mods_preferred_", length(save), "_species_pairs_", date, ".RDS", sep = ""))
 
 # clean up 
 rm(sp_pairs, jobs_final, date)
@@ -883,7 +883,9 @@ This approach builds towards the top of the **'ladder of causation'** proposed b
 
 # change wd first
 wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step3_output_combined_results/"
-comm_sp = readRDS(paste(wd, "supported_community_31_species_pairs_vector_for_counterfactual_testing_20250124.csv", sep = ""))
+# comm_sp = readRDS(paste(wd, "supported_community_31_species_pairs_vector_for_counterfactual_testing_20250124.csv", sep = ""))
+comm_sp = as.vector("") # no community species during testing. 
+
 ```
 
 I will be running several counter-factual tests from the **64 preferred predator-prey models**, and the `r length(comm_sp)` supported results from the broader community, to examine the causal forces driving observed relationships. The tests include:

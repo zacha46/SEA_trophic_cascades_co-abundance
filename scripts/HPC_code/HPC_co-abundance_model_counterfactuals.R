@@ -33,20 +33,19 @@ setting = Sys.getenv("SETTING")  # MCMC setting
 #### Also read in counterfactual settings! 
 counter = Sys.getenv("COUNTER")
 
-
 #### List all possible bundled data files 
 files = list.files("data/bundled_data")[grepl("Bundled_data", list.files("data/bundled_data/"))]
 
 # #for local testing
-# files = list.files("data_GitHub_CoA_bundles/counterfactual_testing/")[grepl("Bundled_data", list.files("data_GitHub_CoA_bundles/counterfactual_testing/"))]
-
-# ## Subset files for proper pref setting
-# files = files[grepl(pref, files)]
-# ## and for proper GB setting
-# f = files[grepl(gb, files)]
+# setwd("/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step2_output_CoA_bundles/")
+# files = list.files()[grepl("Bundled_data", list.files())]
 
 ## Subset files for proper counterfactual test 
 f = files[grepl(counter, files)]
+
+### Import the formatted data
+dat = readRDS(paste("data/bundled_data/", f ,sep = ""))
+
 
 ### Import the formatted data
 dat = readRDS(paste("data/bundled_data/", f ,sep = ""))

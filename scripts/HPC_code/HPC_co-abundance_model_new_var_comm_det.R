@@ -10,7 +10,7 @@
 ## Will no longer generate prediction plots or monitor site-level abundance
 # in an effort to save RAM and complete LONG settings. 
 
-## Submitted to HPC on January 3rd, 2024
+## Submitted to HPC on June 16th, 2025
 # Zachary Amir, z.amir@uq.edu.au
 
 ####### Set up #####
@@ -27,32 +27,31 @@ slurm = as.numeric(slurm) #imports as character var, not numeric
 
 #### Read external values from SLURM into R
 setting = Sys.getenv("SETTING")  # MCMC setting
-# pref = Sys.getenv("PREF")        # preferred prey models or not
-# gb = Sys.getenv("GB")            # RAM
-
-#### Also read in counterfactual settings! 
-# counter = Sys.getenv("COUNTER")
+pref = Sys.getenv("PREF")        # preferred prey models or not
+gb = Sys.getenv("GB")            # RAM
 
 
 #### List all possible bundled data files 
 files = list.files("data/bundled_data")[grepl("Bundled_data", list.files("data/bundled_data/"))]
 
 # #for local testing
-# files = list.files("counterfactual_testing/")[grepl("Bundled_data", list.files("counterfactual_testing/"))]
-
-# ## Subset files for proper pref setting
-# files = files[grepl(pref, files)]
-# ## and for proper GB setting
-# f = files[grepl(gb, files)]
+# setwd("/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step2_output_CoA_bundles/")
+# files = list.files()[grepl("Bundled_data", list.files())]
 
 ## Subset files for NOT counterfactual test 
-f = files[!grepl("counterfactual", files)]
+files = files[!grepl("counterfactual", files)]
+
+## Subset files for proper pref setting
+files = files[grepl(pref, files)]
+## and for proper GB setting
+f = files[grepl(gb, files)]
+
 
 ### Import the formatted data
 dat = readRDS(paste("data/bundled_data/", f ,sep = ""))
 
 # #for local testing
-# dat = readRDS(paste("counterfactual_testing/", f ,sep = ""))
+# dat = readRDS(f)
 
 
 

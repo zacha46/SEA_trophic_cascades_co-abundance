@@ -24,11 +24,17 @@ options(mc.cores = 3)
 #### Read Job Array index value into R
 slurm = Sys.getenv("SLURM_ARRAY_TASK_ID")
 slurm = as.numeric(slurm) #imports as character var, not numeric
+# for local testing
+# slurm = 4 # 7
 
 #### Read external values from SLURM into R
 setting = Sys.getenv("SETTING")  # MCMC setting
+# local testing
+# setting = "LOCAL_TEST"
 pref = Sys.getenv("PREF")        # preferred prey models or not
+# pref = "preferred"
 gb = Sys.getenv("GB")            # RAM
+# gb = "250GB"
 
 
 #### List all possible bundled data files 
@@ -54,29 +60,28 @@ dat = readRDS(paste("data/bundled_data/", f ,sep = ""))
 # dat = readRDS(f)
 
 
-
 ## Thin to a single species pair
 bdata = dat[[slurm]]
 
 ## and save the name of the species pair 
 n = names(dat)[slurm]
 
-# ### Verify that this species pair at this setting has not already been completed-
-# # First, create file name that mimics results to check if already present
-# res =  paste(setting, "_co-abundance_coefficents_", n, sep = "")
-# 
-# # Second, list all completed results
-# res_search = list.files("results/bundled_data/coefficent_dataframes/")
-# 
-# # If the newly constructed file name matches ANY values already present in results,
-# if(any(grepl(res, res_search))){
-# 
-#   ## Print a message stating so
-#   print(paste("The species pair:", n, "run with MCMC settings:", setting, "is already present in the results folder. This R script is terminating now."))
-# 
-#   ## and terminate the R script fully
-#   stop("The script was terminated.")
-# }
+### Verify that this species pair at this setting has not already been completed-
+# First, create file name that mimics results to check if already present
+res =  paste(setting, "_co-abundance_coefficents_", n, sep = "")
+
+# Second, list all completed results
+res_search = list.files("results/coefficent_dataframes/")
+
+# If the newly constructed file name matches ANY values already present in results,
+if(any(grepl(res, res_search))){
+
+  ## Print a message stating so
+  print(paste("The species pair:", n, "run with MCMC settings:", setting, "is already present in the results folder. This R script is terminating now."))
+
+  ## and terminate the R script fully
+  stop("The script was terminated.")
+}
 
 ## matricies saved as char but need to be numeric 
 bdata$y.dom = apply(bdata$y.dom, 2, as.numeric)
@@ -324,6 +329,9 @@ inits = function() {
 # MCMC settings, based on assignment above
 ## Want burn-in to be ~20% of iterations and then thin = (ni - nb) / ideal n.eff (per chain), ideally 30000 in the long one. 
 ### Assess n.eff via (ni - nb)/nt * nc 
+if(setting == "LOCAL_TEST"){
+  ni <- 200;  nt <- 10; nb <- 60; nc <- 2; na = NULL      # test on local computer quickly
+}
 if(setting == "SHORT"){
   ni <- 3000;  nt <- 5; nb <- 60; nc <- 3; na = NULL      #quick test to make sure code works, 2.5 hr per mod
 }
@@ -419,150 +427,42 @@ day<-substr(Sys.Date(),9, 10)
 month<-substr(Sys.Date(),6,7)
 year<-substr(Sys.Date(),1,4)
 
-path = paste(paste(paste(paste("results/coefficent_dataframes/", slurm, "_", setting, "_", counter, "_co-abundance_coefficents_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
+path = paste(paste(paste(paste("results/coefficent_dataframes/", slurm, "_", setting, "_", "_co-abundance_coefficents_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
 write.csv(s, path, row.names = F)
 
 
 ## Give us an update please! 
 print(paste("Finished generating coefficent dataframe for: ", n, " at ", Sys.time(),
-            ". Beginning PPC dataframes now.", sep = ""))
+            ". Beginning PPC dataframe now.", sep = ""))
 
-
-# ####### Generate dataframe for prediction plots ######
+####### Generate dataframe for PPC plots ########
 # 
-# ## grab a fresh version of bdata that hasnt been transformed to match JAGS format
-# bdata = dat[[slurm]]
+# # Data Prep for Plot
+# ppc.dat = data.frame("sub.sim" = mod$sims.list$fit.rep.sub,
+#                      "sub.real" = mod$sims.list$fit.sub,
+#                      "dom.sim" = mod$sims.list$fit.rep.dom,
+#                      "dom.real" = mod$sims.list$fit.dom)
 # 
-# ## We will need the metadata here to grab accurate landscape ID's 
-# covars = read.csv(paste("data/ZDA_UMF/", 
-#                       list.files("data/ZDA_UMF/")[grepl("clean_metadata", list.files("data/ZDA_UMF/"))],
-#                       sep = ""))
+# ## Add a label to color the dots
+# ppc.dat$sub.label[mod$sims.list$fit.rep.sub > mod$sims.list$fit.sub]= "Above"
+# ppc.dat$sub.label[mod$sims.list$fit.rep.sub < mod$sims.list$fit.sub]= "Below"
 # 
-# ## Thin covars to match sampling units in species matrixs
-# covars = covars[covars$cell_id_3km %in% rownames(bdata$y.dom),]
+# ppc.dat$dom.label[mod$sims.list$fit.rep.dom > mod$sims.list$fit.dom]= "Above"
+# ppc.dat$dom.label[mod$sims.list$fit.rep.dom < mod$sims.list$fit.dom]= "Below"
 # 
-# ## First we extract estimated abundance of both species per site 
-# ## Then we predict prey abundance as a function of predator abundance
+# ## dont forget to add the species pair! 
+# ppc.dat$Species_Pair = n
 # 
-# # Create empty df to fill in estimates abundance of both species
-# est.dat = data.frame(matrix(NA, nrow = 0, ncol = 9))
-# names(est.dat) = c("Sub_abundance", "Dom_abundance", 
-#                    "lower_sub", "upper_sub", 
-#                    "lower_dom", "upper_dom",
-#                    "Sampling_Unit", "Landscape", 
-#                    "Species_Pair")
-# # Then fill it in!
-# est.dat[1:length(colMeans(mod$sims.list$N.sub)), 1] = colMeans(mod$sims.list$N.sub)
-# est.dat[1:length(colMeans(mod$sims.list$N.dom)), 2] = colMeans(mod$sims.list$N.dom)
-# est.dat[1:length(colMeans(mod$sims.list$N.sub)), 3] = apply(mod$sims.list$N.sub, 2, quantile, probs = 0.025)
-# est.dat[1:length(colMeans(mod$sims.list$N.sub)), 4] = apply(mod$sims.list$N.sub, 2, quantile, probs = 0.975)
-# est.dat[1:length(colMeans(mod$sims.list$N.dom)), 5] = apply(mod$sims.list$N.dom, 2, quantile, probs = 0.025)
-# est.dat[1:length(colMeans(mod$sims.list$N.dom)), 6] = apply(mod$sims.list$N.dom, 2, quantile, probs = 0.975)
-# est.dat[1:length(colMeans(mod$sims.list$N.sub)), 7] = covars$cell_id_3km
-# est.dat[1:length(colMeans(mod$sims.list$N.sub)), 8] = covars$Landscape
-# est.dat[1:length(colMeans(mod$sims.list$N.sub)), 9] = n
-# 
-# 
-# #### Prepare covariates included in BUGS model to make predictions
-# # Extract covariates from data bundle 
-# flii = bdata$flii
-# hfp = bdata$hfp
-# elev = bdata$elev
-# hunt = bdata$hunt
-# 
-# # extract the dominant species abundance from the model and vary it across the observed range
-# int = colMeans(mod$sims.list$N.dom)
-# int = seq(from = min(int), to = max(int), length.out = length(colMeans(mod$sims.list$N.dom))) 
-# # Important to keep the length.out the same at est.dat to merge together later! 
-# 
-# # Extract average overall landscape random effect
-# # for the subordinate species  across all landscapes
-# land = mod$sims.list$a6 # all RE values for each simulation of MCMC
-# land = colMeans(land) # average RE value per landscape
-# 
-# # do the same for year
-# yr = mod$sims.list$a8
-# yr = colMeans(yr)
-# 
-# #Create empty df to fill predictions per row
-# pred.dat = matrix(NA, nrow = length(int), ncol = 7)
-# 
-# for(l in 1:length(int)){ 
-#   
-#   ## Species interaction prediction
-#   p = mod$sims.list$a0[,1] +             #Let abundance intercept vary
-#     mod$sims.list$a1[,1] * mean(flii) +  #hold FLII constant 
-#     mod$sims.list$a2[,1] * mean(hfp) +   #hold HFP constant
-#     mod$sims.list$a3[,1] * mean(elev) +  #hold elev constant
-#     mod$sims.list$a4[,1] * mean(hunt) +  #hold hunting constant
-#     mod$sims.list$a5 * int[l] +          #vary predator abundance
-#     land + yr                            #hold REs constant
-#   
-#   ## Back-transform from Poisson distribution
-#   p = exp(p)
-#   
-#   ## Fill in the dataframe
-#   pred.dat[l,1] = mean(p) #mean predicted abundance
-#   pred.dat[l,2] = quantile(p, 0.025) # lower CI
-#   pred.dat[l,3] = quantile(p, 0.975) # upper CI
-#   pred.dat[l,4] = int[l] # var (Already back-transformed? --> yes!)
-#   pred.dat[l,5] = "Sp_Interaction" #var name
-#   pred.dat[l,6] = "Subordinate" #Dominant vs Subordinate Abundance Identifier
-#   pred.dat[l,7] = n #species pair
-#   
-# }
-# ## Will get warnings about multiplying different length objects, its ok. 
-# 
-# # Convert to dataframe
-# pred.dat = as.data.frame(pred.dat)
-# names(pred.dat) = c("Predicted.N", "lower", "upper", "var", 
-#                     "var.name", "Position", "Species_Pair") #names need to match before rbinding
-# # Ensure numbers are numeric
-# pred.dat[,1:4] = lapply(pred.dat[,1:4], as.numeric)
-# 
-# ### Save these two data frames 
+# #### Save it! 
 # day<-substr(Sys.Date(),9, 10)
 # month<-substr(Sys.Date(),6,7)
 # year<-substr(Sys.Date(),1,4)
 # 
-# path = paste(paste(paste(paste("results/prediction_dataframes/", slurm, "_", setting, "_predicted_abundance_plotdata_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
-# write.csv(pred.dat, path)
+# path = paste(paste(paste(paste("results/PPC_dataframes/", slurm, "_", setting, "_PPC_plotdata_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
+# write.csv(ppc.dat, path)
 # 
-# path = paste(paste(paste(paste("results/prediction_dataframes/", slurm, "_", setting, "_estimated_abundance_per_SU_plotdata_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
-# write.csv(est.dat, path)
-# 
-# print(paste("Finished generating prediction dataframes for: ", n, " at ", Sys.time(),
-#             ". Beginning PPC dataframes now.", sep = ""))
-# 
-# 
-####### Generate dataframe for PPC plots ########
-
-# Data Prep for Plot
-ppc.dat = data.frame("sub.sim" = mod$sims.list$fit.rep.sub,
-                     "sub.real" = mod$sims.list$fit.sub,
-                     "dom.sim" = mod$sims.list$fit.rep.dom,
-                     "dom.real" = mod$sims.list$fit.dom)
-
-## Add a label to color the dots
-ppc.dat$sub.label[mod$sims.list$fit.rep.sub > mod$sims.list$fit.sub]= "Above"
-ppc.dat$sub.label[mod$sims.list$fit.rep.sub < mod$sims.list$fit.sub]= "Below"
-
-ppc.dat$dom.label[mod$sims.list$fit.rep.dom > mod$sims.list$fit.dom]= "Above"
-ppc.dat$dom.label[mod$sims.list$fit.rep.dom < mod$sims.list$fit.dom]= "Below"
-
-## dont forget to add the species pair! 
-ppc.dat$Species_Pair = n
-
-#### Save it! 
-day<-substr(Sys.Date(),9, 10)
-month<-substr(Sys.Date(),6,7)
-year<-substr(Sys.Date(),1,4)
-
-path = paste(paste(paste(paste("results/PPC_dataframes/", slurm, "_", setting, "_PPC_plotdata_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
-write.csv(ppc.dat, path)
-
-print(paste("Finished generating PPC plotdata dataframe for: ", n, " at ", Sys.time(),
-            ". Beginning PPC values dataframe now.", sep = ""))
+# print(paste("Finished generating PPC plotdata dataframe for: ", n, " at ", Sys.time(),
+#             ". Beginning PPC values dataframe now.", sep = ""))
 
 
 ##### Generate dataframe w/ only BPV and C-hat values
@@ -570,8 +470,8 @@ print(paste("Finished generating PPC plotdata dataframe for: ", n, " at ", Sys.t
 ## Create a dataframe to store results
 da = data.frame(matrix(NA, nrow = 0, ncol = 11))
 names(da) = c("Interaction_Estimate", "SD", "lower", "upper", "Rhat",
-               "Significance", "BPV.dom", "BPV.sub", "Chat.dom", 
-               "Chat.sub", "Species_Pair")
+              "Significance", "BPV.dom", "BPV.sub", "Chat.dom", 
+              "Chat.sub", "Species_Pair")
 
 # Extract posterior mean values and Rhat
 a = data.frame(mod$summary)
@@ -605,11 +505,119 @@ day<-substr(Sys.Date(),9, 10)
 month<-substr(Sys.Date(),6,7)
 year<-substr(Sys.Date(),1,4)
 
-path = paste(paste(paste(paste("results/PPC_dataframes/", slurm, "_", setting, "_", counter, "_BPV_and_Chat_values_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
+path = paste(paste(paste(paste("results/PPC_dataframes/", slurm, "_", setting, "_BPV_and_Chat_values_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
 write.csv(da, path)
 
 print(paste("Finished generating PPC plotdata dataframe for: ", n, " at ", Sys.time(),
-            ". All dataframe extractions are now complete.", sep = ""))
+            ". Beginning prediction dataframe extractions now.", sep = ""))
+
+####### Generate dataframe for prediction plots ######
+
+## grab a fresh version of bdata that hasnt been transformed to match JAGS format
+bdata = dat[[slurm]]
+
+## We will need the metadata here to grab accurate landscape ID's
+covars = read.csv(paste("data/UMF/",
+                      list.files("data/UMF/")[grepl("clean_metadata", list.files("data/UMF/"))],
+                      sep = ""))
+
+## Thin covars to match sampling units in species matrixs
+covars = covars[covars$cell_id %in% rownames(bdata$y.dom),]
+
+## First we extract estimated abundance of both species per site
+## Then we predict prey abundance as a function of predator abundance
+
+# Create empty df to fill in estimates abundance of both species
+est.dat = data.frame(matrix(NA, nrow = 0, ncol = 9))
+names(est.dat) = c("Sub_abundance", "Dom_abundance",
+                   "lower_sub", "upper_sub",
+                   "lower_dom", "upper_dom",
+                   "Sampling_Unit", "Landscape",
+                   "Species_Pair")
+# Then fill it in!
+est.dat[1:length(colMeans(mod$sims.list$N.sub)), 1] = colMeans(mod$sims.list$N.sub)
+est.dat[1:length(colMeans(mod$sims.list$N.dom)), 2] = colMeans(mod$sims.list$N.dom)
+est.dat[1:length(colMeans(mod$sims.list$N.sub)), 3] = apply(mod$sims.list$N.sub, 2, quantile, probs = 0.025)
+est.dat[1:length(colMeans(mod$sims.list$N.sub)), 4] = apply(mod$sims.list$N.sub, 2, quantile, probs = 0.975)
+est.dat[1:length(colMeans(mod$sims.list$N.dom)), 5] = apply(mod$sims.list$N.dom, 2, quantile, probs = 0.025)
+est.dat[1:length(colMeans(mod$sims.list$N.dom)), 6] = apply(mod$sims.list$N.dom, 2, quantile, probs = 0.975)
+est.dat[1:length(colMeans(mod$sims.list$N.sub)), 7] = covars$cell_id
+est.dat[1:length(colMeans(mod$sims.list$N.sub)), 8] = covars$Landscape
+est.dat[1:length(colMeans(mod$sims.list$N.sub)), 9] = n
+
+
+#### Prepare covariates included in BUGS model to make predictions
+# Extract covariates from data bundle
+flii = bdata$flii
+hfp = bdata$hfp
+elev = bdata$elev
+comm = bdata$comm_det
+
+# extract the dominant species abundance from the model and vary it across the observed range
+int = colMeans(mod$sims.list$N.dom)
+int = seq(from = min(int), to = max(int), length.out = length(colMeans(mod$sims.list$N.dom)))
+# Important to keep the length.out the same at est.dat to merge together later!
+
+# Extract average overall landscape random effect
+# for the subordinate species  across all landscapes
+land = mod$sims.list$a6 # all RE values for each simulation of MCMC
+land = colMeans(land) # average RE value per landscape
+
+# do the same for year
+yr = mod$sims.list$a8
+yr = colMeans(yr)
+
+#Create empty df to fill predictions per row
+pred.dat = matrix(NA, nrow = length(int), ncol = 7)
+
+for(l in 1:length(int)){
+
+  ## Species interaction prediction
+  p = mod$sims.list$a0[,1] +             #Let abundance intercept vary
+    mod$sims.list$a1[,1] * mean(flii) +  #hold FLII constant
+    mod$sims.list$a2[,1] * mean(hfp) +   #hold HFP constant
+    mod$sims.list$a3[,1] * mean(elev) +  #hold elev constant
+    mod$sims.list$a4[,1] * mean(comm) +  #hold comm detections constant
+    mod$sims.list$a5 * int[l] +          #vary predator abundance
+    land + yr                            #hold REs constant
+
+  ## Back-transform from Poisson distribution
+  p = exp(p)
+
+  ## Fill in the dataframe
+  pred.dat[l,1] = mean(p) #mean predicted abundance
+  pred.dat[l,2] = quantile(p, 0.025) # lower CI
+  pred.dat[l,3] = quantile(p, 0.975) # upper CI
+  pred.dat[l,4] = int[l] # var (Already back-transformed? --> yes!)
+  pred.dat[l,5] = "Sp_Interaction" #var name
+  pred.dat[l,6] = "Subordinate" #Dominant vs Subordinate Abundance Identifier
+  pred.dat[l,7] = n #species pair
+
+}
+## Will get warnings about multiplying different length objects, its ok.
+
+# Convert to dataframe
+pred.dat = as.data.frame(pred.dat)
+names(pred.dat) = c("Predicted.N", "lower", "upper", "var",
+                    "var.name", "Position", "Species_Pair") #names need to match before rbinding
+# Ensure numbers are numeric
+pred.dat[,1:4] = lapply(pred.dat[,1:4], as.numeric)
+
+### Save these two data frames
+day<-substr(Sys.Date(),9, 10)
+month<-substr(Sys.Date(),6,7)
+year<-substr(Sys.Date(),1,4)
+
+path = paste(paste(paste(paste("results/prediction_dataframes/", slurm, "_", setting, "_predicted_abundance_plotdata_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
+write.csv(pred.dat, path)
+
+path = paste(paste(paste(paste("results/prediction_dataframes/", slurm, "_", setting, "_estimated_abundance_per_SU_plotdata_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
+write.csv(est.dat, path)
+
+print(paste("Finished generating prediction dataframes for: ", n, " at ", Sys.time(),
+            ". All dataframes have been extracted and saved from this model. Script is terminating now.", sep = ""))
+
+
 
 
 

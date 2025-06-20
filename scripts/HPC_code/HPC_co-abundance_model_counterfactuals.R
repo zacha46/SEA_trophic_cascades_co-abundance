@@ -46,10 +46,6 @@ f = files[grepl(counter, files)]
 ### Import the formatted data
 dat = readRDS(paste("data/bundled_data/", f ,sep = ""))
 
-
-### Import the formatted data
-dat = readRDS(paste("data/bundled_data/", f ,sep = ""))
-
 # #for local testing
 # dat = readRDS(paste("data_GitHub_CoA_bundles/counterfactual_testing/", f ,sep = ""))
 

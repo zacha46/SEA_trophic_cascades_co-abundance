@@ -324,13 +324,13 @@ inits = function() {
 ## Want burn-in to be ~20% of iterations and then thin = (ni - nb) / ideal n.eff (per chain), ideally 30000 in the long one. 
 ### Assess n.eff via (ni - nb)/nt * nc 
 if(setting == "SHORT"){
-  ni <- 3000;  nt <- 5; nb <- 60; nc <- 3; na = NULL      #quick test to make sure code works, 2.5 hr per mod
+  ni <- 3000;  nt <- 5; nb <- 60; nc <- 3; na = 1000      #quick test to make sure code works, 2.5 hr per mod
 }
 if(setting == "MIDDLE"){
-  ni = 50000;  nt = 20; nb = 10000 ; nc <- 3; na = NULL   #examine parameter values --> use this for prelim testing. 36-49 hrs per mod
+  ni = 75000;  nt = 18; nb = 15000 ; nc <- 3; na = 8000    #examine parameter values --> use this for prelim testing. 36-49 hrs per mod
 }
 if(setting == "LONG"){
-  ni = 250000;  nt = 20; nb = 50000 ; nc <- 3; na = NULL  #publication quality run --> ~160 hours per mod, all finish in < 2 weeks! 
+  ni = 250000;  nt = 20; nb = 50000 ; nc <- 3; na = 10000  #publication quality run --> ~160 hours per mod, all finish in < 2 weeks! 
 }
 
 # take the start time 

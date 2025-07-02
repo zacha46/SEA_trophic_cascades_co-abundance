@@ -6,11 +6,7 @@
 ## But because models are too large to save ALL of them, 
 # this script will extract only the relevant dataframes. 
 
-### September 2023 Update-
-## Will no longer generate prediction plots or monitor site-level abundance
-# in an effort to save RAM and complete LONG settings. 
-
-## Submitted to HPC on June 16th, 2025
+## Submitted to HPC on July 2nd, 2025
 # Zachary Amir, z.amir@uq.edu.au
 
 ####### Set up #####
@@ -97,18 +93,21 @@ if(grepl("SUB-Panthera_tigris|SUB-Panthera_pardus|SUB-Cuon_alpinus||SUB-Neofelis
 
 # Set truncation bounds for species interaction parameter
 if (interaction_type == "top-down") {
-  a5_lower <- -3   # -3 is smallest it can be
-  a5_upper <- .1    # cant be above zero, but needs wiggle room to be non-significant!
+  # a5_lower <- -3   # -3 is smallest it can be
+  # a5_upper <- .1    # cant be above zero, but needs wiggle room to be non-significant!
+  a5_mean = -0.5
 } else if (interaction_type == "bottom-up") {
-  a5_lower <- -.1    # cant be below zero, but needs wiggle room to be non-significant!
-  a5_upper <- 3    # 3 is largest it can be
+  # a5_lower <- -.1    # cant be below zero, but needs wiggle room to be non-significant!
+  # a5_upper <- 3    # 3 is largest it can be
+  a5_mean = 0.5
 } else {
   stop("interaction_type must be either 'top-down' or 'bottom-up'")
 }
 
 ## save in bdata
-bdata$a5_lower = a5_lower
-bdata$a5_upper = a5_upper
+# bdata$a5_lower = a5_lower
+# bdata$a5_upper = a5_upper
+bdata$a5_mean = a5_mean
 # rm(a5_upper, a5_lower, interaction_type)
 
 ## if results are not already present, start the models! 
@@ -118,7 +117,7 @@ print(paste("Begining to run co-abundance model for: ", n, " with MCMC settings:
 
 ####### Make the model in BUGS language and run it ####
 
-cat(file = "ZDA_Co_Abundance_Model_final_20250603.jags", 
+cat(file = "ZDA_Co_Abundance_Model_final_20250702.jags", 
     
     "model{
 
@@ -153,8 +152,8 @@ cat(file = "ZDA_Co_Abundance_Model_final_20250603.jags",
       
     }
     
-  ## Species interaction, truncated based on top-down or bottom-up
-  a5 ~ dnorm(0, 0.01) T(a5_lower, a5_upper)
+  ## Species interaction, centered around positive or negative .5 based on top-down or bottom-up
+  a5 ~ dnorm(a5_mean, 1)
     
   # Landscape RE hyper prior --> define it's variance
   sigma.a6 ~ dunif(0,5)
@@ -305,8 +304,11 @@ params = c('a0', 'a1', 'a2', 'a3', 'a4', 'a5',    # Abundance parameters
            # "N.dom", "N.sub"                     # NOT monitoring abundance per site to save RAM on LONG mods. 
            )                         
 
-# Generate valid initial value for truncated version of a5
-init_a5 <- runif(1, min = a5_lower + 0.01, max = a5_upper - 0.01) # add small buffer (0.01) to avoid edges of truncated range
+# # Generate valid initial value for truncated version of a5
+# init_a5 <- runif(1, min = a5_lower + 0.01, max = a5_upper - 0.01) # add small buffer (0.01) to avoid edges of truncated range
+
+# Generate valid inital value for directional prior a5
+init_a5 <- rnorm(1, mean = a5_mean, sd = .5)
 
 # Specify the initial values
 inits = function() {
@@ -346,7 +348,7 @@ if(setting == "LONG"){
 start = Sys.time()
 
 ### Run the model 
-mod = jags(bdata, inits, params, "ZDA_Co_Abundance_Model_final_20250603.jags",
+mod = jags(bdata, inits, params, "ZDA_Co_Abundance_Model_final_20250702.jags",
            ## MCMC settings
            n.chains = nc, n.adapt = na, n.thin = nt, 
            n.iter = ni, n.burnin = nb, parallel = T)

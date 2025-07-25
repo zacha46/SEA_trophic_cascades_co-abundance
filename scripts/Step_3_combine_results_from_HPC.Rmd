@@ -609,7 +609,7 @@ table(preform$OD_valid_conserv[!is.na(preform$Interaction_Estimate)]) # only 2 f
 
 ## add a column denoting if the species interaction parameter converged 
 preform$parameter_valid = "No"
-preform$parameter_valid[preform$Rhat >= 0.99 & preform$Rhat <= 1.2] = "Yes"
+preform$parameter_valid[preform$Rhat >= 0.99 & preform$Rhat <= 1.1] = "Yes"
 table(preform$parameter_valid[!is.na(preform$Interaction_Estimate)]) # majority is valid!
 
 ## Add the direction of the relationship

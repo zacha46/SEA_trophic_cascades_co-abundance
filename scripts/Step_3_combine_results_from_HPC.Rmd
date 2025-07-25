@@ -113,7 +113,7 @@ scale = "5km"
 
 ## Specify the specific iteration of tests were interested in
 # options are "Jan_2024", "Sep_2024" "Oct2024", "Dec2024", "June_2025", and "July_2025"
-time = "July_2025"
+time = "Sep_2024"
 
 # Subset for the MCMC settings were interested in 
 files = files[grepl(setting, files)]
@@ -592,10 +592,10 @@ str(preform) # looks good
 str(preform[preform$mod_completion == "uncompleted",]) #same missing ones from before, re-running on HPC now! 
 
 ## Add a column denoting if the BPV values converged based on a wide range to account for many mods 
-# preform$BPV_valid = "No"
-# preform$BPV_valid[preform$BPV.dom >= 0.15 & preform$BPV.dom <= 0.85 &
-#                     preform$BPV.sub >= 0.15 & preform$BPV.sub <= 0.85] = "Yes"
-preform$BPV_valid = "Yes" # for testing, lets ignore Bayes p-value for now. 
+preform$BPV_valid = "No"
+preform$BPV_valid[preform$BPV.dom >= 0.15 & preform$BPV.dom <= 0.85 &
+                    preform$BPV.sub >= 0.15 & preform$BPV.sub <= 0.85] = "Yes"
+# preform$BPV_valid = "Yes" # for testing, lets ignore Bayes p-value for now. 
 table(preform$BPV_valid[!is.na(preform$Interaction_Estimate)]) 
 # majority are valid 
 
@@ -897,8 +897,8 @@ table(preform$dom_species[preform$Rhat > 1.2 &
                             preform$preference == "preferred"]) # mostly CL and leopard, others are equally represented
 
 ## Keep an eye out for underfitting!! Happens when bayes p-value is too small
-summary(preform$BPV.dom[preform$direction == "top-down"]) # max = .3,  mean/median = 0.1
-summary(preform$BPV.sub[preform$direction == "top-down"]) # max = .6, mean/media = 0.2
+summary(preform$BPV.dom[preform$direction == "top-down"]) # max = .39,  mean/median = 0.15
+summary(preform$BPV.sub[preform$direction == "top-down"]) # max = .4, mean/media = 0.16
 summary(preform$BPV.dom[preform$direction == "bottom-up"]) # max = .4,  mean/median = 0.2
 summary(preform$BPV.sub[preform$direction == "bottom-up"]) # max = .4, mean/media = 0.2
 # possibly due to tighgtly constrainted prior SIV parameter. 

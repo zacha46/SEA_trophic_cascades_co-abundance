@@ -17,6 +17,9 @@ library(tidyverse)        ## For basic data wrangling
 library(plyr)             ## For ddply
 library(cowplot)          ## For arranging plots 
 
+## establish preferred plot style, either per "species" or "model"
+plot_type = "species-pairs" # "models"
+
 ```
 
 ```{r Import collated model performance data from step 3}
@@ -35,8 +38,12 @@ files = files[! grepl("counter-factual", files)]
 p_file = files[grepl("preform", files)]
 preform = read.csv(paste(wd, p_file, sep = ""))
 
+## Also import results per species 
+s_file = files[grepl("species-pair", files)]
+preform_sp = read.csv(paste(wd, s_file, sep = ""))
+
 ## keep enviro clean
-rm(p_file, files) 
+rm(p_file, s_file, files) 
 
 ```
 
@@ -44,7 +51,11 @@ rm(p_file, files)
 
 This Rmarkdown file will be used to generate all key plots included in the main and supplementary text of our manuscript. Additional plots will likely be generated as well, but only the key plots will be visualized in this document. 
 
-```{r Prepare plotting data}
+```{r Prepare plotting data per model}
+
+#
+##
+### Start by preparing plot_dat per model 
 
 ## grab top-down mods
 td_plot_dat = preform[grepl("DOM-Large_Carnivore", preform$guild_pair),]
@@ -73,71 +84,70 @@ bu_plot_dat = rbind(bu_plot_dat, a)
 bu_plot_dat = bu_plot_dat[!grepl("DOM-Large_Carnivore", bu_plot_dat$guild_pair),]
 
 ## and combine them
-plot_dat = rbind(td_plot_dat, bu_plot_dat)
+plot_dat_mod = rbind(td_plot_dat, bu_plot_dat)
 rm(td_plot_dat, bu_plot_dat, a)
 
 ### verify all large-carnivore pairings are top-down only
-table(plot_dat$direction[plot_dat$guild_pair == "SUB-Large_Carnivore~DOM-Large_Carnivore"]) # good! 
+table(plot_dat_mod$direction[plot_dat_mod$guild_pair == "SUB-Large_Carnivore~DOM-Large_Carnivore"]) # good! 
 
 ## set order manually b/c order is silly on graph
-plot_dat$rel_species = factor(plot_dat$rel_species, levels = c("Neofelis_genus","Cuon_alpinus",
+plot_dat_mod$rel_species = factor(plot_dat_mod$rel_species, levels = c("Neofelis_genus","Cuon_alpinus",
                                                                "Panthera_pardus","Panthera_tigris",
                                                                  "All_large_carnivores"))
 
 ## create a new column for simple groupings: top-down, bottom-up and unsupported
-plot_dat$support_simple = plot_dat$direction
-plot_dat$support_simple_conserv = plot_dat$direction
+plot_dat_mod$support_simple = plot_dat_mod$direction
+plot_dat_mod$support_simple_conserv = plot_dat_mod$direction
 
 ### edit support_simple to allow for unsupported mods
-plot_dat$support_simple[grepl("Unsupported", plot_dat$support)] = "unsupported"
-table(plot_dat$support_simple)
+plot_dat_mod$support_simple[grepl("Unsupported", plot_dat_mod$support)] = "unsupported"
+table(plot_dat_mod$support_simple)
 
 ### and do the same for conservative values
-plot_dat$support_simple_conserv[grepl("Unsupported", plot_dat$support_conserv)] = "unsupported"
-table(plot_dat$support_simple_conserv)
+plot_dat_mod$support_simple_conserv[grepl("Unsupported", plot_dat_mod$support_conserv)] = "unsupported"
+table(plot_dat_mod$support_simple_conserv)
 
 
-## remove NA values from plot_dat if present --> from non-completed mods
-if(any(is.na(plot_dat$Interaction_Estimate))){
-  
-  plot_dat = plot_dat[! is.na(plot_dat$Interaction_Estimate), ]
-  
+## remove NA values from plot_dat_mod if present --> from non-completed mods
+if(any(is.na(plot_dat_mod$Interaction_Estimate))){
+  plot_dat_mod = plot_dat_mod[! is.na(plot_dat_mod$Interaction_Estimate), ]
 }
 
 ## Check if there are extreme species interaction values (> |2|)
-summary(plot_dat$Interaction_Estimate)  # some large values overall
+summary(plot_dat_mod$Interaction_Estimate)  # some large values overall
 
 ## Check pref models --> main text
-summary(plot_dat$Interaction_Estimate[plot_dat$preference == "preferred"]) # narrow range here, all good! 
+summary(plot_dat_mod$Interaction_Estimate[plot_dat_mod$preference == "preferred"]) # narrow range here, all good! 
 
 
 ## set factors so unsupported is in the back 
-plot_dat$support_simple = factor(plot_dat$support_simple, levels = c("top-down", "bottom-up", "unsupported"))
-plot_dat$support_simple_conserv = factor(plot_dat$support_simple_conserv, levels = c("top-down", "bottom-up", "unsupported"))
+plot_dat_mod$support_simple = factor(plot_dat_mod$support_simple, levels = c("top-down", "bottom-up", "unsupported"))
+plot_dat_mod$support_simple_conserv = factor(plot_dat_mod$support_simple_conserv, levels = c("top-down", "bottom-up", "unsupported"))
 
 
 ## make the support column more informative
-plot_dat$support[plot_dat$support == "Supported" & plot_dat$direction == "top-down"] = "top-down"
-plot_dat$support_conserv[plot_dat$support_conserv == "Supported" & plot_dat$direction == "top-down"] = "top-down"
-plot_dat$support[plot_dat$support == "Supported" & plot_dat$direction == "bottom-up"] = "bottom-up"
-plot_dat$support_conserv[plot_dat$support_conserv == "Supported" & plot_dat$direction == "bottom-up"] = "bottom-up"
+plot_dat_mod$support[plot_dat_mod$support == "Supported" & plot_dat_mod$direction == "top-down"] = "top-down"
+plot_dat_mod$support_conserv[plot_dat_mod$support_conserv == "Supported" & plot_dat_mod$direction == "top-down"] = "top-down"
+plot_dat_mod$support[plot_dat_mod$support == "Supported" & plot_dat_mod$direction == "bottom-up"] = "bottom-up"
+plot_dat_mod$support_conserv[plot_dat_mod$support_conserv == "Supported" & plot_dat_mod$direction == "bottom-up"] = "bottom-up"
 
 ## make letters all lowercase
-plot_dat$support= tolower(plot_dat$support)
-plot_dat$support_conserv = tolower(plot_dat$support_conserv)
+plot_dat_mod$support= tolower(plot_dat_mod$support)
+plot_dat_mod$support_conserv = tolower(plot_dat_mod$support_conserv)
+table(plot_dat_mod$support)
 
 ## and set factor level 
-plot_dat$support = factor(plot_dat$support, levels = c("top-down", "bottom-up", "unsupported_1", "unsupported_2","unsupported_3"))
-plot_dat$support_conserv = factor(plot_dat$support_conserv, levels = c("top-down", "bottom-up", "unsupported_1","unsupported_2","unsupported_3"))
+plot_dat_mod$support = factor(plot_dat_mod$support, levels = c("top-down", "bottom-up", "unsupported_1", "unsupported_2","unsupported_3"))
+plot_dat_mod$support_conserv = factor(plot_dat_mod$support_conserv, levels = c("top-down", "bottom-up", "unsupported_1","unsupported_2","unsupported_3"))
 
-### Verify plot_data has the correct info 
-table(plot_dat$rel_species[plot_dat$direction == "top-down"])
-table(plot_dat$rel_species[plot_dat$direction == "bottom-up"]) # all critters accounted for 
+### Verify plot_dat_moda has the correct info 
+table(plot_dat_mod$rel_species[plot_dat_mod$direction == "top-down"])
+table(plot_dat_mod$rel_species[plot_dat_mod$direction == "bottom-up"]) # all critters accounted for 
 ## double check support
-table(plot_dat$support[plot_dat$direction == "top-down"])
-table(plot_dat$support_conserv[plot_dat$direction == "top-down"])
-table(plot_dat$support[plot_dat$direction == "bottom-up"])
-table(plot_dat$support_conserv[plot_dat$direction == "bottom-up"]) # All good! 
+table(plot_dat_mod$support[plot_dat_mod$direction == "top-down"])
+table(plot_dat_mod$support_conserv[plot_dat_mod$direction == "top-down"])
+table(plot_dat_mod$support[plot_dat_mod$direction == "bottom-up"])
+table(plot_dat_mod$support_conserv[plot_dat_mod$direction == "bottom-up"]) # All good! 
 
 ### set up colors for all values 
 new_colors = c("unsupported_1" = "gray87",
@@ -152,9 +162,127 @@ all_plots = list()
 
 ```
 
+```{r Prepare plotting data per species pair}
+#
+##
+### Repeat the process, but this time for preform_sp 
+
+# convert no_association to unsupported for color scheme to work
+preform_sp$direction[preform_sp$direction == "no_association"] = "unsupported"
+
+## first copy over preform to a new data frame 
+plot_dat_sp = preform_sp
+# and determine the relevant species
+plot_dat_sp$rel_species[grepl("Panthera_tigris", plot_dat_sp$pair_id)] = "Panthera_tigris"
+plot_dat_sp$rel_species[grepl("Panthera_pardus", plot_dat_sp$pair_id)] = "Panthera_pardus"
+plot_dat_sp$rel_species[grepl("Cuon_alpinus", plot_dat_sp$pair_id)] = "Cuon_alpinus"
+plot_dat_sp$rel_species[grepl("Neofelis_genus", plot_dat_sp$pair_id)] = "Neofelis_genus"
+# now make a copy for all 
+a = plot_dat_sp
+a$rel_species = "All_large_carnivores"
+
+## then combine into one 
+plot_dat_sp = rbind(plot_dat_sp, a)
+rm(a)
+
+## set order manually b/c order is silly on graph
+plot_dat_sp$rel_species = factor(plot_dat_sp$rel_species, levels = c("Neofelis_genus","Cuon_alpinus",
+                                                               "Panthera_pardus","Panthera_tigris",
+                                                                 "All_large_carnivores"))
+table(plot_dat_sp$rel_species)
+
+## create a new column for simple groupings: top-down, bottom-up and unsupported
+plot_dat_sp$support_simple = plot_dat_sp$direction
+plot_dat_sp$support_simple_conserv = plot_dat_sp$direction
+
+### edit support_simple to allow for unsupported mods
+plot_dat_sp$support_simple[grepl("Unsupported", plot_dat_sp$support)] = "unsupported"
+table(plot_dat_sp$support_simple)
+
+### and do the same for conservative values
+plot_dat_sp$support_simple_conserv[grepl("Unsupported", plot_dat_sp$support_conserv)] = "unsupported"
+table(plot_dat_sp$support_simple_conserv) # same as above, this is redundant! 
+
+## remove NA values from plot_dat_sp if present --> from non-completed mods
+if(any(is.na(plot_dat_sp$Interaction_Estimate))){
+  plot_dat_sp = plot_dat_sp[! is.na(plot_dat_sp$Interaction_Estimate), ]
+}
+
+## Check if there are extreme species interaction values (> |2|)
+summary(plot_dat_sp$Interaction_Estimate)  # some large values overall
+
+## Check pref models --> main text
+summary(plot_dat_sp$Interaction_Estimate[plot_dat_sp$preference == "preferred"]) # narrow range here, all good! 
+
+## set factors so unsupported is in the back 
+plot_dat_sp$support_simple = factor(plot_dat_sp$support_simple, levels = c("top-down", "bottom-up", "unsupported"))
+plot_dat_sp$support_simple_conserv = factor(plot_dat_sp$support_simple_conserv, levels = c("top-down", "bottom-up", "unsupported"))
+
+
+## make the support column more informative
+plot_dat_sp$support[plot_dat_sp$support == "Supported" & plot_dat_sp$direction == "top-down"] = "top-down"
+#plot_dat_sp$support_conserv[plot_dat_sp$support_conserv == "Supported" & plot_dat_sp$direction == "top-down"] = "top-down"
+plot_dat_sp$support[plot_dat_sp$support == "Supported" & plot_dat_sp$direction == "bottom-up"] = "bottom-up"
+#plot_dat_sp$support_conserv[plot_dat_sp$support_conserv == "Supported" & plot_dat_sp$direction == "bottom-up"] = "bottom-up"
+## Just to make code work, copy supports
+plot_dat_sp$support_conserv = plot_dat_sp$support
+
+## make letters all lowercase
+plot_dat_sp$support= tolower(plot_dat_sp$support)
+plot_dat_sp$support_conserv = tolower(plot_dat_sp$support_conserv)
+
+## and set factor level 
+plot_dat_sp$support = factor(plot_dat_sp$support, levels = c("top-down", "bottom-up", "unsupported"))
+plot_dat_sp$support_conserv = factor(plot_dat_sp$support_conserv, levels = c("top-down", "bottom-up", "unsupported"))
+
+### Verify plot_dat_sp has the correct info 
+table(plot_dat_sp$rel_species[plot_dat_sp$direction == "top-down"])
+table(plot_dat_sp$rel_species[plot_dat_sp$direction == "bottom-up"]) # all critters accounted for 
+## double check support
+table(plot_dat_sp$support[plot_dat_sp$direction == "top-down"])
+table(plot_dat_sp$support_conserv[plot_dat_sp$direction == "top-down"])
+table(plot_dat_sp$support[plot_dat_sp$direction == "bottom-up"])
+table(plot_dat_sp$support_conserv[plot_dat_sp$direction == "bottom-up"]) # All good!
+
+```
+
+```{r Explore histograms per species pair, eval=FALSE}
+## This would be the main plot in figure 1, but reduced to sp-pairs
+## and if this works/looks good, possibly replace the other figs w/ this style 
+
+# make the plot 
+ggplot(plot_dat_sp[plot_dat_sp$preference == "preferred",], aes(x = Interaction_Estimate, fill = direction))+
+  geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1, alpha = 1)+#, position = "dodge")+
+  # theme_minimal()+
+  # theme_test()+
+  theme_classic()+
+  geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
+  scale_fill_manual(values = new_colors) +
+  scale_y_continuous(breaks = seq(0, max(table(preform_sp$direction)), by = 3)) +
+  labs(x = "Species Interaction Value", y = NULL, fill = NULL, color = NULL)+
+  theme(axis.text.x = element_text(size = 16),
+        axis.text.y = element_text(size = 16),
+        axis.text = element_text(color = "black"),
+        text = element_text(family = "Helvetica"))
+## I like it, it looks cleaner! 
+```
+
 ## Histograms 
 
 Histograms are a key tool for visualizing the results from many co-abundance models, by examining the count of different species interaction values (SIV) from different levels of support. Below you will see the key plots generated in this document, following the support criteria defined in step 3. Note that additional plots with more conservative PPC settings (matching those of Amir et al 2022, Ecology & Evolution) will be saved to dropbox but not visualized in this document.  
+
+Importantly, histograms can be generated on a per model (i.e., each species pair has a top-down or bottom-up model), or per species pair (i.e., each pair is either top-down, bottom-up, or unsupported). **The histograms below have been calculated per `r plot_type`.**
+
+```{r Determine if we want plots per model or per species}
+## Make this a conditional statement so we dont have to change the code below! 
+if(plot_type == "species-pairs"){
+  plot_dat = plot_dat_sp
+} 
+
+if(plot_type == "models"){
+  plot_dat = plot_dat_mod
+}
+```
 
 ```{r Visualize conceptual histogram}
 ## This one will be included in the full-page figure the describe results of two competing hypotheses
@@ -329,30 +457,31 @@ rm(community_siv_hist_cons, community_siv_all_large_carns_hist, community_siv_hi
 
 ```{r Visualize preferred SIV histogram}
 
-##### Repeat for preferred prey species too! 
-td_dat_pref = plot_dat[plot_dat$direction == "top-down" &
-                         plot_dat$preference == "preferred",]
-# insepct
-unique(td_dat_pref$rel_species) # all large carns already accounted for in plot dat! 
+# ##### Repeat for preferred prey species too! 
+# td_dat_pref = plot_dat[plot_dat$direction == "top-down" &
+#                          plot_dat$preference == "preferred",]
+# # insepct
+# unique(td_dat_pref$rel_species) # all large carns already accounted for in plot dat! 
+# 
+# ## inspect
+# table(td_dat_pref$support);table(td_dat_pref$support_conserv) # all good! 
+# 
+# 
+# #
+# ##
+# ### Repeat the process for bottom-up 
+# bu_dat_pref = plot_dat[plot_dat$direction == "bottom-up"&
+#                          plot_dat$preference == "preferred",]
+# # insepct
+# unique(bu_dat_pref$rel_species) # all large carns already accounted for in plot dat! 
+# 
+# ## inspect
+# table(bu_dat_pref$support);table(bu_dat_pref$support_conserv) # all good! 
 
-## inspect
-table(td_dat_pref$support);table(td_dat_pref$support_conserv) # all good! 
-
-
-#
-##
-### Repeat the process for bottom-up 
-bu_dat_pref = plot_dat[plot_dat$direction == "bottom-up"&
-                         plot_dat$preference == "preferred",]
-# insepct
-unique(bu_dat_pref$rel_species) # all large carns already accounted for in plot dat! 
-
-## inspect
-table(bu_dat_pref$support);table(bu_dat_pref$support_conserv) # all good! 
 
 ## and combine them
-pref_dat = rbind(td_dat_pref, bu_dat_pref)
-rm(td_dat_pref, bu_dat_pref)
+pref_dat = plot_dat[plot_dat$preference == "preferred",] #rbind(td_dat_pref, bu_dat_pref)
+# rm(td_dat_pref, bu_dat_pref)
 
 ## inspect
 summary(pref_dat$Interaction_Estimate) # small range
@@ -495,7 +624,7 @@ rm(preferred_siv_all_large_carns_hist, preferred_siv_all_large_carns_hist_cons, 
 
 ### determine percentages in each category
 perc_table = ddply(plot_dat, .(rel_species, support_simple), summarize,
-                   num_lvl = length(Species_Pair))
+                   num_lvl = length(Interaction_Estimate))
 # then total number of mods per species
 perc_table$num_total[perc_table$rel_species == "Neofelis_genus"] = 
   sum(perc_table$num_lvl[perc_table$rel_species == "Neofelis_genus"])
@@ -513,11 +642,12 @@ perc_table$percent = round(perc_table$num_lvl / perc_table$num_total * 100, 1)
 perc_table$PPC_setting = "normal"
 ## and the preference type 
 perc_table$preference = "community"
-
+## and the response variable type 
+perc_table$response_var = plot_type
 
 ### repeat for the conservative grouping
 perc_table_cons = ddply(plot_dat, .(rel_species, support_simple_conserv), summarize,
-                   num_lvl = length(Species_Pair))
+                   num_lvl = length(Interaction_Estimate))
 # then total number of mods per species
 perc_table_cons$num_total[perc_table_cons$rel_species == "Neofelis_genus"] = 
   sum(perc_table_cons$num_lvl[perc_table_cons$rel_species == "Neofelis_genus"])
@@ -535,6 +665,8 @@ perc_table_cons$percent = round(perc_table_cons$num_lvl / perc_table_cons$num_to
 perc_table_cons$PPC_setting = "conservative"
 ## and the preference type 
 perc_table_cons$preference = "community"
+## and the response variable type 
+perc_table_cons$response_var = plot_type
 
 ## match col names for easier binding
 names(perc_table)[2] = "support_levels"
@@ -548,7 +680,7 @@ names(perc_table_cons)[2] = "support_levels"
 
 ### determine percentages in each preferred prey category
 pref_perc_table = ddply(pref_dat, .(rel_species, support_simple), summarize,
-                   num_lvl = length(Species_Pair))
+                   num_lvl = length(Interaction_Estimate))
 # then total number of mods per species
 pref_perc_table$num_total[pref_perc_table$rel_species == "Neofelis_genus"] = 
   sum(pref_perc_table$num_lvl[pref_perc_table$rel_species == "Neofelis_genus"])
@@ -566,10 +698,12 @@ pref_perc_table$percent = round(pref_perc_table$num_lvl / pref_perc_table$num_to
 pref_perc_table$PPC_setting = "normal"
 # and the preference
 pref_perc_table$preference = "preferred"
+## and the response variable type 
+pref_perc_table$response_var = plot_type
 
 ### Repeat for conservative groupings
 pref_perc_table_cons = ddply(pref_dat, .(rel_species, support_simple_conserv), summarize,
-                   num_lvl = length(Species_Pair))
+                   num_lvl = length(Interaction_Estimate))
 # then total number of mods per species
 pref_perc_table_cons$num_total[pref_perc_table_cons$rel_species == "Neofelis_genus"] = 
   sum(pref_perc_table_cons$num_lvl[pref_perc_table_cons$rel_species == "Neofelis_genus"])
@@ -587,6 +721,8 @@ pref_perc_table_cons$percent = round(pref_perc_table_cons$num_lvl / pref_perc_ta
 pref_perc_table_cons$PPC_setting = "conservative"
 # and the preference
 pref_perc_table_cons$preference = "preferred"
+## and the response variable type 
+pref_perc_table_cons$response_var = plot_type
 
 ## re-name cols to save
 names(pref_perc_table_cons)[2] = "support_levels"
@@ -596,12 +732,18 @@ names(pref_perc_table)[2] = "support_levels"
 res_table = rbind(pref_perc_table, pref_perc_table_cons, perc_table_cons, perc_table)
 rm(pref_perc_table, pref_perc_table_cons, perc_table_cons, perc_table)
 
-
-
 ```
 
 ```{r Visualize unsupported SIV histogram}
-## These graphs are split between top-down and bottom-up models 
+
+## Before we begin, these can only work via model, so we can see the different levels of un-support
+if(plot_type == "species-pairs"){
+  plot_dat = plot_dat_mod
+}
+
+#
+##
+### These graphs are split between top-down and bottom-up models 
 
 ### Top-down & preferred non-support first 
 
@@ -781,7 +923,7 @@ rm(plot_list, plot_list_cons, unsup_top_down_siv_hists_cons, unsup_top_down_siv_
 ## summarize percentages in each non-supported category, which will be added to graphs manually in ppt
 # first how many mods per species per support
 top_down_nonsupport = ddply(td_dat[grepl("unsupported", td_dat$support), ], .(rel_species, support), summarize,
-                            num_lvl = length(Species_Pair))
+                            num_lvl = length(Interaction_Estimate))
 # then total number of mods per species
 top_down_nonsupport$num_total[top_down_nonsupport$rel_species == "Neofelis_genus"] = 
   sum(top_down_nonsupport$num_lvl[top_down_nonsupport$rel_species == "Neofelis_genus"])
@@ -803,7 +945,7 @@ top_down_nonsupport$direction = "top-down"
 
 ### remake w/ conservative values
 top_down_nonsupport_cons = ddply(td_dat[grepl("unsupported", td_dat$support_conserv), ], .(rel_species, support_conserv), summarize,
-                            num_lvl = length(Species_Pair))
+                            num_lvl = length(Interaction_Estimate))
 # then total number of mods per species
 top_down_nonsupport_cons$num_total[top_down_nonsupport_cons$rel_species == "Neofelis_genus"] = 
   sum(top_down_nonsupport_cons$num_lvl[top_down_nonsupport_cons$rel_species == "Neofelis_genus"])
@@ -840,7 +982,7 @@ top_down_nonsupport = rbind(top_down_nonsupport, top_down_nonsupport_cons)
 # summarize percentages in each non-supported category, which will be added to graphs manually in ppt
 # first how many mods per species per support
 bottom_up_nonsupport = ddply(bu_dat[grepl("unsupport", bu_dat$support), ], .(rel_species, support), summarize,
-                            num_lvl = length(Species_Pair))
+                            num_lvl = length(Interaction_Estimate))
 # then total number of mods per species
 bottom_up_nonsupport$num_total[bottom_up_nonsupport$rel_species == "Neofelis_genus"] = 
   sum(bottom_up_nonsupport$num_lvl[bottom_up_nonsupport$rel_species == "Neofelis_genus"])
@@ -864,7 +1006,7 @@ bottom_up_nonsupport$direction = "bottom-up"
 ## summarize percentages in each non-supported category, which will be added to graphs manually in ppt
 # first how many mods per species per support
 bottom_up_nonsupport_cons = ddply(bu_dat[grepl("unsupport", bu_dat$support_conserv), ], .(rel_species, support_conserv), summarize,
-                             num_lvl = length(Species_Pair))
+                             num_lvl = length(Interaction_Estimate))
 # then total number of mods per species
 bottom_up_nonsupport_cons$num_total[bottom_up_nonsupport_cons$rel_species == "Neofelis_genus"] = 
   sum(bottom_up_nonsupport_cons$num_lvl[bottom_up_nonsupport_cons$rel_species == "Neofelis_genus"])

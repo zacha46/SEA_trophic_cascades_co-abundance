@@ -202,7 +202,7 @@ meta = meta[meta$survey_id %in% caps$survey_id,]
 
 ### this will be important for determining the number of deployments used total and per survey 
 
-## specify the workind diretory where og data lives
+## specify the working diretory where og data lives
 og_wd = "/Users/zachary_amir/Dropbox/CT capture histories database/Asian ECL raw CT data/Step4_output_pre-resampling/"
 
 # list all relevant files 
@@ -225,14 +225,82 @@ rm(files, og_wd)
 
 
 ## Also need SU and num polygons per landscape
+# but add more here for Reviewer 2! 
 land_sum = ddply(meta, .(Landscape), summarize,
                  num_su = (length(unique(cell_id))),
-                 num_polygon = length(unique(Polygon5km)))
+                 num_polygon = length(unique(Polygon5km)),
+                 num_survey = length(unique(survey_id)),
+                 duration = as.numeric(difftime(max(Sampling_end), min(Sampling_begin), units = "days")),
+                 start_date = min(Sampling_begin),
+                 end_date = max(Sampling_end),
+                 data_sources = length(unique(source)),
+                 # add bounding box for the spatial nerds out there... I C U! 
+                 Xmin = min(Avg_Longitude),
+                 Xmax = max(Avg_Longitude),
+                 Ymin = min(Avg_Latitude),
+                 Ymax = max(Avg_Latitude))
 
+## create total_area_sampled by multiplying polygon count w/ 5
+land_sum$total_area_sampled = land_sum$num_polygon*5
+summary(land_sum$total_area_sampled) # good! Nothing over 1000 square km 
+hist(land_sum$total_area_sampled) # classic poisson, who is the biggie?
+land_sum$Landscape[land_sum$total_area_sampled > 700] # Eastern section of Thai forest reserve... could probably move that longitude a bit more East to make this smaller?
 
+## rename cols to be more clear
+names(land_sum)
+names(land_sum) = c("landscape", "total trap nights", "number of sampling units", "number of 5km polygons", "number of single-season surveys", "sampling duration", "start date", "end date", "number of data providers", "Xmin", "Xmax", "Ymin", "Ymax", "total area sampled km2", "number of deployments", "were tigers detected", "were leopards detected", "were dholes detected", "were clouded leopards detected")
+# save this! 
+# write.csv(land_sum, "data_GitHub/Landscape_summary_table_20250801.csv", row.names = F)
 
 ```
 
+```{r Generate a table per landscape}
+## The idea here is to provide more context for the Reviewer 2 who wanted to learn more about the data
+## so this will be included as a supplementary table
+head(land_sum) # and weve already got a start here, added all we can from the resampled data 
+
+## extract relevant information from non-resampled meta data
+land_sum_nonresamp = ddply(og_meta, .(Landscape), summarize,
+                           num_dep = (length(unique(deployment_id))))
+# make sure its safe to merge
+setdiff(land_sum_nonresamp$Landscape, land_sum$Landscape)
+setdiff(land_sum$Landscape, land_sum_nonresamp$Landscape) # safe to merge
+land_sum = merge(land_sum, land_sum_nonresamp, by = "Landscape")
+rm(land_sum_nonresamp)
+
+## gather landscapes where each large carnivore was detected
+tig_land = unique(meta$Landscape[meta$survey_id %in% caps$survey_id[caps$Species == "Panthera tigris"]])
+leo_land = unique(meta$Landscape[meta$survey_id %in% caps$survey_id[caps$Species == "Panthera pardus"]])
+dho_land = unique(meta$Landscape[meta$survey_id %in% caps$survey_id[caps$Species == "Cuon alpinus"]])
+cl_land = unique(meta$Landscape[meta$survey_id %in% caps$survey_id[caps$Species %in% c("Neofelis diardi", "Neofelis nebulosa")]])
+# and add these to land_sum
+land_sum$tiger_det = "no"
+land_sum$tiger_det[land_sum$Landscape %in% tig_land] = "yes"
+land_sum$leopard_det = "no"
+land_sum$leopard_det[land_sum$Landscape %in% leo_land] = "yes"
+land_sum$dhole_det = "no"
+land_sum$dhole_det[land_sum$Landscape %in% dho_land] = "yes"
+land_sum$CL_det = "no"
+land_sum$CL_det[land_sum$Landscape %in% cl_land] = "yes"
+rm(tig_land, leo_land, dho_land, cl_land)
+
+## finally, gather trap-nights from surv_sum, but need to add landscapes here!
+add = distinct(select(surv_summary[surv_summary$survey_id %in% meta$survey_id,], survey_id, trap_nights))
+add2 = distinct(select(meta, Landscape, survey_id))
+add3 = merge(add, add2, by ="survey_id")
+## now we need to summarize per landscape here
+land_tn = ddply(add3, .(Landscape), summarize,
+                sum_trap_nights = sum(as.numeric(trap_nights)))
+# ensure a clean merge
+setdiff(land_tn$Landscape, land_sum$Landscape)
+setdiff(land_sum$Landscape, land_tn$Landscape) # were good! 
+land_sum = merge(land_tn, land_sum, by = "Landscape")
+
+## clean up
+rm(add, add2, add3, land_tn, land_caps, cap_land)
+
+
+```
 
 ## Camera trap data included for analysis  
 
@@ -251,7 +319,7 @@ I will also gather species traits from the `library(speciestraits)` databases. E
 ```{r select and standardize species to include}
 
 ## clean up environment from previous reporting text
-rm(dat_rm, rm, rm2, surv_summary, land_sum)
+rm(dat_rm, rm, rm2, surv_summary)
 
 ##### Which species will be included and how to standardize species?
 

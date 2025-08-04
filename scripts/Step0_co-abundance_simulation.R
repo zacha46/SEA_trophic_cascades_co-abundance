@@ -94,5 +94,130 @@ df_export <- data.frame(
 
 ##### Load ChatGPT data simulator funciton #####
 
+simulate_coabundance_full <- function(
+    nsites = 300,
+    nreps = 20,
+    narea = 10,
+    nyear = 5,
+    nsource = 5,
+    a5 = 0,
+    bias = c("none"),  # Accepts vector: e.g., c("spatial", "unmeasured_state")
+    seed = 42
+) {
+  set.seed(seed)
+  bias <- match.arg(bias, choices = c("none", "double_count", "spatial", "unmeasured_state", "unmeasured_detection"), several.ok = TRUE)
+  
+  # === 1. FIXED EFFECTS ===
+  flii <- scale(rnorm(nsites))[,1]
+  hfp <- scale(rnorm(nsites))[,1]
+  elev <- scale(rnorm(nsites))[,1]
+  comm_det <- scale(log(runif(nsites, 1, 100) + 1))[,1]
+  
+  # === 2. RANDOM EFFECT GROUPINGS ===
+  area <- sample(1:narea, nsites, replace = TRUE)
+  year <- sample(1:nyear, nsites, replace = TRUE)
+  source <- sample(1:nsource, nsites, replace = TRUE)
+  
+  # === 3. OCCUPANCY FLAGS ===
+  Z.dom <- rep(1, nsites)
+  Z.sub <- rbinom(nsites, size = 1, prob = 0.75)
+  
+  # === 4. RANDOM EFFECTS ===
+  a6 <- rnorm(narea, 0, 0.5)
+  a7 <- rnorm(narea, 0, 0.5)
+  a8 <- rnorm(nyear, 0, 0.5)
+  a9 <- rnorm(nyear, 0, 0.5)
+  b3 <- rnorm(nsource, 0, 0.4)
+  b4 <- rnorm(nsource, 0, 0.4)
+  
+  # === 5. OPTIONAL UNMEASURED COVARIATES ===
+  if ("unmeasured_state" %in% bias) {
+    u_state <- scale(rnorm(nsites))[,1]
+  } else {
+    u_state <- rep(0, nsites)
+  }
+  
+  if ("unmeasured_detection" %in% bias) {
+    u_det <- scale(rnorm(nsites))[,1]
+  } else {
+    u_det <- rep(0, nsites)
+  }
+  
+  # === 6. SPATIAL AUTOCORRELATION ===
+  if ("spatial" %in% bias) {
+    spatial_effect <- scale(stats::filter(rnorm(nsites + 10), rep(1/5, 5), sides = 2))[6:(nsites+5)]
+  } else {
+    spatial_effect <- rep(0, nsites)
+  }
+  
+  # === 7. STATE MODEL: LAMBDA ===
+  lambda_dom <- exp(
+    1 + 0.6*flii + 0.4*hfp + 0.3*elev + 0.2*comm_det +
+      a7[area] + a9[year] + u_state + spatial_effect
+  )
+  
+  N.dom <- rpois(nsites, lambda_dom * Z.dom)
+  
+  lambda_sub <- exp(
+    1 + 0.3*flii + 0.2*hfp + 0.1*elev + 0.1*comm_det +
+      a5 * lambda_dom + a6[area] + a8[year] + u_state + spatial_effect
+  )
+  
+  N.sub <- rpois(nsites, lambda_sub * Z.sub)
+  
+  # === 8. EFFORT MATRIX (cams) ===
+  raw_effort <- matrix(runif(nsites * nreps, min = 0.5, max = 1.5), nsites, nreps)
+  cams <- scale(raw_effort)
+  
+  # === 9. DOUBLE COUNTING (shared latent detection burst) ===
+  if ("double_count" %in% bias) {
+    burst_effect <- matrix(rnorm(nsites, 0, 0.8), nsites, nreps)
+  } else {
+    burst_effect <- matrix(0, nsites, nreps)
+  }
+  
+  # === 10. DETECTION MODEL ===
+  y.dom <- matrix(0, nsites, nreps)
+  y.sub <- matrix(0, nsites, nreps)
+  
+  for (j in 1:nsites) {
+    for (k in 1:nreps) {
+      # Detection probabilities
+      lp_dom <- -1 + 0.5 * cams[j,k] + b4[source[j]] + u_det[j] + spatial_effect[j] + burst_effect[j,k]
+      lp_sub <- -1.5 + 0.3 * cams[j,k] + b3[source[j]] + u_det[j] + spatial_effect[j] + burst_effect[j,k]
+      
+      p_dom <- plogis(lp_dom)
+      p_sub <- plogis(lp_sub)
+      
+      y.dom[j,k] <- rbinom(1, N.dom[j], p_dom)
+      y.sub[j,k] <- rbinom(1, N.sub[j], p_sub)
+    }
+  }
+  
+  # === 11. RETURN DATA STRUCTURE ===
+  return(list(
+    y.dom = y.dom,
+    y.sub = y.sub,
+    Z.dom = Z.dom,
+    Z.sub = Z.sub,
+    N.dom = N.dom,
+    N.sub = N.sub,
+    flii = flii,
+    hfp = hfp,
+    elev = elev,
+    comm_det = comm_det,
+    area = area,
+    year = year,
+    source = source,
+    cams = cams,
+    nsites = nsites,
+    nreps = nreps,
+    narea = narea,
+    nyear = nyear,
+    nsource = nsource,
+    a5_true = a5,
+    bias_applied = bias
+  ))
+}
 
 

@@ -25,6 +25,9 @@ slurm = Sys.getenv("SLURM_ARRAY_TASK_ID")
 slurm = as.numeric(slurm) #imports as character var, not numeric
 # local testing 
 # slurm = 1
+
+## and MCMC setting! 
+setting = Sys.getenv("SETTING")  # MCMC setting
 # setting = "SHORT"
 
 #### List all possible bundled data files 

@@ -91,6 +91,8 @@ df_export <- data.frame(
 )
 
 # write.csv(df_export, "~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/explore/example_coabundance_subset_flat_20250804.csv", row.names = FALSE)
+rm(dat_small, df_export, filtered_df, dat, meta_df, selected_areas, selected_sources, 
+   selected_years, subset_cols, subset_rows, dat_small_rows)
 
 ##### Load ChatGPT data simulator funciton #####
 
@@ -189,8 +191,9 @@ simulate_coabundance_full <- function(
       p_dom <- plogis(lp_dom)
       p_sub <- plogis(lp_sub)
       
-      y.dom[j,k] <- rbinom(1, N.dom[j], p_dom)
-      y.sub[j,k] <- rbinom(1, N.sub[j], p_sub)
+      ## make sure matricies are skewed by very high numbers and cap values @ 10 
+      y.dom[j,k] <- min(rbinom(1, N.dom[j], p_dom), 10)
+      y.sub[j,k] <- min(rbinom(1, N.sub[j], p_sub), 10)
     }
   }
   
@@ -220,4 +223,63 @@ simulate_coabundance_full <- function(
   ))
 }
 
+# Clean simulation with a5 = 0
+sim_clean <- simulate_coabundance_full(a5 = 0)
 
+# Add unmeasured confounding in state only
+sim_confounded <- simulate_coabundance_full(a5 = 1, bias = "unmeasured_state")
+
+# Combine multiple biases
+sim_messy <- simulate_coabundance_full(a5 = 1, bias = c("double_count", "unmeasured_detection", "spatial"))
+
+# Inspect outputs
+str(sim_messy)
+image(sim_messy$y.sub)
+rm(sim_clean, sim_confounded, sim_messy)
+
+### Now we are going to create 18 datasets based on multiple conditions
+# bias = none, double counts of individuals, spatial autocorrelation, unmeasured variables in state & det, and a combo of all
+# SIV = -.5, 0, .5
+
+# save biases as a list
+bias_types <- list(
+  "none",
+  "double_count",
+  "spatial",
+  "unmeasured_state",
+  "unmeasured_detection",
+  c("double_count", "spatial", "unmeasured_state", "unmeasured_detection")  # all biases
+)
+
+# store true a5 values we want to test
+a5_values <- c(-.5, 0, .5)
+
+# Storage
+simulated_datasets <- list()
+
+# Generate datasets
+for (a5 in a5_values) {
+  for (bias in bias_types) {
+    key <- paste0("a5_", a5, "_bias_", paste(bias, collapse = "+"))
+    simulated_datasets[[key]] <- simulate_coabundance_full(a5 = a5, bias = bias)
+  }
+}
+rm(a5, bias, key)
+
+## check 
+length(simulated_datasets) # 18! 
+names(simulated_datasets) # very good. 
+
+## grab the date
+day<-substr(Sys.Date(),9, 10)
+month<-substr(Sys.Date(),6,7)
+year<-substr(Sys.Date(),1,4)
+date = paste(year, month, day, sep = "")
+rm(day, month, year)
+
+# make a path 
+path = paste("~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step2_output_CoA_bundles/Bundled_data_for_bayes_co-abudance_mods_SIMULATION_", length(simulated_datasets), "_species_pairs_", 
+             date, ".RDS", sep = "")
+
+## save this as a RDS object
+write_rds(simulated_datasets, path)

@@ -86,7 +86,7 @@ print(paste("Begining to run co-abundance simulation test: ", n, " with MCMC set
 
 ####### Make the model in BUGS language and run it ####
 
-cat(file = "ZDA_Co_Abundance_Model_final_20241201.jags", 
+cat(file = "ZDA_Co_Abundance_Model_final_20250805.jags", 
     
     "model{
 
@@ -94,34 +94,34 @@ cat(file = "ZDA_Co_Abundance_Model_final_20241201.jags",
   for (i in 1:2) {
       
     # Intercept
-    a0[i] ~ dnorm(0, 0.01)
+    a0[i] ~ dnorm(0, 1)
       
     # FLII
-    a1[i] ~ dnorm(0, 0.01)
+    a1[i] ~ dnorm(0, 1)
       
     # HFP
-    a2[i] ~ dnorm(0, 0.01)
+    a2[i] ~ dnorm(0, 1)
     
     # Elev
-    a3[i] ~ dnorm(0, 0.01)
+    a3[i] ~ dnorm(0, 1)
     
     # community detections
-    a4[i] ~ dnorm(0, 0.01)
+    a4[i] ~ dnorm(0, 1)
   
     # Det intercept
-    b0[i] ~ dnorm(0, 0.01)
+    b0[i] ~ dnorm(0, 1)
     
     # Cams
-    b2[i] ~ dnorm(0, 0.01)
+    b2[i] ~ dnorm(0, 1)
       
     ## OD params for observation model
+    sd.p[i] ~ dunif(0, 5) 
     tau.p[i] <- pow(sd.p[i], -2) 
-    sd.p[i] ~ dunif(0, 1)  #not sure how to define variance here... leaving it the same as K&R
       
     }
     
   ## Species interaction
-  a5 ~ dnorm(0, 0.01)
+  a5 ~ dnorm(0, 1)
     
   # Landscape RE hyper prior --> define it's variance
   sigma.a6 ~ dunif(0,5)
@@ -151,7 +151,7 @@ cat(file = "ZDA_Co_Abundance_Model_final_20241201.jags",
 
   }
   
-    # source RE hyper prior --> define it's variance
+  # source RE hyper prior --> define it's variance
   sigma.b3 ~ dunif(0,5)
   var.b3 <- 1/(sigma.b3*sigma.b3)
 
@@ -193,7 +193,9 @@ cat(file = "ZDA_Co_Abundance_Model_final_20241201.jags",
           
             lp.sub[j,k] <- b0[1] +  b2[1]*cams[j,k] + b3[source[j]] + eps.p.sub[j,k]
         
-              eps.p.sub[j,k] ~ dnorm(0, tau.p[1])
+              eps.p.sub[j,k] <- eps.p.sub.z[j,k] * sd.p[1]
+              
+                eps.p.sub.z[j,k] ~ dnorm(0, 1)
           
       
       ## Dominant species
@@ -204,8 +206,11 @@ cat(file = "ZDA_Co_Abundance_Model_final_20241201.jags",
           lp.lim.dom[j,k]<- min(250, max(-250, lp.dom[j,k])) #stabilize logit
           
             lp.dom[j,k] <- b0[2] + b2[2]*cams[j,k] + b4[source[j]] + eps.p.dom[j,k]
-        
-              eps.p.dom[j,k] ~ dnorm(0, tau.p[2])
+              
+              eps.p.dom[j,k] <- eps.p.dom.z[j,k] * sd.p[2]
+                
+                eps.p.dom.z[j,k] ~ dnorm(0, 1)              
+              
          
          
     ### PPC- Subordinate
@@ -265,8 +270,9 @@ params = c('a0', 'a1', 'a2', 'a3', 'a4', 'a5',    # Abundance parameters
            'var.a8','var.a9','a8', 'a9',          # Year random effects
            'var.b3','var.b4','b3', 'b4',          # source random effects
            "tau.p","eps.p.dom","eps.p.sub",       # OD params
+           "eps.p.dom.z", "eps.p.sub.z",          # non-centered OD parameters 
            "fit.sub", "fit.rep.sub",              # Chi2 stat for sub, real then simulated
-           "fit.dom", "fit.rep.dom",               # Chi2 stat for dom, real then simulated
+           "fit.dom", "fit.rep.dom",              # Chi2 stat for dom, real then simulated
            # "E.dom", "E.rep.dom",
            # "E.sub", "E.rep.sub",
            "N.dom", "N.sub"                     
@@ -308,7 +314,7 @@ if(setting == "LONG"){
 start = Sys.time()
 
 ### Run the model 
-mod = jags(bdata, inits, params, "ZDA_Co_Abundance_Model_final_20241201.jags",
+mod = jags(bdata, inits, params, "ZDA_Co_Abundance_Model_final_20250805.jags",
            ## MCMC settings
            n.chains = nc, n.adapt = na, n.thin = nt, 
            n.iter = ni, n.burnin = nb, parallel = T)

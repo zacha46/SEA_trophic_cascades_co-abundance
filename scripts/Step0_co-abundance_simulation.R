@@ -3,7 +3,7 @@
 
 ## Zachary Amir, Z.Amir@uq.edu.au
 ## Code created: July 25th, 2025
-## Last updated: August 4th, 2025 
+## Last updated: August 5th, 2025 
 
 # load library
 library(tidyverse)     ## For lots of functions 
@@ -252,7 +252,7 @@ bias_types <- list(
 )
 
 # store true a5 values we want to test
-a5_values <- c(-.5, 0, .5)
+a5_values <- c(-1, -.5, 0, .5, 1)
 
 # Storage
 simulated_datasets <- list()
@@ -267,7 +267,7 @@ for (a5 in a5_values) {
 rm(a5, bias, key)
 
 ## check 
-length(simulated_datasets) # 18! 
+length(simulated_datasets) # 30 w/ extra a5 values  
 names(simulated_datasets) # very good. 
 
 ## grab the date

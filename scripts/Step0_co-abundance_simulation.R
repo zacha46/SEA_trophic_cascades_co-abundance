@@ -99,9 +99,9 @@ rm(dat_small, df_export, filtered_df, dat, meta_df, selected_areas, selected_sou
 simulate_coabundance_full <- function(
     nsites = 300,
     nreps = 20,
-    narea = 10,
-    nyear = 5,
-    nsource = 5,
+    narea = 12,
+    nyear = 4,
+    nsource = 6,
     a5 = 0,
     bias = c("none"),  # Accepts vector: e.g., c("spatial", "unmeasured_state")
     seed = 42
@@ -120,17 +120,34 @@ simulate_coabundance_full <- function(
   year <- sample(1:nyear, nsites, replace = TRUE)
   source <- sample(1:nsource, nsites, replace = TRUE)
   
-  # === 3. OCCUPANCY FLAGS ===
-  Z.dom <- rep(1, nsites)
-  Z.sub <- rbinom(nsites, size = 1, prob = 0.75)
+  # === 3. iZIP parameter ===
+  # Ensure at least 2 areas for each combination (adjust as needed)
+  n_each <- floor(narea / 4)
+  remaining <- narea - 4 * n_each
+  
+  # Create vector of all combinations
+  combos <- rep(list(c(1,1), c(1,0), c(0,1), c(0,0)), each = n_each)
+  if (remaining > 0) {
+    # Add a few more random combos to fill out remaining areas
+    combos <- c(combos, replicate(remaining, sample(list(c(1,1), c(1,0), c(0,1), c(0,0)), 1), simplify = FALSE))
+  }
+  
+  # Shuffle for randomness
+  set.seed(seed)
+  combos <- sample(combos)
+  
+  # Split into Z values
+  landscape_Z_dom <- sapply(combos, function(x) x[1])
+  landscape_Z_sub <- sapply(combos, function(x) x[2])
+  
+  # Assign to sites
+  Z.dom <- landscape_Z_dom[area]
+  Z.sub <- landscape_Z_sub[area]
   
   # === 4. RANDOM EFFECTS ===
-  a6 <- rnorm(narea, 0, 0.5)
-  a7 <- rnorm(narea, 0, 0.5)
-  a8 <- rnorm(nyear, 0, 0.5)
-  a9 <- rnorm(nyear, 0, 0.5)
-  b3 <- rnorm(nsource, 0, 0.4)
-  b4 <- rnorm(nsource, 0, 0.4)
+  a_state_area <- rnorm(narea, 0, 0.5)
+  a_state_yr <- rnorm(nyear, 0, 0.5)
+  b_det_source <- rnorm(nsource, 0, 0.4)
   
   # === 5. OPTIONAL UNMEASURED COVARIATES ===
   if ("unmeasured_state" %in% bias) {
@@ -153,18 +170,17 @@ simulate_coabundance_full <- function(
   }
   
   # === 7. STATE MODEL: LAMBDA ===
-  lambda_dom <- exp(
-    1 + 0.6*flii + 0.4*hfp + 0.3*elev + 0.2*comm_det +
-      a7[area] + a9[year] + u_state + spatial_effect
-  )
-  
+  # use a common state model for both species, so create the base linear predictor 
+  linpred <- 1 + 0.5*flii + 0.3*hfp + 0.2*elev + 0.2*comm_det +
+    u_state + spatial_effect + a_state_area[area] + a_state_yr[year]
+  # apply the predictor 
+  lambda_dom <- exp(linpred)
+  # extract abundance
   N.dom <- rpois(nsites, lambda_dom * Z.dom)
   
-  lambda_sub <- exp(
-    1 + 0.3*flii + 0.2*hfp + 0.1*elev + 0.1*comm_det +
-      a5 * N.dom + a6[area] + a8[year] + u_state + spatial_effect
-  )
-  
+  # apply the predictor but add N.dom for subordinate speices
+  lambda_sub <- exp(linpred + a5 * N.dom)
+  # extract abundance 
   N.sub <- rpois(nsites, lambda_sub * Z.sub)
   
   # === 8. EFFORT MATRIX (cams) ===
@@ -182,14 +198,19 @@ simulate_coabundance_full <- function(
   y.dom <- matrix(0, nsites, nreps)
   y.sub <- matrix(0, nsites, nreps)
   
+  ## Shared detection parameters, assuming both species are detected equally 
+  b_det_intercept <- -1
+  b_det_effort <- 0.5
+  b_source <- rnorm(nsource, 0, 0.4)  # One shared source effect vector
+  
   for (j in 1:nsites) {
     for (k in 1:nreps) {
-      # Detection probabilities
-      lp_dom <- -1 + 0.5 * cams[j,k] + b4[source[j]] + u_det[j] + spatial_effect[j] + burst_effect[j,k]
-      lp_sub <- -1.5 + 0.3 * cams[j,k] + b3[source[j]] + u_det[j] + spatial_effect[j] + burst_effect[j,k]
+      # Common detection model for both species Detection probabilities
+      lp_common <- b_det_intercept + b_det_effort * cams[j,k] +
+        b_det_source[source[j]] + u_det[j] + spatial_effect[j] + burst_effect[j,k]
       
-      p_dom <- plogis(lp_dom)
-      p_sub <- plogis(lp_sub)
+      p_dom <- plogis(lp_common)
+      p_sub <- plogis(lp_common)
       
       ## make sure matricies are skewed by very high numbers and cap values @ 10 
       y.dom[j,k] <- min(rbinom(1, N.dom[j], p_dom), 10)
@@ -221,25 +242,18 @@ simulate_coabundance_full <- function(
     a5_true = a5,
     bias_applied = bias
   ))
-}
+} # end function
 
-# Clean simulation with a5 = 0
-sim_clean <- simulate_coabundance_full(a5 = 0)
-
-# Add unmeasured confounding in state only
-sim_confounded <- simulate_coabundance_full(a5 = 1, bias = "unmeasured_state")
-
-# Combine multiple biases
-sim_messy <- simulate_coabundance_full(a5 = 1, bias = c("double_count", "unmeasured_detection", "spatial"))
-
-# Inspect outputs
-str(sim_messy)
-image(sim_messy$y.sub)
-rm(sim_clean, sim_confounded, sim_messy)
+### simulate positive and negative a5 w/ no bias
+sim_pos = simulate_coabundance_full(a5 = 1, bias = "none")
+sim_neg = simulate_coabundance_full(a5 = -1, bias = "none")
+# assess correlations between N.dom and N.sub
+cor(sim_pos$N.dom, sim_pos$N.sub) # positive 
+cor(sim_neg$N.dom, sim_neg$N.sub) # negative, good. 
 
 ### Now we are going to create 18 datasets based on multiple conditions
 # bias = none, double counts of individuals, spatial autocorrelation, unmeasured variables in state & det, and a combo of all
-# SIV = -.5, 0, .5
+# SIV = -1,-.5, 0, .5, 1
 
 # save biases as a list
 bias_types <- list(
@@ -298,7 +312,7 @@ rm(list = ls())
 wd = "~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/results/"
 
 # and list all relevant files 
-files = list.files(paste(wd, "MIDDLE_simulations_August_2025_v2", sep = ""), recursive = T)
+files = list.files(paste(wd, "MIDDLE_simulations_August_2025_v3", sep = ""), recursive = T)
 
 #
 ##
@@ -310,7 +324,7 @@ files_coeff = files[grepl("coefficent_dataframes/", files)]
 res = list()
 for(i in 1:length(files_coeff)){
   # import the file 
-  d = read.csv(paste(wd, "MIDDLE_simulations_August_2025_v2/", files_coeff[i], sep = ""))
+  d = read.csv(paste(wd, "MIDDLE_simulations_August_2025_v3/", files_coeff[i], sep = ""))
   # save in the list 
   res[[i]] = d
   # save with the test name 
@@ -341,7 +355,7 @@ files_ppc = files[grepl("PPC_dataframes/", files)]
 res = list()
 for(i in 1:length(files_ppc)){
   # import the file 
-  d = read.csv(paste(wd, "MIDDLE_simulations_August_2025_v2/", files_ppc[i], sep = ""))
+  d = read.csv(paste(wd, "MIDDLE_simulations_August_2025_v3/", files_ppc[i], sep = ""))
   # save in the list 
   res[[i]] = d
   # save with the test name 
@@ -426,7 +440,7 @@ files_abund = files[grepl("prediction_dataframes/", files)]
 res = list()
 for(i in 1:length(files_abund)){
   # import the file 
-  d = read.csv(paste(wd, "MIDDLE_simulations_August_2025_v2/", files_abund[i], sep = ""))
+  d = read.csv(paste(wd, "MIDDLE_simulations_August_2025_v3/", files_abund[i], sep = ""))
   # save in the list 
   res[[i]] = d
   # save with the test name 
@@ -455,10 +469,8 @@ unique(abund$bias) # both are good!
 ## first inspect no bias -> can model recover true value?
 dat = ppc[ppc$bias == "none", ]
 dat[order(dat$true_a5), c("true_a5", "Interaction_Estimate","lower","upper", "Significance", "support")]
-## Two strange things:
-# true -.5 value was insignificant
-# poor model fit for both true .5 and 1. 
-
+## One strange thing now:
+# positive true a5 values are negative, WTF! 
 
 
 

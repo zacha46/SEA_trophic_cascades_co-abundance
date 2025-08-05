@@ -8,7 +8,7 @@
 # load library
 library(tidyverse)     ## For lots of functions 
 
-#### Provide example data to ChatGPT ##### 
+##### Provide example data to ChatGPT ##### 
 
 ## import example data
 dat = readRDS("data_CoA_bundles/Bundled_data_for_Bayes_co-abundance_mods_community_500GB_33_species_pairs_5km_20250306.RDS")
@@ -162,7 +162,7 @@ simulate_coabundance_full <- function(
   
   lambda_sub <- exp(
     1 + 0.3*flii + 0.2*hfp + 0.1*elev + 0.1*comm_det +
-      a5 * lambda_dom + a6[area] + a8[year] + u_state + spatial_effect
+      a5 * N.dom + a6[area] + a8[year] + u_state + spatial_effect
   )
   
   N.sub <- rpois(nsites, lambda_sub * Z.sub)
@@ -283,3 +283,186 @@ path = paste("~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_
 
 ## save this as a RDS object
 write_rds(simulated_datasets, path)
+
+##### Run models on the HPC ######
+
+## The code that runs the simulations on the HPC is called scripts/HPC_code/HPC_co-abundance_model_simulations.R
+## and the code that communicates with the HPC is called scripts/SLURM_code/MIDDLE/SLURM_co-abundance_array_MIDDLE_simulation.sh
+
+##### Import results from HPC ######
+
+## start fresh 
+rm(list = ls())
+
+# save working directory to where the results live in dropbox 
+wd = "~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/results/"
+
+# and list all relevant files 
+files = list.files(paste(wd, "MIDDLE_simulations_August_2025_v2", sep = ""), recursive = T)
+
+#
+##
+### Coefficient data frame 
+
+## First, subset for coefficent results
+files_coeff = files[grepl("coefficent_dataframes/", files)]
+# import each one
+res = list()
+for(i in 1:length(files_coeff)){
+  # import the file 
+  d = read.csv(paste(wd, "MIDDLE_simulations_August_2025_v2/", files_coeff[i], sep = ""))
+  # save in the list 
+  res[[i]] = d
+  # save with the test name 
+  names(res)[i] = str_extract(files_coeff[i], "(?<=coefficents_).*(?=_\\d{8}\\.csv)")
+}
+rm(d, i, files_coeff)
+
+## Combine in to a DF 
+coeff = do.call(rbind, res)
+rownames(coeff) = NULL
+
+# extract true a5 and bias as new columns
+coeff <- coeff %>%
+  mutate(
+    true_a5 = as.numeric(str_match(sim_test, "a5_([^_]+)_bias_")[,2]),
+    bias = str_match(sim_test, "bias_(.*)$")[,2]
+  )
+unique(coeff$true_a5)
+unique(coeff$bias) # both are good! 
+
+#
+##
+### PPC data frame 
+
+## First, subset for coefficent results
+files_ppc = files[grepl("PPC_dataframes/", files)]
+# import each one
+res = list()
+for(i in 1:length(files_ppc)){
+  # import the file 
+  d = read.csv(paste(wd, "MIDDLE_simulations_August_2025_v2/", files_ppc[i], sep = ""))
+  # save in the list 
+  res[[i]] = d
+  # save with the test name 
+  names(res)[i] = str_extract(files_ppc[i], "(?<=Chat_values_).*(?=_\\d{8}\\.csv)")
+}
+rm(d, i, files_ppc)
+
+## Combine in to a DF 
+ppc = do.call(rbind, res)
+rownames(ppc) = NULL
+
+# extract true a5 and bias as new columns
+ppc <- ppc %>%
+  mutate(
+    true_a5 = as.numeric(str_match(sim_test, "a5_([^_]+)_bias_")[,2]),
+    bias = str_match(sim_test, "bias_(.*)$")[,2]
+  )
+unique(ppc$true_a5)
+unique(ppc$bias) # both are good! 
+
+#### Apply support levels here
+## Bayes p-value
+ppc$BPV_valid = "No"
+ppc$BPV_valid[ppc$BPV.dom >= 0.15 & ppc$BPV.dom <= 0.85 &
+                    ppc$BPV.sub >= 0.15 & ppc$BPV.sub <= 0.85] = "Yes"
+table(ppc$BPV_valid[!is.na(ppc$Interaction_Estimate)]) 
+
+## over dispersion, C-hat 
+ppc$OD_valid = "No"
+ppc$OD_valid[ppc$Chat.dom >= 0.95 & ppc$Chat.dom <= 1.3 &
+                   ppc$Chat.sub >= 0.95 & ppc$Chat.sub <= 1.3] = "Yes"
+table(ppc$OD_valid[!is.na(ppc$Interaction_Estimate)]) 
+
+## Rhat for SIV
+ppc$parameter_valid = "No"
+ppc$parameter_valid[ppc$Rhat >= 0.99 & ppc$Rhat <= 1.1] = "Yes"
+table(ppc$parameter_valid[!is.na(ppc$Interaction_Estimate)]) 
+
+## Create support levels when combining w/ direction
+ppc$support[ppc$BPV_valid == "No" |
+              ppc$OD_valid == "No" |
+              ppc$parameter_valid == "No"] = "unsupported_poor_fit" # lowest level of support --> bad mod.
+ppc$support[ppc$BPV_valid == "Yes" & 
+              ppc$OD_valid == "Yes" &
+              ppc$parameter_valid == "Yes" &
+              ppc$Significance == "Non-Significant"] = "unsupported_unclear_SIV" # mid-low support --> good mod, but not important
+ppc$support[ppc$BPV_valid == "Yes" & 
+              ppc$OD_valid == "Yes" &
+              ppc$parameter_valid == "Yes" &
+              ppc$Significance == "Significant" &
+              ppc$true_a5 < 0  &
+              ppc$Interaction_Estimate > 0] = "unsupported_wrong_direction" # almost supportive --> good model, significant result, but not in correct direction for hypothesis.  
+ppc$support[ppc$BPV_valid == "Yes" & 
+              ppc$OD_valid == "Yes" &
+              ppc$parameter_valid == "Yes" &
+              ppc$Significance == "Significant" &
+              ppc$true_a5 > 0 &
+              ppc$Interaction_Estimate < 0] = "unsupported_wrong_direction" # Same as above, but applied for bottom-up
+## assign which models support our hypothesis
+ppc$support[ppc$BPV_valid == "Yes" & 
+              ppc$OD_valid == "Yes" &
+              ppc$parameter_valid == "Yes" &
+              ppc$Significance == "Significant" &
+              ppc$true_a5 < 0  &
+              ppc$Interaction_Estimate <= 0] = "Supported" # good model, significant result, in correct direction for hypothesis.  
+ppc$support[ppc$BPV_valid == "Yes" & 
+              ppc$OD_valid == "Yes" &
+              ppc$parameter_valid == "Yes" &
+              ppc$Significance == "Significant" &
+              ppc$true_a5 > 0 &
+              ppc$Interaction_Estimate >= 0] = "Supported" # Same as above, but applied for bottom-up direction. 
+# Check results 
+table(ppc$support) # most are a poor fit 
+
+#
+##
+### abundance data frame 
+
+## First, subset for coefficent results
+files_abund = files[grepl("prediction_dataframes/", files)]
+# import each one
+res = list()
+for(i in 1:length(files_abund)){
+  # import the file 
+  d = read.csv(paste(wd, "MIDDLE_simulations_August_2025_v2/", files_abund[i], sep = ""))
+  # save in the list 
+  res[[i]] = d
+  # save with the test name 
+  names(res)[i] = str_extract(files_abund[i], "(?<=comparison_).*(?=_\\d{8}\\.csv)")
+}
+rm(d, i, files_abund)
+
+## Combine in to a DF 
+abund = do.call(rbind, res)
+rownames(abund) = NULL
+
+# extract true a5 and bias as new columns
+abund <- abund %>%
+  mutate(
+    true_a5 = as.numeric(str_match(sim_test, "a5_([^_]+)_bias_")[,2]),
+    bias = str_match(sim_test, "bias_(.*)$")[,2]
+  )
+unique(abund$true_a5)
+unique(abund$bias) # both are good! 
+
+#
+##
+###
+#### Inspect results 
+
+## first inspect no bias -> can model recover true value?
+dat = ppc[ppc$bias == "none", ]
+dat[order(dat$true_a5), c("true_a5", "Interaction_Estimate","lower","upper", "Significance", "support")]
+## Two strange things:
+# true -.5 value was insignificant
+# poor model fit for both true .5 and 1. 
+
+
+
+
+#
+#
+#
+#

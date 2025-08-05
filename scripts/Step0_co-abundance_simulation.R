@@ -312,7 +312,7 @@ rm(list = ls())
 wd = "~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/results/"
 
 # and list all relevant files 
-files = list.files(paste(wd, "MIDDLE_simulations_August_2025_v3", sep = ""), recursive = T)
+files = list.files(paste(wd, "MIDDLE_simulations_August_2025_v4", sep = ""), recursive = T)
 
 #
 ##
@@ -324,7 +324,7 @@ files_coeff = files[grepl("coefficent_dataframes/", files)]
 res = list()
 for(i in 1:length(files_coeff)){
   # import the file 
-  d = read.csv(paste(wd, "MIDDLE_simulations_August_2025_v3/", files_coeff[i], sep = ""))
+  d = read.csv(paste(wd, "MIDDLE_simulations_August_2025_v4/", files_coeff[i], sep = ""))
   # save in the list 
   res[[i]] = d
   # save with the test name 
@@ -355,7 +355,7 @@ files_ppc = files[grepl("PPC_dataframes/", files)]
 res = list()
 for(i in 1:length(files_ppc)){
   # import the file 
-  d = read.csv(paste(wd, "MIDDLE_simulations_August_2025_v3/", files_ppc[i], sep = ""))
+  d = read.csv(paste(wd, "MIDDLE_simulations_August_2025_v4/", files_ppc[i], sep = ""))
   # save in the list 
   res[[i]] = d
   # save with the test name 
@@ -440,7 +440,7 @@ files_abund = files[grepl("prediction_dataframes/", files)]
 res = list()
 for(i in 1:length(files_abund)){
   # import the file 
-  d = read.csv(paste(wd, "MIDDLE_simulations_August_2025_v3/", files_abund[i], sep = ""))
+  d = read.csv(paste(wd, "MIDDLE_simulations_August_2025_v4/", files_abund[i], sep = ""))
   # save in the list 
   res[[i]] = d
   # save with the test name 

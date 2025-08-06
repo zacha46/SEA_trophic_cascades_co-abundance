@@ -109,16 +109,34 @@ simulate_coabundance_full <- function(
   set.seed(seed)
   bias <- match.arg(bias, choices = c("none", "double_count", "spatial", "unmeasured_state", "unmeasured_detection"), several.ok = TRUE)
   
-  # === 1. FIXED EFFECTS ===
-  flii <- scale(rnorm(nsites))[,1]
-  hfp <- scale(rnorm(nsites))[,1]
-  elev <- scale(rnorm(nsites))[,1]
+  # === 1. Assign groupings in structured blocks ===
+  sites_per_area <- floor(nsites / narea)
+  area <- rep(1:narea, each = sites_per_area)
+  area <- c(area, sample(1:narea, nsites - length(area), replace = TRUE))  # pad remainder
+  
+  sites_per_year <- floor(nsites / nyear)
+  year <- rep(1:nyear, each = sites_per_year)
+  year <- c(year, sample(1:nyear, nsites - length(year), replace = TRUE))
+  
+  sites_per_source <- floor(nsites / nsource)
+  source <- rep(1:nsource, each = sites_per_source)
+  source <- c(source, sample(1:nsource, nsites - length(source), replace = TRUE))
+  
+  # === 2. Group-level covariate structure ===
+  area_effect_flii <- rnorm(narea, 0, 0.7)
+  area_effect_hfp  <- rnorm(narea, 0, 0.5)
+  area_effect_elev <- rnorm(narea, 0, 0.3)
+  
+  flii_raw <- rnorm(nsites) + area_effect_flii[area]
+  hfp_raw  <- rnorm(nsites) + area_effect_hfp[area]
+  elev_raw <- rnorm(nsites) + area_effect_elev[area]
+  
+  flii <- scale(flii_raw)[,1]
+  hfp  <- scale(hfp_raw)[,1]
+  elev <- scale(elev_raw)[,1]
+  
   comm_det <- scale(log(runif(nsites, 1, 100) + 1))[,1]
   
-  # === 2. RANDOM EFFECT GROUPINGS ===
-  area <- sample(1:narea, nsites, replace = TRUE)
-  year <- sample(1:nyear, nsites, replace = TRUE)
-  source <- sample(1:nsource, nsites, replace = TRUE)
   
   # === 3. iZIP parameter ===
   # Ensure at least 2 areas for each combination (adjust as needed)
@@ -144,23 +162,14 @@ simulate_coabundance_full <- function(
   Z.dom <- landscape_Z_dom[area]
   Z.sub <- landscape_Z_sub[area]
   
-  # === 4. RANDOM EFFECTS ===
+  # === 4. Group-level random effects ===
   a_state_area <- rnorm(narea, 0, 0.5)
   a_state_yr <- rnorm(nyear, 0, 0.5)
   b_det_source <- rnorm(nsource, 0, 0.4)
   
   # === 5. OPTIONAL UNMEASURED COVARIATES ===
-  if ("unmeasured_state" %in% bias) {
-    u_state <- scale(rnorm(nsites))[,1]
-  } else {
-    u_state <- rep(0, nsites)
-  }
-  
-  if ("unmeasured_detection" %in% bias) {
-    u_det <- scale(rnorm(nsites))[,1]
-  } else {
-    u_det <- rep(0, nsites)
-  }
+  u_state <- if ("unmeasured_state" %in% bias) scale(rnorm(nsites))[,1] else rep(0, nsites)
+  u_det   <- if ("unmeasured_detection" %in% bias) scale(rnorm(nsites))[,1] else rep(0, nsites)
   
   # === 6. SPATIAL AUTOCORRELATION ===
   if ("spatial" %in% bias) {
@@ -312,7 +321,7 @@ rm(list = ls())
 wd = "~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/results/"
 
 # and list all relevant files 
-files = list.files(paste(wd, "MIDDLE_simulations_August_2025_v4", sep = ""), recursive = T)
+files = list.files(paste(wd, "MIDDLE_simulations_PPC_only_August_2025", sep = ""), recursive = T)
 
 #
 ##
@@ -350,12 +359,12 @@ unique(coeff$bias) # both are good!
 ### PPC data frame 
 
 ## First, subset for coefficent results
-files_ppc = files[grepl("PPC_dataframes/", files)]
+files_ppc = files#[grepl("PPC_dataframes/", files)]
 # import each one
 res = list()
 for(i in 1:length(files_ppc)){
   # import the file 
-  d = read.csv(paste(wd, "MIDDLE_simulations_August_2025_v4/", files_ppc[i], sep = ""))
+  d = read.csv(paste(wd, "MIDDLE_simulations_PPC_only_August_2025/", files_ppc[i], sep = ""))
   # save in the list 
   res[[i]] = d
   # save with the test name 

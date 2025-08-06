@@ -86,7 +86,7 @@ print(paste("Begining to run co-abundance simulation test: ", n, " with MCMC set
 
 ####### Make the model in BUGS language and run it ####
 
-cat(file = "ZDA_Co_Abundance_Model_final_20250805.jags", 
+cat(file = "ZDA_Co_Abundance_Model_final_20250806.jags", 
     
     "model{
 
@@ -123,47 +123,62 @@ cat(file = "ZDA_Co_Abundance_Model_final_20250805.jags",
   ## Species interaction
   a5 ~ dnorm(0, 1)
     
-  # Landscape RE hyper prior --> define it's variance
-  sigma.a6 ~ dunif(0,5)
-  var.a6 <- 1/(sigma.a6*sigma.a6) 
+  # # Landscape RE hyper prior --> define it's variance
+  # sigma.a6 ~ dunif(0,5)
+  # var.a6 <- 1/(sigma.a6*sigma.a6) 
     
-  sigma.a7 ~ dunif(0,5)
-  var.a7 <- 1/(sigma.a7*sigma.a7)
-    
-  for (k in 1:narea) {
-      
-    a6[k] ~ dnorm(0,var.a6)
-    a7[k] ~ dnorm(0,var.a7)
-      
-  }
+  # sigma.a7 ~ dunif(0,5)
+  # var.a7 <- 1/(sigma.a7*sigma.a7)
+  #   
+  # for (k in 1:narea) {
+  #     
+  #   a6[k] ~ dnorm(0,var.a6)
+  #   a7[k] ~ dnorm(0,var.a7)
+  #     
+  # }
   
-  # year RE hyper prior --> define it's variance
-  sigma.a8 ~ dunif(0,5)
-  var.a8 <- 1/(sigma.a8*sigma.a8)
-
-  sigma.a9 ~ dunif(0,5)
-  var.a9 <- 1/(sigma.a9*sigma.a9)
-
-  for (k in 1:nyear) {
-
-    a8[k] ~ dnorm(0,var.a8)
-    a9[k] ~ dnorm(0,var.a9)
-
-  }
+  # # year RE hyper prior --> define it's variance
+  # sigma.a8 ~ dunif(0,5)
+  # var.a8 <- 1/(sigma.a8*sigma.a8)
+  # 
+  # sigma.a9 ~ dunif(0,5)
+  # var.a9 <- 1/(sigma.a9*sigma.a9)
+  # 
+  # for (k in 1:nyear) {
+  # 
+  #   a8[k] ~ dnorm(0,var.a8)
+  #   a9[k] ~ dnorm(0,var.a9)
+  # 
+  # }
   
-  # source RE hyper prior --> define it's variance
-  sigma.b3 ~ dunif(0,5)
-  var.b3 <- 1/(sigma.b3*sigma.b3)
+  # # source RE hyper prior --> define it's variance
+  # sigma.b3 ~ dunif(0,5)
+  # var.b3 <- 1/(sigma.b3*sigma.b3)
+  # 
+  # sigma.b4 ~ dunif(0,5)
+  # var.b4 <- 1/(sigma.b4*sigma.b4)
+  # 
+  # for (k in 1:nsource) {
+  # 
+  #   b3[k] ~ dnorm(0,var.b3)
+  #   b4[k] ~ dnorm(0,var.b4)
+  # 
+  # }
+  
+  # Center N.dom by area
+for (k in 1:narea) {
+  Ndom_sum[k] <- 0
+  Ndom_count[k] <- 0
+}
 
-  sigma.b4 ~ dunif(0,5)
-  var.b4 <- 1/(sigma.b4*sigma.b4)
+for (j in 1:nsites) {
+  Ndom_sum[area[j]] <- Ndom_sum[area[j]] + N.dom[j]
+  Ndom_count[area[j]] <- Ndom_count[area[j]] + 1
+}
 
-  for (k in 1:nsource) {
-
-    b3[k] ~ dnorm(0,var.b3)
-    b4[k] ~ dnorm(0,var.b4)
-
-  }
+for (k in 1:narea) {
+  Ndom_mean[k] <- Ndom_sum[k] / Ndom_count[k]
+}
     
     
   # Likelihood
@@ -173,12 +188,12 @@ cat(file = "ZDA_Co_Abundance_Model_final_20250805.jags",
     # Abundance of Subordinate Species w/ iZIP
     N.sub[j] ~ dpois(lambda.sub[j] * Z.sub[j])
 
-      log(lambda.sub[j]) <- a0[1] + a1[1]*flii[j] + a2[1]*hfp[j] + a3[1]*elev[j] + a4[1]*comm_det[j] + a5*N.dom[j] + a6[area[j]] + a8[year[j]]
+      log(lambda.sub[j]) <- a0[1] + a1[1]*flii[j] + a2[1]*hfp[j] + a3[1]*elev[j] + a4[1]*comm_det[j] + a5*(N.dom[j] - Ndom_mean[area[j]]) #+ a6[area[j]] + a8[year[j]]
     
     # Abundance of Dominant Species w/ iZIP 
     N.dom[j] ~ dpois(lambda.dom[j] * Z.dom[j])
     
-      log(lambda.dom[j]) <- a0[2] + a1[2]*flii[j] + a2[2]*hfp[j] + a3[2]*elev[j] + a4[2]*comm_det[j] + a7[area[j]] + a9[year[j]]
+      log(lambda.dom[j]) <- a0[2] + a1[2]*flii[j] + a2[2]*hfp[j] + a3[2]*elev[j] + a4[2]*comm_det[j] #+ a7[area[j]] + a9[year[j]]
                       
                       
     # Observation model for counts per replicated observation with OD params 
@@ -191,7 +206,7 @@ cat(file = "ZDA_Co_Abundance_Model_final_20250805.jags",
         
           lp.lim.sub[j,k]<- min(250, max(-250, lp.sub[j,k])) #stabilize logit
           
-            lp.sub[j,k] <- b0[1] +  b2[1]*cams[j,k] + b3[source[j]] + eps.p.sub[j,k]
+            lp.sub[j,k] <- b0[1] +  b2[1]*cams[j,k] + eps.p.sub[j,k] # + b3[source[j]] 
         
               eps.p.sub[j,k] <- eps.p.sub.z[j,k] * sd.p[1]
               
@@ -205,7 +220,7 @@ cat(file = "ZDA_Co_Abundance_Model_final_20250805.jags",
         
           lp.lim.dom[j,k]<- min(250, max(-250, lp.dom[j,k])) #stabilize logit
           
-            lp.dom[j,k] <- b0[2] + b2[2]*cams[j,k] + b4[source[j]] + eps.p.dom[j,k]
+            lp.dom[j,k] <- b0[2] + b2[2]*cams[j,k] + eps.p.dom[j,k] # + b4[source[j]]
               
               eps.p.dom[j,k] <- eps.p.dom.z[j,k] * sd.p[2]
                 
@@ -308,9 +323,9 @@ cat(file = "ZDA_Co_Abundance_Model_final_20250805.jags",
 ### Specify the parameters to be monitored.
 params = c('a0', 'a1', 'a2', 'a3', 'a4', 'a5',    # Abundance parameters
            'b0',  'b2',                           # Detection parameters
-           'var.a6','var.a7','a6', 'a7',          # Landscape random effects
-           'var.a8','var.a9','a8', 'a9',          # Year random effects
-           'var.b3','var.b4','b3', 'b4',          # source random effects
+           # 'var.a6','var.a7','a6', 'a7',          # Landscape random effects
+           # 'var.a8','var.a9','a8', 'a9',          # Year random effects
+           # 'var.b3','var.b4','b3', 'b4',          # source random effects
            "tau.p","eps.p.dom","eps.p.sub",       # OD params
            "eps.p.dom.z", "eps.p.sub.z",          # non-centered OD parameters 
            "fit.sub", "fit.rep.sub",              # Chi2 stat for sub, real then simulated
@@ -328,12 +343,12 @@ inits = function() {
   list(a0=rnorm(2), a1=rnorm(2), a2=rnorm(2), a3=rnorm(2), a4=rnorm(2), a5=rnorm(1),
        b0=rnorm(2), b2=rnorm(2),
        sd.p = runif(2, .4, .8), # Experimented and medium values seem to produce better convergence.
-       a6=rnorm(bdata$narea), a7=rnorm(bdata$narea),
-       a8=rnorm(bdata$nyear), a9=rnorm(bdata$nyear),
-       b3=rnorm(bdata$nsource), b4=rnorm(bdata$nsource),
-       sigma.a6= runif(1, 3, 5), sigma.a7= runif(1, 3, 5), #crashes w/ inits >= 6, and has better convergence > 2
-       sigma.a8= runif(1, 3, 5), sigma.a9= runif(1, 3, 5), #havent explored these values at all.
-       sigma.b3= runif(1, 3, 5), sigma.b4= runif(1, 3, 5), #havent explored these values at all.
+       # a6=rnorm(bdata$narea), a7=rnorm(bdata$narea),
+       # a8=rnorm(bdata$nyear), a9=rnorm(bdata$nyear),
+       # b3=rnorm(bdata$nsource), b4=rnorm(bdata$nsource),
+       # sigma.a6= runif(1, 3, 5), sigma.a7= runif(1, 3, 5), #crashes w/ inits >= 6, and has better convergence > 2
+       # sigma.a8= runif(1, 3, 5), sigma.a9= runif(1, 3, 5), #havent explored these values at all.
+       # sigma.b3= runif(1, 3, 5), sigma.b4= runif(1, 3, 5), #havent explored these values at all.
        N.sub = as.vector(apply(bdata$y.sub ,1,max, na.rm=T)),   
        N.dom = as.vector(apply(bdata$y.dom ,1,max, na.rm=T)),
        Z.dom = as.vector(rep(as.numeric(NA), length.out = length(bdata$Z.dom))),
@@ -396,7 +411,14 @@ mod = jags(bdata, inits, params, "ZDA_Co_Abundance_Model_final_20250805.jags",
 # take the end time 
 end = Sys.time()
 
-### DONT SAVE THE MODEL, they are too big 
+## make a saving path
+day<-substr(Sys.Date(),9, 10)
+month<-substr(Sys.Date(),6,7)
+year<-substr(Sys.Date(),1,4)
+
+path = paste(paste(paste(paste("results/simulations/full_models/", slurm, "_", setting, "_", "full_model_", n, "_", year,sep=""),month,sep=""),day,sep=""),".rds",sep="")
+## save the model 
+saveRDS(mod, path)
 
 print(paste("Finished running co-abundance simulation test: ", n, " at ", Sys.time(),
             ". This model took ", round(difftime(end, start, units = "hours"), 4), " hours to be completed. Beginning dataframe extractions now.", sep = ""))

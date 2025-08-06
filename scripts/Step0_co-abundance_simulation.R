@@ -7,6 +7,7 @@
 
 # load library
 library(tidyverse)     ## For lots of functions 
+library(jagsUI)        ## for bayes model manipulations
 
 ##### Provide example data to ChatGPT ##### 
 
@@ -187,9 +188,14 @@ simulate_coabundance_full <- function(
   # extract abundance
   N.dom <- rpois(nsites, lambda_dom * Z.dom)
   
-  # apply the predictor but add N.dom for subordinate speices
-  lambda_sub <- exp(linpred + a5 * N.dom)
-  # extract abundance 
+  # intalize lambda sub, 
+  lambda_sub <- rep(NA, nsites)
+  # but apply N_dom as a centered value per RE group 
+  for (i in 1:nsites) {
+    group_mean <- mean(N.dom[area == area[i]])
+    # this is expanding upon the linear predictor to include centered N.dom 
+    lambda_sub[i] <- exp(linpred[i] + a5 * (N.dom[i] - group_mean))
+  }
   N.sub <- rpois(nsites, lambda_sub * Z.sub)
   
   # === 8. EFFORT MATRIX (cams) ===
@@ -249,7 +255,8 @@ simulate_coabundance_full <- function(
     nyear = nyear,
     nsource = nsource,
     a5_true = a5,
-    bias_applied = bias
+    bias_applied = bias,
+    a_state_area = a_state_area
   ))
 } # end function
 
@@ -258,7 +265,19 @@ sim_pos = simulate_coabundance_full(a5 = 1, bias = "none")
 sim_neg = simulate_coabundance_full(a5 = -1, bias = "none")
 # assess correlations between N.dom and N.sub
 cor(sim_pos$N.dom, sim_pos$N.sub) # positive 
-cor(sim_neg$N.dom, sim_neg$N.sub) # negative, good. 
+cor(sim_neg$N.dom, sim_neg$N.sub) # barely negative... suspicous. 
+
+# # Assess if N.dom varies by random effects
+# boxplot(N.dom ~ area, data = sim_pos)
+# boxplot(N.sub ~ area, data = sim_pos)
+# 
+# ## check for correlation between N.dom and area random effect 
+# area_effects <- tapply(sim_pos$N.dom, sim_pos$area, mean)
+# cor(area_effects, unique(sim_pos$a_state_area))  
+# 
+# plot(sim_neg$N.dom - tapply(sim_neg$N.dom, sim_neg$area, mean)[sim_neg$area],
+#      sim_neg$N.sub, col = sim_neg$area, pch = 19)
+
 
 ### Now we are going to create 18 datasets based on multiple conditions
 # bias = none, double counts of individuals, spatial autocorrelation, unmeasured variables in state & det, and a combo of all
@@ -275,7 +294,7 @@ bias_types <- list(
 )
 
 # store true a5 values we want to test
-a5_values <- c(-1, -.5, 0, .5, 1)
+a5_values <- c(-2, -1, -.5, 0, .5, 1, 2)
 
 # Storage
 simulated_datasets <- list()
@@ -290,7 +309,7 @@ for (a5 in a5_values) {
 rm(a5, bias, key)
 
 ## check 
-length(simulated_datasets) # 30 w/ extra a5 values  
+length(simulated_datasets) # 30 w/ extra a5 values, but only 5 if looking at no biases
 names(simulated_datasets) # very good. 
 
 ## grab the date
@@ -305,7 +324,7 @@ path = paste("~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_
              date, ".RDS", sep = "")
 
 ## save this as a RDS object
-write_rds(simulated_datasets, path)
+saveRDS(simulated_datasets, path)
 
 ##### Run models on the HPC ######
 
@@ -321,7 +340,7 @@ rm(list = ls())
 wd = "~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/results/"
 
 # and list all relevant files 
-files = list.files(paste(wd, "MIDDLE_simulations_PPC_only_August_2025", sep = ""), recursive = T)
+files = list.files(paste(wd, "MIDDLE_simulations_August_2025_v7", sep = ""), recursive = T)
 
 #
 ##
@@ -333,7 +352,7 @@ files_coeff = files[grepl("coefficent_dataframes/", files)]
 res = list()
 for(i in 1:length(files_coeff)){
   # import the file 
-  d = read.csv(paste(wd, "MIDDLE_simulations_August_2025_v4/", files_coeff[i], sep = ""))
+  d = read.csv(paste(wd, "MIDDLE_simulations_August_2025_v7/", files_coeff[i], sep = ""))
   # save in the list 
   res[[i]] = d
   # save with the test name 
@@ -359,12 +378,12 @@ unique(coeff$bias) # both are good!
 ### PPC data frame 
 
 ## First, subset for coefficent results
-files_ppc = files#[grepl("PPC_dataframes/", files)]
+files_ppc = files[grepl("PPC_dataframes/", files)]
 # import each one
 res = list()
 for(i in 1:length(files_ppc)){
   # import the file 
-  d = read.csv(paste(wd, "MIDDLE_simulations_PPC_only_August_2025/", files_ppc[i], sep = ""))
+  d = read.csv(paste(wd, "MIDDLE_simulations_August_2025_v7/", files_ppc[i], sep = ""))
   # save in the list 
   res[[i]] = d
   # save with the test name 
@@ -449,7 +468,7 @@ files_abund = files[grepl("prediction_dataframes/", files)]
 res = list()
 for(i in 1:length(files_abund)){
   # import the file 
-  d = read.csv(paste(wd, "MIDDLE_simulations_August_2025_v4/", files_abund[i], sep = ""))
+  d = read.csv(paste(wd, "MIDDLE_simulations_August_2025_v7/", files_abund[i], sep = ""))
   # save in the list 
   res[[i]] = d
   # save with the test name 
@@ -478,10 +497,29 @@ unique(abund$bias) # both are good!
 ## first inspect no bias -> can model recover true value?
 dat = ppc[ppc$bias == "none", ]
 dat[order(dat$true_a5), c("true_a5", "Interaction_Estimate","lower","upper", "Significance", "support")]
-## One strange thing now:
-# positive true a5 values are negative, WTF! 
+## ok, values are somewhat recovered, but still facing poor fits. 
+dat # some very large Rhats, insepct the true mod
 
 
+## import example mod
+check = readRDS('this_is_a_test.rds')
+
+# Extract a5 samples directly
+a5_samples <- check$sims.list$a5
+# Convert to data frame
+df <- data.frame(a5 = a5_samples)
+
+# Plot posterior
+ggplot(df, aes(x = a5)) +
+  geom_density(fill = "skyblue", alpha = 0.6) +
+  geom_vline(xintercept = mean(df$a5), linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = quantile(df$a5, c(0.025, 0.975)), linetype = "dotted", color = "black") +
+  labs(title = "Posterior Distribution of a5",
+       x = expression(a[5]),
+       y = "Density") +
+  theme_minimal()
+## check the traceplots 
+traceplot(check, parameters = "a5")
 
 #
 #

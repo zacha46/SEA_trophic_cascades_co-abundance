@@ -340,38 +340,38 @@ rm(list = ls())
 wd = "~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/results/"
 
 # and list all relevant files 
-files = list.files(paste(wd, "MIDDLE_simulations_August_2025_v7", sep = ""), recursive = T)
+files = list.files(paste(wd, "MIDDLE_simulations_August_2025_varying_REs", sep = ""), recursive = T)
 
-#
-##
-### Coefficient data frame 
-
-## First, subset for coefficent results
-files_coeff = files[grepl("coefficent_dataframes/", files)]
-# import each one
-res = list()
-for(i in 1:length(files_coeff)){
-  # import the file 
-  d = read.csv(paste(wd, "MIDDLE_simulations_August_2025_v7/", files_coeff[i], sep = ""))
-  # save in the list 
-  res[[i]] = d
-  # save with the test name 
-  names(res)[i] = str_extract(files_coeff[i], "(?<=coefficents_).*(?=_\\d{8}\\.csv)")
-}
-rm(d, i, files_coeff)
-
-## Combine in to a DF 
-coeff = do.call(rbind, res)
-rownames(coeff) = NULL
-
-# extract true a5 and bias as new columns
-coeff <- coeff %>%
-  mutate(
-    true_a5 = as.numeric(str_match(sim_test, "a5_([^_]+)_bias_")[,2]),
-    bias = str_match(sim_test, "bias_(.*)$")[,2]
-  )
-unique(coeff$true_a5)
-unique(coeff$bias) # both are good! 
+# #
+# ##
+# ### Coefficient data frame 
+# 
+# ## First, subset for coefficent results
+# files_coeff = files[grepl("coefficent_dataframes/", files)]
+# # import each one
+# res = list()
+# for(i in 1:length(files_coeff)){
+#   # import the file 
+#   d = read.csv(paste(wd, "MIDDLE_simulations_August_2025_v8/", files_coeff[i], sep = ""))
+#   # save in the list 
+#   res[[i]] = d
+#   # save with the test name 
+#   names(res)[i] = str_extract(files_coeff[i], "(?<=coefficents_).*(?=_\\d{8}\\.csv)")
+# }
+# rm(d, i, files_coeff)
+# 
+# ## Combine in to a DF 
+# coeff = do.call(rbind, res)
+# rownames(coeff) = NULL
+# 
+# # extract true a5 and bias as new columns
+# coeff <- coeff %>%
+#   mutate(
+#     true_a5 = as.numeric(str_match(sim_test, "a5_([^_]+)_bias_")[,2]),
+#     bias = str_match(sim_test, "bias_(.*)$")[,2]
+#   )
+# unique(coeff$true_a5)
+# unique(coeff$bias) # both are good! 
 
 #
 ##
@@ -383,11 +383,13 @@ files_ppc = files[grepl("PPC_dataframes/", files)]
 res = list()
 for(i in 1:length(files_ppc)){
   # import the file 
-  d = read.csv(paste(wd, "MIDDLE_simulations_August_2025_v7/", files_ppc[i], sep = ""))
+  d = read.csv(paste(wd, "MIDDLE_simulations_August_2025_varying_REs/", files_ppc[i], sep = ""))
+  # grab the random effect test 
+  d$RE_test = str_extract(files_ppc[i], "(?<=values_)[^_]+_REs?|[^_]+_RE(?=_only)")
   # save in the list 
   res[[i]] = d
   # save with the test name 
-  names(res)[i] = str_extract(files_ppc[i], "(?<=Chat_values_).*(?=_\\d{8}\\.csv)")
+  names(res)[i] = str_extract(files_ppc[i], "a5.*(?=_\\d{8}\\.csv)")
 }
 rm(d, i, files_ppc)
 
@@ -462,32 +464,32 @@ table(ppc$support) # most are a poor fit
 ##
 ### abundance data frame 
 
-## First, subset for coefficent results
-files_abund = files[grepl("prediction_dataframes/", files)]
-# import each one
-res = list()
-for(i in 1:length(files_abund)){
-  # import the file 
-  d = read.csv(paste(wd, "MIDDLE_simulations_August_2025_v7/", files_abund[i], sep = ""))
-  # save in the list 
-  res[[i]] = d
-  # save with the test name 
-  names(res)[i] = str_extract(files_abund[i], "(?<=comparison_).*(?=_\\d{8}\\.csv)")
-}
-rm(d, i, files_abund)
-
-## Combine in to a DF 
-abund = do.call(rbind, res)
-rownames(abund) = NULL
-
-# extract true a5 and bias as new columns
-abund <- abund %>%
-  mutate(
-    true_a5 = as.numeric(str_match(sim_test, "a5_([^_]+)_bias_")[,2]),
-    bias = str_match(sim_test, "bias_(.*)$")[,2]
-  )
-unique(abund$true_a5)
-unique(abund$bias) # both are good! 
+# ## First, subset for coefficent results
+# files_abund = files[grepl("prediction_dataframes/", files)]
+# # import each one
+# res = list()
+# for(i in 1:length(files_abund)){
+#   # import the file 
+#   d = read.csv(paste(wd, "MIDDLE_simulations_August_2025_v8/", files_abund[i], sep = ""))
+#   # save in the list 
+#   res[[i]] = d
+#   # save with the test name 
+#   names(res)[i] = str_extract(files_abund[i], "(?<=comparison_).*(?=_\\d{8}\\.csv)")
+# }
+# rm(d, i, files_abund)
+# 
+# ## Combine in to a DF 
+# abund = do.call(rbind, res)
+# rownames(abund) = NULL
+# 
+# # extract true a5 and bias as new columns
+# abund <- abund %>%
+#   mutate(
+#     true_a5 = as.numeric(str_match(sim_test, "a5_([^_]+)_bias_")[,2]),
+#     bias = str_match(sim_test, "bias_(.*)$")[,2]
+#   )
+# unique(abund$true_a5)
+# unique(abund$bias) # both are good! 
 
 #
 ##
@@ -496,30 +498,34 @@ unique(abund$bias) # both are good!
 
 ## first inspect no bias -> can model recover true value?
 dat = ppc[ppc$bias == "none", ]
-dat[order(dat$true_a5), c("true_a5", "Interaction_Estimate","lower","upper", "Significance", "support")]
+dat[order(dat$true_a5), c("true_a5", "Interaction_Estimate","lower","upper", "Rhat", "Significance", "support", "RE_test")]
 ## ok, values are somewhat recovered, but still facing poor fits. 
-dat # some very large Rhats, insepct the true mod
+dat = dat[order(dat$true_a5),] # some very large Rhats, insepct the true mod
+
+# inspect one RE test at a time 
+dat[dat$RE_test == "no_REs", c("true_a5", "Interaction_Estimate","lower","upper", "Rhat", "Significance", "support", "RE_test")]
 
 
-## import example mod
-check = readRDS('this_is_a_test.rds')
+## Inspect each bias level 
+dat = ppc[ppc$bias == "unmeasured_state", ]
+dat[order(dat$true_a5), c("true_a5", "Interaction_Estimate","lower","upper", "Significance", "support")]
+# weird results 
 
-# Extract a5 samples directly
-a5_samples <- check$sims.list$a5
-# Convert to data frame
-df <- data.frame(a5 = a5_samples)
+dat = ppc[ppc$bias == "unmeasured_detection", ]
+dat[order(dat$true_a5), c("true_a5", "Interaction_Estimate","lower","upper", "Significance", "support")]
+# almost all poor fits 
 
-# Plot posterior
-ggplot(df, aes(x = a5)) +
-  geom_density(fill = "skyblue", alpha = 0.6) +
-  geom_vline(xintercept = mean(df$a5), linetype = "dashed", color = "blue") +
-  geom_vline(xintercept = quantile(df$a5, c(0.025, 0.975)), linetype = "dotted", color = "black") +
-  labs(title = "Posterior Distribution of a5",
-       x = expression(a[5]),
-       y = "Density") +
-  theme_minimal()
-## check the traceplots 
-traceplot(check, parameters = "a5")
+dat = ppc[ppc$bias == "double_count", ]
+dat[order(dat$true_a5), c("true_a5", "Interaction_Estimate","lower","upper", "Significance", "support")]
+# all poor fits 
+
+dat = ppc[ppc$bias == "spatial", ]
+dat[order(dat$true_a5), c("true_a5", "Interaction_Estimate","lower","upper", "Significance", "support")]
+# all poor fits 
+
+dat = ppc[ppc$bias == "double_count+spatial+unmeasured_state+unmeasured_detection", ]
+dat[order(dat$true_a5), c("true_a5", "Interaction_Estimate","lower","upper", "Significance", "support")]
+# all poor fits 
 
 #
 #

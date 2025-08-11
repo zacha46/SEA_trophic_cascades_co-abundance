@@ -19,149 +19,326 @@ library(tidyverse)     ## For lots of functions
 library(rjags)         ## For running and inspecting bayes models
 # library(coda)          ## for manipulating bayes models, but loaded w/ rjags
 
-## Set seed for reproducibiliy
+## Set seed for reproduciblity
 set.seed(2025)
 
+##### Function for simulating data  ##### 
 
-#### Matt H's code ####
+# load dimensions for testing + terminiology 
+nsites  <- 60    # j, rows in the matrix
+nreps   <- 3     # k, columns in the matrix
+narea   <- 4     # number of landscapes for RE
+nyear   <- 3     # number of years for RE 
+nsource <- 2     # number of data providers for RE
 
-# basic idea: simulate data by writing your model in reverse
-
-# metadata
-j <- 100  # number of sites
-k <- 3  # number of surveys per site
-S <- 2  # number of species
-
-# parameters
-lambda_a <- rgamma(S, 3, 1)  # baseline abundance of species
-lambda_b <- rnorm(1, mean = -1)  # SIV -> effect of species 1 on species 2
-p <- rbeta(S, 1, 1)  # detection probabilities
-
-# site-level abundance
-N <- matrix(0, j, S)
-N[, 1] <- rpois(j, lambda_a[1])  # true abundance of species 1
-log_lambda <- rep(log(lambda_a[2]), j)  # linear predictor of species 2
-for (i in 1:j) {
-  if (N[i]) {
-    log_lambda[i] <- log_lambda[i] + lambda_b * log(N[i, 1])  # increment abundance of species 1
-  }
-}
-N[, 2] <- rpois(j, exp(log_lambda))  # true abundance of species 2
-
-# observation process/data for both species 
-y <- array(0, c(j, k, S))
-for (i in 1:j) {
-  for (s in 1:S) {
-    y[i, , s] <- rbinom(k, N[i, s], p[s])
-  }
-}
-
-## See if poission GLM can recover similar coefficent as lambda_b
-summary(glm(N[,2] ~ N[,1], family = "poisson")) # still there and significant! 
-
-## keep it clean for the next sim
-rm(list = ls())
-
-
-#### Simulate simple co-abundance model ##### 
-
-# Terminology: 
-# Minimal 2-species N-mixture (no ZIP)
-# Labels: a0[1:2], b0[1:2], a5
-# No random effects or extra covariates yet
-
-# --- dimensions ---
-nsites <- 60   # j
-nreps  <- 3    # k
-
-## inverse logit function 
+## inverse logit function, used inside function 
 inv_logit <- function(x) 1/(1+exp(-x))
 
-# --- simulate one dataset (simple, no ZIP) ---
-sim_one <- function(nsites, nreps, true_siv, log_dom = FALSE){
-  ## simulate covariates 
+# Load the function
+coabundance_simulator <- function(nsites, nreps, narea, nyear, nsource, 
+                                  true_siv, log_dom = FALSE,
+                                  area = NULL, Zdom_area = NULL, Zsub_area = NULL,
+                                  # --- bias toggles & strengths ---
+                                  bias_doublecount = FALSE,   dc_rate = 0.4,               # 1) double counting, with a customizable rate 
+                                  bias_sp_autocorr = FALSE,   rho_sp = 0.3, p_cross = 0.4, # 2) spillover across sites, 
+                                  # rho = how much neighbor contributes, and p = the chance critter is seen at neighbor site 
+                                  bias_unmeas_state = FALSE,  u_state_sd = 0.6,            # 3) unmeasured state cov, w/ customizable rate
+                                  bias_unmeas_det = FALSE,    u_det_sd = 0.6){             # 4) unmeasured det cov, w/ customizable rate 
+  ### Assign areas if not supplied
+  if (is.null(area)) {
+    q <- rep(floor(nsites / narea), narea)
+    # if there are less less levels than sites 
+    if (sum(q) < nsites){ 
+      # add 1
+      q[seq_len(nsites - sum(q))] <- q[seq_len(nsites - sum(q))] + 1L
+    }
+    # create area groupings 
+    area <- rep(seq_len(narea), times = q)
+  } # end null condition
+  
+  ## Validate Z vectors supplied to the function
+  if (is.null(Zdom_area) || is.null(Zsub_area)) {
+    # default to present in all areas if not provided
+    Zdom_area <- rep(1L, narea)
+    Zsub_area <- rep(1L, narea)
+  } # end null z condition
+  ## Make sure Z is kosher and equals area groupings in length
+  stopifnot(length(Zdom_area) == narea, length(Zsub_area) == narea)
+  Zdom_area <- as.integer(Zdom_area); Zsub_area <- as.integer(Zsub_area)
+  
+  ## Assign year and source random effects
+  year = sample(1:nyear, size = nsites, replace = TRUE)
+  source = sample(1:nsource, size = nsites, replace = TRUE)
+  
+  ## simulate key covariates 
   a0 <- rnorm(2, 0, 1)             # state intercepts
   a5 <- rnorm(1, true_siv, 0.5)    # interaction: sp2 depends on sp1
   b0 <- rnorm(2, 0, 1)             # detection intercepts
+  ## Additional covaraites 
+  a1 <- rnorm(2, 0, 1)             # flii effects
+  a2 <- rnorm(2, 0, 1)             # hfp effects
+  a3 <- rnorm(2, 0, 1)             # elev effects
+  a4 <- rnorm(2, 0, 1)             # community detections 
+  ## Detection covariate 
+  b1 <- rnorm(2, 0, 1)             # sampling effort observation covariate 
+  sd.p <- runif(2, 0, 1)           # OD RE per species 
+  ## bias covariates
+  u_state <- rnorm(nsites, 0, u_state_sd)   # site latent driver
+
+  # Site covariates (scale for stability)
+  flii <- scale(rnorm(nsites, 0, 1))[,1]
+  hfp  <- scale(rnorm(nsites, 0, 1))[,1]
+  elev <- scale(rnorm(nsites, 0, 1))[,1]
+  comm_det <- scale(log(runif(nsites, 1, 100) + 1))[,1]
   
-  ## create iZIP by incorporating occupancy prob w/ sites 
-  # Here: first half sites have dom present, sub present at random
-  Z_dom <- c(rep(1, nsites/2), rep(0, nsites/2))
-  Z_sub <- rbinom(nsites, 1, 0.7)  # tweak rule as needed
+  # Detection coviariate 
+  # raw_effort <- matrix(runif(nsites * nreps, min = 0.5, max = 1.5), nsites, nreps)
+  raw_effort = matrix(rlnorm(nsites * nreps, meanlog=0, sdlog=0.6), nsites, nreps) # add wider spread 
+  cams <- scale(raw_effort)
+  
+  ## generate the random intercepts using moderate SDs to avoid issues 
+  sigma_a6 <- 0.5 ; sigma_a7 <- 0.5   # dom/sub ~ area
+  a6_area  <- rnorm(narea, 0, sigma_a6)
+  a7_area  <- rnorm(narea, 0, sigma_a7)
+  
+  ## Do the same for the two other random effects: 
+  # year
+  sigma_a8 <- 0.5 ; sigma_a9 <- 0.5
+  a8_year  <- rnorm(nyear, 0, sigma_a8) # subordinate 
+  a9_year  <- rnorm(nyear, 0, sigma_a9) # dominant 
+  # source 
+  sigma_b2 <- 0.5 ; sigma_b3 <- 0.5
+  b2_source <- rnorm(nsource, 0, sigma_b2) # subordinate
+  b3_source <- rnorm(nsource, 0, sigma_b3) # dominant 
+  
+  #
+  ##
+  ### State formula 
   
   # expected abundance of dominant species 
-  lambda_dom <- exp(a0[2])
-  
+  lambda_dom <- exp(a0[2] + a1[2]*flii + a2[2]*hfp + a3[2]*elev + a4[2]*comm_det + a7_area[area] + a9_year[year] + if(bias_unmeas_state){u_state}else{0}) 
   # Draw dominant counts first w/ iZIP 
-  N_dom <- rpois(nsites, lambda_dom) * Z_dom
+  N_dom <- rpois(nsites, lambda_dom) * Zdom_area[area]
   
   # Subordinate mean depends on latent N.dom 
   if(log_dom){
     # can use log for stability
-    lambda_sub <- exp(a0[1] + a5 * log(N_dom + 1))
+    lp_sub <- a0[1] + a1[1]*flii + a2[1]*hfp + a3[1]*elev + a4[1]*comm_det + a5*log(N_dom + 1) + a6_area[area] + a8_year[year] + if(bias_unmeas_state){u_state}else{0}
   }else{
-    lambda_sub <- exp(a0[1] + a5 * N_dom)
-  }
-
-   # Draw subordinate counts
-  N_sub <- rpois(nsites, lambda_sub) * Z_sub
+    ## Center N_dom by calculating the Z-score: value - mean / sd 
+    N_dom_c <- (N_dom - mean(N_dom))/sd(N_dom)
+    lp_sub <- a0[1] + a1[1]*flii + a2[1]*hfp + a3[1]*elev + a4[1]*comm_det + a5*N_dom_c + a6_area[area] + a8_year[year] + if(bias_unmeas_state){u_state}else{0}
+  } # end log condition
+  ## clamp the linear predictor to a more narrow range to prevent overflow
+  lp_sub <- pmax(pmin(lp_sub, 20), -20)   
+  lambda_sub <- exp(lp_sub)
   
-  ## Detection is same for both species, w/ different intercepts
-  p_dom <- inv_logit(b0[2])
-  p_sub <- inv_logit(b0[1])
-  # create the count matrix based on true abundance and detection prob 
-  y_dom <- matrix(0L, nsites, nreps)
-  y_sub <- matrix(0L, nsites, nreps)
-  for(j in 1:nsites){
-    for(k in 1:nreps){
-      y_dom[j,k] <- rbinom(1, N_dom[j], p_dom)
-      y_sub[j,k] <- rbinom(1, N_sub[j], p_sub)
+  # Draw subordinate counts
+  N_sub <- rpois(nsites, lambda_sub) * Zsub_area[area]
+  
+  ### Prepare for the spatial autocorrelation bias 
+  # create a simple neighbor map: within each area, neighbors are the previous/next site indices
+  neighbors <- vector("list", nsites)
+  idx_by_area <- split(seq_len(nsites), area)
+  for (grp in idx_by_area) {
+    for (pos in seq_along(grp)) {
+      nb <- integer(0)
+      if (pos > 1) nb <- c(nb, grp[pos - 1])
+      if (pos < length(grp)) nb <- c(nb, grp[pos + 1])
+      neighbors[[grp[pos]]] <- nb
     }
   }
   
+  #
+  ##
+  ### Detection formula 
+  
+  # create the count matrix based on true abundance and detection prob 
+  y_dom <- matrix(0L, nsites, nreps)
+  y_sub <- matrix(0L, nsites, nreps)
+  # specify the OD RE outside of the loop 
+  eps_dom <- rnorm(1, 0, sd.p[2])
+  eps_sub <- rnorm(1, 0, sd.p[1])
+  
+  ## Create a bias for unobserved covariate in detection formula
+  if (bias_unmeas_det) {
+    u_det <- matrix(rnorm(nsites*nreps, 0, u_det_sd), nsites, nreps)
+  } else {
+    # defaults to zero if not used. 
+    u_det <- matrix(0, nsites, nreps)
+  }
+  
+  # for each site 
+  for(j in 1:nsites){
+    # and for each rep 
+    for(k in 1:nreps){
+      
+      ## Detection linear predictor is same for both species, w/ different intercepts/coefficents
+      lp_dom = b0[2] + b1[2]*cams + eps_dom + b2_source[source[j]] + u_det[j,k]
+      lp_sub = b0[1] + b1[1]*cams + eps_sub + b3_source[source[j]] + u_det[j,k]
+      
+      ## take the logit transformation of the linear predictors to calculate det prob 
+      p_dom <- inv_logit(max(min(lp_dom, 250), -250))
+      p_sub <- inv_logit(max(min(lp_sub, 250), -250))
+      
+      ## now combine det prob with latent abundance to inform the count history matrix using a binomial distribution
+      y_base_dom <- rbinom(1, N_dom[j], p_dom)
+      y_base_sub <- rbinom(1, N_sub[j], p_sub)
+      
+      ### Add a double counting bias
+      if (bias_doublecount) {
+        # extra "double-counted" opportunities scale with abundance
+        dc_dom <- rpois(1, lambda = dc_rate * max(N_dom[j], 0))
+        dc_sub <- rpois(1, lambda = dc_rate * max(N_sub[j], 0))
+        # draw the extra counts 
+        y_ext_dom <- rbinom(1, dc_dom, p_dom)
+        y_ext_sub <- rbinom(1, dc_sub, p_sub)
+        # combine with base counts
+        y_dom[j,k] <- y_base_dom + y_ext_dom
+        y_sub[j,k] <- y_base_sub + y_ext_sub
+      } else {
+        # but if false, dont add any double counting! 
+        y_dom[j,k] <- y_base_dom
+        y_sub[j,k] <- y_base_sub
+      }
+      
+      ### Add a spatial autocorrelation bias 
+      if (bias_sp_autocorr) {
+        # neighbor abundance pool (dominant & subordinate)
+        Nnb_dom <- if (length(neighbors[[j]])>0) round(rho_sp * mean(N_dom[neighbors[[j]]])) else 0L
+        Nnb_sub <- if (length(neighbors[[j]])>0) round(rho_sp * mean(N_sub[neighbors[[j]]])) else 0L
+        # spillover detection from neighbors (can exceed local N)
+        y_dom[j,k] <- y_dom[j,k] + rbinom(1, max(Nnb_dom,0), p_cross * p_dom)
+        y_sub[j,k] <- y_sub[j,k] + rbinom(1, max(Nnb_sub,0), p_cross * p_sub)
+      }
+      
+    } # end per rep
+  } # end per site
+  
+  ## save all the data in a list 
   list(
-    data = list(nsites=nsites, nreps=nreps, y.dom=y_dom, y.sub=y_sub, Z.dom = Z_dom, Z.sub = Z_sub),
-    truth = list(a0=a0, a5=a5, b0=b0, Z_dom = Z_dom, Z_sub = Z_sub,
+    data = list(nsites=nsites, nreps=nreps, 
+                y.dom=y_dom, y.sub=y_sub, 
+                Zdom_area=Zdom_area, Zsub_area=Zsub_area, 
+                flii=as.numeric(flii), hfp=as.numeric(hfp), elev=as.numeric(elev), comm_det = as.numeric(comm_det),
+                narea = narea, area = as.integer(area),
+                cams = cams,
+                nyear = nyear, year = as.numeric(year), 
+                nsource = nsource, source = as.numeric(source)),
+    # and also keep the true values for comparison later 
+    truth = list(a0=a0, a5=a5, b0=b0,
+                 Zdom_area=Zdom_area, Zsub_area=Zsub_area, sd.p = sd.p,
                  lambda_dom=lambda_dom, lambda_sub=lambda_sub)
   )
 } # end function
 
-## Use the function to simulate a dataset 
-sim <- sim_one(nsites, nreps, true_siv = -2, log_dom = F)
+#### Test the function! 
 
-# --- JAGS model (matches the simulator) ---
+## Define key values for the function
+nsites  <- 60; nreps <- 3
+narea   <- 4
+nyear   <- 2
+nsource <- 2
+area   <- rep(1:narea, times=c(20,15,15,10))
+Zdom_area <- c(1, 1, 0, 1)  # area 3 absent for dominant
+Zsub_area <- c(0, 1, 1, 1)  # area 1 absent for subordinate
+
+## Use the function to simulate a dataset 
+sim <- coabundance_simulator(nsites, nreps, narea, nyear, nsource, 
+                             true_siv = 2, log_dom = T, area = area, 
+                             Zdom_area = Zdom_area, Zsub_area = Zsub_area,
+                             bias_doublecount = FALSE, bias_sp_autocorr = FALSE, 
+                             bias_unmeas_state = FALSE, bias_unmeas_det = FALSE)
+
+
+##### Load a JAGS model and inital values #####
 jags_model <- "
 model{
-  # Priors
+  # Regular priors for both species
   for(i in 1:2){
-    a0[i] ~ dnorm(0, 1)
-    b0[i] ~ dnorm(0, 1)
+    a0[i] ~ dnorm(0, 1)   # state intercept 
+    b0[i] ~ dnorm(0, 1)   # det intercept 
+    a1[i] ~ dnorm(0, 1)   # flii
+    a2[i] ~ dnorm(0, 1)   # hfp
+    a3[i] ~ dnorm(0, 1)   # elev
+    a4[i] ~ dnorm(0, 1)   # comm_det
+    b1[i] ~ dnorm(0, 1)   # sampling effort 
+    # OD params for observation model
+    sd.p[i] ~ dunif(0, 1) 
+    tau.p[i] <- pow(sd.p[i], -2)
   }
+  # SIV prior 
   a5 ~ dnorm(0, 1)
+  
+  # landscape RE hyper priors 
+  sigma.a6 ~ dunif(0, 5)
+  var.a6 <- 1 / pow(sigma.a6, 2)
+  sigma.a7 ~ dunif(0, 5)
+  var.a7 <- 1 / pow(sigma.a7, 2)
+  
+  for (k in 1:narea){
+    a6[k] ~ dnorm(0, var.a6)   # sub ~ area
+    a7[k] ~ dnorm(0, var.a7)   # dom ~ area
+  }
+  
+  # Year RE hyper priors 
+  sigma.a8 ~ dunif(0, 5)
+  var.a8 <- 1/pow(sigma.a8, 2)
+  sigma.a9 ~ dunif(0, 5)
+  var.a9 <- 1/pow(sigma.a9, 2)
+  
+  for (k in 1:nyear){
+    a8[k] ~ dnorm(0, var.a6)   # sub ~ year
+    a9[k] ~ dnorm(0, var.a7)   # dom ~ year
+  }
+  
+  # Source RE hyper prior 
+  sigma.b2 ~ dunif(0, 5)
+  var.b2 <- 1/pow(sigma.b2, 2)
+  sigma.b3 ~ dunif(0, 5)
+  var.b3 <- 1/pow(sigma.b3, 2)
+  
+  for (k in 1:nsource){
+    b2[k] ~ dnorm(0, var.b2)   # sub ~ source
+    b3[k] ~ dnorm(0, var.b3)   # dom ~ source
+  }
 
  # State process
   for(j in 1:nsites){
     # Dominant
-    log(lambda.dom[j]) <- a0[2]
-    N.dom[j] ~ dpois(lambda.dom[j] * Z.dom[j])
+    log(lambda.dom[j]) <- a0[2] + a1[2]*flii[j] + a2[2]*hfp[j] + a3[2]*elev[j] + a4[2]*comm_det[j] + a7[area[j]] + a9[year[j]]
+    N.dom[j] ~ dpois(lambda.dom[j] * Zdom_area[area[j]])
 
     # Subordinate depends on **latent N.dom** (can use log for stability, but not now)
-    log(lambda.sub[j]) <- a0[1] + a5 * N.dom[j]
-    N.sub[j] ~ dpois(lambda.sub[j] * Z.sub[j])
+    log(lambda.sub[j]) <- a0[1] + a5 * log(N.dom[j] + 1.0E-6) + a1[1]*flii[j] + a2[1]*hfp[j] + a3[1]*elev[j] + a4[1]*comm_det[j] + a6[area[j]] + a8[year[j]]
+    N.sub[j] ~ dpois(lambda.sub[j] * Zsub_area[area[j]])
   }
 
   # Detection
   for(j in 1:nsites){
     for(k in 1:nreps){
+    
       # dominant species detection formula
-      logit(p.dom[j,k]) <- b0[2]
+      lp.dom[j,k] <- b0[2] + b1[2]*cams[j,k] + eps.p.dom[j,k] + b2[source[j]]
+      # implement a stable logit transformation
+      p.dom[j,k] <- 1 / (1 + exp(-max(-250, min(250, lp.dom[j,k])))) 
+      # calculate det prob
       y.dom[j,k] ~ dbin(p.dom[j,k], N.dom[j])
+      # and the ODRE  
+      eps.p.dom[j,k] ~ dnorm(0, tau.p[2])
+      
       # and fill in replicated matrix
       y.rep.dom[j,k] ~ dbin(p.dom[j,k], N.dom[j])
       
       # subordinate species detection formula 
-      logit(p.sub[j,k]) <- b0[1]
+      lp.sub[j,k] <- b0[1] + b1[1]*cams[j,k] + eps.p.sub[j,k] + b3[source[j]]
+      # implement a stable logit transformation
+      p.sub[j,k] <- 1 / (1 + exp(-max(-250, min(250, lp.sub[j,k])))) 
+      # calculate det prob
       y.sub[j,k] ~ dbin(p.sub[j,k], N.sub[j])
+      # and the ODRE
+      eps.p.sub[j,k] ~ dnorm(0, tau.p[1])
+      
       # and fill in replicated matrix
       y.rep.sub[j,k] ~ dbin(p.sub[j,k], N.sub[j])
       
@@ -169,10 +346,10 @@ model{
       exp_dom[j,k] <- N.dom[j] * p.dom[j,k]
       exp_sub[j,k] <- N.sub[j] * p.sub[j,k]
       
-      E.dom[j,k] <- pow((y.dom[j,k] - exp_dom[j,k]), 2) / (exp_dom[j,k] + 0.5)
+      E.dom[j,k]     <- pow((y.dom[j,k]     - exp_dom[j,k]), 2) / (exp_dom[j,k] + 0.5)
       E.rep.dom[j,k] <- pow((y.rep.dom[j,k] - exp_dom[j,k]), 2) / (exp_dom[j,k] + 0.5)
-      
-      E.sub[j,k] <- pow((y.sub[j,k] - exp_sub[j,k]), 2) / (exp_sub[j,k] + 0.5)
+
+      E.sub[j,k]     <- pow((y.sub[j,k]     - exp_sub[j,k]), 2) / (exp_sub[j,k] + 0.5)
       E.rep.sub[j,k] <- pow((y.rep.sub[j,k] - exp_sub[j,k]), 2) / (exp_sub[j,k] + 0.5)
       
     } # end per nreps 
@@ -197,8 +374,8 @@ make_inits <- function(data_list){
   Ndom_init <- pmax(as.integer(max_y_dom + 1L), 1L)
   Nsub_init <- pmax(as.integer(max_y_sub + 1L), 1L)
   # Force zero where Z==0
-  Ndom_init[data_list$Z.dom == 0] <- 0L
-  Nsub_init[data_list$Z.sub == 0] <- 0L
+  Ndom_init[data_list$Zdom_area[data_list$area] == 0] <- 0L
+  Nsub_init[data_list$Zsub_area[data_list$area] == 0] <- 0L
   
   ## NA vector for iZIP
   # Z.dom = as.vector(rep(as.numeric(NA), length.out = length(data_list$Z.dom)))
@@ -206,31 +383,44 @@ make_inits <- function(data_list){
   
   # bundle in a list 
   list(
+    # key params
     a0 = rnorm(2, 0, 0.2),
     b0 = rnorm(2, 0, 0.2),
     a5 = rnorm(1, 0, 0.2),
+    # site covs 
+    a1 = rnorm(2, 0, 0.2),
+    a2 = rnorm(2, 0, 0.2),
+    a3 = rnorm(2, 0, 0.2),
+    a4 = rnorm(2, 0, 0.2),
+    # det covs 
+    b1 = rnorm(2, 0, 0.2),
+    sd.p = runif(2, 0, 0.3),
+    # abundance inital values 
     N.dom = Ndom_init, #pmax(as.integer(max_y_dom + 1L), 1L),
     N.sub = Nsub_init #pmax(as.integer(max_y_sub + 1L), 1L)
-    # Z.dom = Z.dom,
-    # Z.sub = Z.sub
   )
 }
 
-data_list <- sim$data
-inits_list <- list(make_inits(data_list), make_inits(data_list))
+inits_list <- list(make_inits(sim$data), make_inits(sim$data))
 
-# --- fit ---
+##### Fit the model and inspect diagnostics #####
+
+# load DIC to track deviance in the model 
+load.module("dic") 
+
+# Create the model object and compile it 
 jm <- jags.model(textConnection(jags_model),
-                 data=data_list,
+                 data=sim$data,
                  inits=inits_list,
                  n.chains=2, n.adapt=500)
+# Burn in 1000 iterations (i.e. update w/out saving )
 update(jm, 1000)
-vars <- c("a0","a5","b0",
-          "fit.dom","fit.rep.dom",
-          "fit.sub","fit.rep.sub")
-samp <- coda.samples(jm, variable.names=vars, n.iter=2000, thin=2)
+# select which variables to monitor 
+vars <- c("a0","a1","a2","a3","a4","a5","b0","b1","sd.p",
+          "fit.dom","fit.rep.dom","fit.sub","fit.rep.sub","deviance")
+# Draw the MCMC samples 
+samp <- coda.samples(jm, variable.names = vars, n.iter=2000, thin=2)
 
-# ---Inspect results  ---
 # extract MCMC matrix
 mcmc_mat <- do.call(rbind, lapply(samp, as.matrix))
 
@@ -244,34 +434,26 @@ rhat <- tryCatch(gelman.diag(samp)$psrf["a5","Point est."], error=function(e) NA
 bayes_p_dom <- mean(mcmc_mat[, "fit.rep.dom"] > mcmc_mat[, "fit.dom"])
 bayes_p_sub <- mean(mcmc_mat[, "fit.rep.sub"] > mcmc_mat[, "fit.sub"])
 
-# c-hat (overdispersion) = mean(fit) / df
-# df = total counts minus parameters; here approx nsites*nreps - #params
-df <- (nsites * nreps) - length(c("a0","a5","b0"))
-chat_dom <- mean(mcmc_mat[, "fit.dom"]) / df
-chat_sub <- mean(mcmc_mat[, "fit.sub"]) / df
+# Pull posterior draws
+a_dom  <- mcmc_mat[, "fit.dom"]
+b_dom  <- mcmc_mat[, "fit.rep.dom"]
+a_sub  <- mcmc_mat[, "fit.sub"]
+b_sub  <- mcmc_mat[, "fit.rep.sub"]
 
-## display results
-cat("\nTruth a5:", sim$truth$a5,
-    "\nPost mean a5:", round(post_mean,3),
+# c-hat calculation 
+chat_dom <- mean(a_dom / b_dom)
+chat_sub <- mean(a_sub / b_sub)
+
+## display results as text 
+cat("\nTruth SIV:", sim$truth$a5,
+    "\nPosterior mean SIV:", round(post_mean,3),
     "\n95% CI:", round(ci,3),
-    "\nRhat(a5):", round(rhat,3),
-    "\nBayes p (dom):", round(bayes_p_dom,3),
-    "\nBayes p (sub):", round(bayes_p_sub,3),
+    "\nRhat(SIV):", round(rhat,3),
+    "\nBayes p-value (dom):", round(bayes_p_dom,3),
+    "\nBayes p-value (sub):", round(bayes_p_sub,3),
     "\nc-hat (dom):", round(chat_dom,3),
     "\nc-hat (sub):", round(chat_sub,3), "\n")
 
-
-
-# summ <- summary(samp)
-# a5_draws <- do.call(rbind, lapply(samp, as.matrix))[, "a5"]
-# ci <- quantile(a5_draws, c(0.025, 0.975))
-# post_mean <- mean(a5_draws)
-# rhat <- tryCatch(gelman.diag(samp)$psrf["a5","Point est."], error=function(e) NA_real_)
-# 
-# cat("\nTruth a5:", sim$truth$a5,
-#     "\nPost mean a5:", round(post_mean,3),
-#     "\n95% CI:", round(ci,3),
-#     "\nRhat(a5):", round(rhat,3), "\n")
 
 
 

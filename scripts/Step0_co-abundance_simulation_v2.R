@@ -18,6 +18,7 @@ library(tidyverse)     ## For lots of functions
 # library(jagsUI)        ## for running and inspecting bayes models
 library(rjags)         ## For running and inspecting bayes models
 # library(coda)          ## for manipulating bayes models, but loaded w/ rjags
+library(jagsUI)
 
 ## Set seed for reproduciblity
 set.seed(2025)
@@ -224,7 +225,8 @@ coabundance_simulator <- function(nsites, nreps, narea, nyear, nsource,
                 narea = narea, area = as.integer(area),
                 cams = cams,
                 nyear = nyear, year = as.numeric(year), 
-                nsource = nsource, source = as.numeric(source)),
+                nsource = nsource, source = as.numeric(source),
+                N.dom = N_dom, N.sub = N_sub),
     # and also keep the true values for comparison later 
     truth = list(a0=a0, a5=a5, b0=b0,
                  Zdom_area=Zdom_area, Zsub_area=Zsub_area, sd.p = sd.p,
@@ -245,7 +247,7 @@ Zsub_area <- c(0, 1, 1, 1)  # area 1 absent for subordinate
 
 ## Use the function to simulate a dataset 
 sim <- coabundance_simulator(nsites, nreps, narea, nyear, nsource, 
-                             true_siv = 2, log_dom = T, area = area, 
+                             true_siv = 1, log_dom = T, area = area, 
                              Zdom_area = Zdom_area, Zsub_area = Zsub_area,
                              bias_doublecount = FALSE, bias_sp_autocorr = FALSE, 
                              bias_unmeas_state = FALSE, bias_unmeas_det = FALSE)
@@ -405,55 +407,245 @@ inits_list <- list(make_inits(sim$data), make_inits(sim$data))
 
 ##### Fit the model and inspect diagnostics #####
 
-# load DIC to track deviance in the model 
-load.module("dic") 
+# # load DIC to track deviance in the model 
+# load.module("dic") 
+# 
+# # Create the model object and compile it 
+# jm <- jags.model(textConnection(jags_model),
+#                  data=sim$data,
+#                  inits=inits_list,
+#                  n.chains=2, n.adapt=500)
+# # Burn in 1000 iterations (i.e. update w/out saving )
+# update(jm, 1000)
+# # select which variables to monitor 
+# vars <- c("a0","a1","a2","a3","a4","a5","b0","b1","sd.p",
+#           "fit.dom","fit.rep.dom","fit.sub","fit.rep.sub","deviance")
+# # Draw the MCMC samples 
+# samp <- coda.samples(jm, variable.names = vars, n.iter=2000, thin=2)
 
-# Create the model object and compile it 
-jm <- jags.model(textConnection(jags_model),
-                 data=sim$data,
-                 inits=inits_list,
-                 n.chains=2, n.adapt=500)
-# Burn in 1000 iterations (i.e. update w/out saving )
-update(jm, 1000)
-# select which variables to monitor 
-vars <- c("a0","a1","a2","a3","a4","a5","b0","b1","sd.p",
-          "fit.dom","fit.rep.dom","fit.sub","fit.rep.sub","deviance")
-# Draw the MCMC samples 
-samp <- coda.samples(jm, variable.names = vars, n.iter=2000, thin=2)
+### Can also run jagsUI style?
+# 1) Save the model string to a real file
+model_path <- tempfile(fileext = ".jags")
+writeLines(jags_model, con = model_path)
 
-# extract MCMC matrix
-mcmc_mat <- do.call(rbind, lapply(samp, as.matrix))
+# 2) Run jagsUI with the file path
+params <- c("a0","a1","a2","a3","a4","a5","b0","b1","sd.p", "N.dom", "N.sub",
+            "fit.dom","fit.rep.dom","fit.sub","fit.rep.sub") # no 'deviance' unless DIC=TRUE
+## remove simulated abundances from list and save in a separate DF 
+abund = data.frame("N.dom_simulated" = sim$data$N.dom,
+                   "N.sub_simulated" = sim$data$N.sub)
+sim$data$N.dom = NULL
+sim$data$N.sub = NULL
 
-# a5 summaries
-a5_draws <- mcmc_mat[, "a5"]
-ci <- quantile(a5_draws, c(0.025, 0.975))
-post_mean <- mean(a5_draws)
-rhat <- tryCatch(gelman.diag(samp)$psrf["a5","Point est."], error=function(e) NA_real_)
+# 3) call the model 
+mod <- jagsUI::jags(data   = sim$data,
+                    inits  = inits_list,
+                    parameters.to.save = params,
+                    model.file = model_path,
+                    n.chains = 2,
+                    n.adapt  = 1000,
+                    n.burnin = 1000,
+                    n.iter   = 3000,  # total iterations INCLUDING burn-in
+                    n.thin   = 50,
+                    parallel = TRUE,   # TRUE on HPC
+                    DIC      = FALSE)
+# print(mod, 2)
+
+## Grab info about a5
+coeff = data.frame(mod$summary[,c(1:3,7:10)])
+post_mean = coeff$mean[rownames(coeff) == "a5"]
+lower = round(coeff$X2.5.[rownames(coeff) == "a5"], 3) 
+upper = round(coeff$X97.5.[rownames(coeff) == "a5"], 3)
+ci = paste(lower, upper, collapse = " - ")
+rhat = coeff$Rhat[rownames(coeff) == "a5"]
 
 # Bayes p-values for PPC
-bayes_p_dom <- mean(mcmc_mat[, "fit.rep.dom"] > mcmc_mat[, "fit.dom"])
-bayes_p_sub <- mean(mcmc_mat[, "fit.rep.sub"] > mcmc_mat[, "fit.sub"])
+bayes_p_dom <- mean(mod$sims.list$fit.rep.dom > mod$sims.list$fit.dom)
+bayes_p_sub <- mean(mod$sims.list$fit.rep.sub > mod$sims.list$fit.sub) 
 
 # Pull posterior draws
-a_dom  <- mcmc_mat[, "fit.dom"]
-b_dom  <- mcmc_mat[, "fit.rep.dom"]
-a_sub  <- mcmc_mat[, "fit.sub"]
-b_sub  <- mcmc_mat[, "fit.rep.sub"]
+a_sub = mod$sims.list$fit.sub
+b_sub = mod$sims.list$fit.rep.sub
+a_dom = mod$sims.list$fit.dom
+b_sub = mod$sims.list$fit.rep.dom
 
 # c-hat calculation 
 chat_dom <- mean(a_dom / b_dom)
 chat_sub <- mean(a_sub / b_sub)
 
 ## display results as text 
-cat("\nTruth SIV:", sim$truth$a5,
+cat("\nTrue SIV:", sim$truth$a5,
     "\nPosterior mean SIV:", round(post_mean,3),
-    "\n95% CI:", round(ci,3),
+    "\n95% CI:", ci, #round(ci,3),
     "\nRhat(SIV):", round(rhat,3),
     "\nBayes p-value (dom):", round(bayes_p_dom,3),
     "\nBayes p-value (sub):", round(bayes_p_sub,3),
     "\nc-hat (dom):", round(chat_dom,3),
     "\nc-hat (sub):", round(chat_sub,3), "\n")
 
+## Also compare true vs simulated latent abundance 
+
+# Create empty df to fill in estimates abundance of both species
+est.dat = data.frame(matrix(NA, nrow = 0, ncol = 7))
+names(est.dat) = c("Sub_abundance", "Dom_abundance",
+                   "lower_sub", "upper_sub",
+                   "lower_dom", "upper_dom",
+                   # "Sampling_Unit", "Landscape",
+                   "sim_test")
+# Then fill it in!
+est.dat[1:length(colMeans(mod$sims.list$N.sub)), 1] = colMeans(mod$sims.list$N.sub)
+est.dat[1:length(colMeans(mod$sims.list$N.dom)), 2] = colMeans(mod$sims.list$N.dom)
+est.dat[1:length(colMeans(mod$sims.list$N.sub)), 3] = apply(mod$sims.list$N.sub, 2, quantile, probs = 0.025)
+est.dat[1:length(colMeans(mod$sims.list$N.sub)), 4] = apply(mod$sims.list$N.sub, 2, quantile, probs = 0.975)
+est.dat[1:length(colMeans(mod$sims.list$N.dom)), 5] = apply(mod$sims.list$N.dom, 2, quantile, probs = 0.025)
+est.dat[1:length(colMeans(mod$sims.list$N.dom)), 6] = apply(mod$sims.list$N.dom, 2, quantile, probs = 0.975)
+est.dat[1:length(colMeans(mod$sims.list$N.sub)), 7] = "test"
+
+## Now add in the true simulated abundance values that we removed earlier 
+est.dat = cbind(abund, est.dat)
+
+## options to calculate the differences
+# option 1, coverage w/in credible interval
+coverage_sub <- mean(est.dat$N.sub_simulated >= est.dat$lower_sub & est.dat$N.sub_simulated <= est.dat$upper_sub)
+coverage_dom <- mean(est.dat$N.dom_simulated >= est.dat$lower_dom & est.dat$N.dom_simulated <= est.dat$upper_dom)
+# ideally coverage is greater than .90%
+if(any(coverage_sub > .9 & coverage_dom > .9)){
+  print("The estimated abundance values provide acceptable coverage within 95% CI of the estimated values")
+}else{
+  print("The estimated abundance values DO NOT provide acceptable coverage within 95% CI of the estimated values")
+}
+
+# option 2, root mean square deviation -> how far are the posteriors from the truth?
+# RMSE summarizes both the bias and the variance in abundance estimates --> shouldnt be greater than 5
+rmse_sub <- sqrt(mean((est.dat$N.sub_simulated - est.dat$Sub_abundance)^2))
+rmse_dom <- sqrt(mean((est.dat$N.dom_simulated - est.dat$Dom_abundance)^2))
+# lower rmse is better!
+if(any(rmse_sub > 5 & rmse_sub > 5)){
+  print("The estimated abundance values are NOT close to the simulated truth.")
+}else{
+  print("The estimated abundance values are close to the simulated truth.")
+}
 
 
+## clean everything up! (except functions)
+rm(abund, coeff, dic.out, est.dat, inits_list, jm, M, mcmc_mat, mod, samp, sim, source, 
+   a_dom, a_sub, a5_draws, area, b_dom, b_sub, bayes_p_dom, bayes_p_sub, chat_dom, chat_sub, ci, 
+   coverage_dom, coverage_sub, Dbar, df_eff, jags_model, lower, model_path, narea, nobs, 
+   nreps, nsites, nsource, nyear, params, pD, post_mean, post_means, rhat, rmse_dom, rmse_sub, upper, 
+   vars, years, Zdom_area, Zsub_area)
 
+
+#### Simulate different scenarios #### 
+
+## the idea here is that we get a range of SIVs and different biases
+a5_values = c(-2, -1, 0, 1, 2)
+biases = c("none", "double_count", "spatial", 
+           "unmeasured_state", "unmeasured_detection","all_biases")
+
+## Define key values for the function
+nsites  <- 500
+nreps   <- 5
+narea   <- 12
+nyear   <- 3
+nsource <- 4
+
+## Even split across areas (simple & transparent)
+sites_per_area <- rep(floor(nsites / narea), narea)
+if (sum(sites_per_area) < nsites) {
+  # add the remainder to the first few areas
+  sites_per_area[seq_len(nsites - sum(sites_per_area))] <- sites_per_area[seq_len(nsites - sum(sites_per_area))] + 1L
+}
+area <- rep(seq_len(narea), times = sites_per_area)
+
+## Area-level iZIP: simple fixed pattern (transparent)
+# Example: dominant absent in 4 areas; subordinate absent in 3 areas
+Zdom_area <- rep(1L, narea); Zdom_area[c(1,3,7,10)] <- 0L  
+Zsub_area <- rep(1L, narea); Zsub_area[c(2,5,8)]       <- 0L
+
+
+## run a loop! 
+data_list = list() # store data bundles here
+for(i in 1:length(a5_values)){
+  # grab one 
+  a5 = a5_values[i]
+  # store temp values here
+  temp = list()
+  for(l in 1:length(biases)){
+    # condition against each bias
+    if(biases[l] == "none"){
+      # switch all biases to false 
+      sim = coabundance_simulator(nsites, nreps, narea, nyear, nsource, 
+                                  true_siv = a5, log_dom = T, area = area, 
+                                  Zdom_area = Zdom_area, Zsub_area = Zsub_area,
+                                  bias_doublecount = FALSE, bias_sp_autocorr = FALSE, 
+                                  bias_unmeas_state = FALSE, bias_unmeas_det = FALSE)
+    } # end none 
+    if(biases[l] == "double_count"){
+      # switch relevant bias to true 
+      sim = coabundance_simulator(nsites, nreps, narea, nyear, nsource, 
+                                  true_siv = a5, log_dom = T, area = area, 
+                                  Zdom_area = Zdom_area, Zsub_area = Zsub_area,
+                                  bias_doublecount = TRUE, bias_sp_autocorr = FALSE, 
+                                  bias_unmeas_state = FALSE, bias_unmeas_det = FALSE)
+    } # end double count 
+    if(biases[l] == "spatial"){
+      # switch relevant bias to true 
+      sim = coabundance_simulator(nsites, nreps, narea, nyear, nsource, 
+                                  true_siv = a5, log_dom = T, area = area, 
+                                  Zdom_area = Zdom_area, Zsub_area = Zsub_area,
+                                  bias_doublecount = FALSE, bias_sp_autocorr = TRUE, 
+                                  bias_unmeas_state = FALSE, bias_unmeas_det = FALSE)
+    } # end spatial
+    if(biases[l] == "unmeasured_state"){
+      # switch relevant bias to true 
+      sim = coabundance_simulator(nsites, nreps, narea, nyear, nsource, 
+                                  true_siv = a5, log_dom = T, area = area, 
+                                  Zdom_area = Zdom_area, Zsub_area = Zsub_area,
+                                  bias_doublecount = FALSE, bias_sp_autocorr = FALSE, 
+                                  bias_unmeas_state = TRUE, bias_unmeas_det = FALSE)
+    } # end state
+    if(biases[l] == "unmeasured_detection"){
+      # switch relevant bias to true 
+      sim = coabundance_simulator(nsites, nreps, narea, nyear, nsource, 
+                                  true_siv = a5, log_dom = T, area = area, 
+                                  Zdom_area = Zdom_area, Zsub_area = Zsub_area,
+                                  bias_doublecount = TRUE, bias_sp_autocorr = FALSE, 
+                                  bias_unmeas_state = FALSE, bias_unmeas_det = TRUE)
+    } # end det
+    if(biases[l] == "all_biases"){
+      # switch relevant bias to true 
+      sim = coabundance_simulator(nsites, nreps, narea, nyear, nsource, 
+                                  true_siv = a5, log_dom = T, area = area, 
+                                  Zdom_area = Zdom_area, Zsub_area = Zsub_area,
+                                  bias_doublecount = TRUE, bias_sp_autocorr = FALSE, 
+                                  bias_unmeas_state = FALSE, bias_unmeas_det = FALSE)
+    } # end all 
+    # save in the temp list 
+    temp[[l]] = sim
+    names(temp)[l] = paste("a5", a5, "bias", biases[l], sep = "_")
+  } # end per bias 
+  # save in the full list 
+  data_list[[i]] = temp
+}
+rm(sim, temp, a5, area, i, l, narea, nreps, nsites, nsource, nyear, 
+   sites_per_area, Zdom_area, Zsub_area)
+
+## flatten all values into a single list
+final_list = flatten(data_list)
+# check that they are all here
+names(final_list) # all good! 
+
+## grab the date
+day<-substr(Sys.Date(),9, 10)
+month<-substr(Sys.Date(),6,7)
+year<-substr(Sys.Date(),1,4)
+date = paste(year, month, day, sep = "")
+rm(day, month, year)
+
+# make a path 
+path = paste("~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step2_output_CoA_bundles/Bundled_data_for_bayes_co-abudance_mods_SIMULATION_", length(final_list), "_species_pairs_", 
+             date, ".RDS", sep = "")
+
+## save this as a RDS object
+saveRDS(final_list, path)
+  

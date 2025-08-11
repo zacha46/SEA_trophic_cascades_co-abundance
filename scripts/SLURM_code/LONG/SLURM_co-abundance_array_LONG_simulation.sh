@@ -11,7 +11,7 @@
 #SBATCH --ntasks=1
 
 # Select 4 CPUS per node (one per MCMC chain)
-#SBATCH --cpus-per-task=3
+#SBATCH --cpus-per-task=4
 
 # Select 100,000 MB (100 GB) of memory per node 
 #SBATCH --mem=100000
@@ -19,11 +19,11 @@
 # Ensure we are in the general queue, not AI, debug, or GPU
 #SBATCH --partition=general
 
-# Select 4 hours (h:m:s format) of walltime for mid-setting models 
-#SBATCH --time=4:00:00
+# Select 12 hours (h:m:s format) of walltime for mid-setting models 
+#SBATCH --time=12:00:00
 
 # SPECIFY THE JOB ARRAY-
-#SBATCH --array=1-5
+#SBATCH --array=1-30
 
 # SPECIFY THE JOB NAME
 #SBATCH --job-name=CoA-SIM

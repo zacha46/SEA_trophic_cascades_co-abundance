@@ -5,7 +5,7 @@
 ### Data has already been formatted to into the proper data bundle to run the co-abundance model on the HPC 
 ## The code to see how data was simulated can be found here: scripts/Step0_co-abundance_simulation.R
 
-## Submitted to HPC on August 7th, 2024
+## Submitted to HPC on August 11th, 2024
 # Zachary Amir, z.amir@uq.edu.au
 
 ####### Set up #####
@@ -18,7 +18,7 @@ library(jagsUI)
 library(tidyverse)
 
 ## specify the number of cores to be uses, should be the same as the model 
-options(mc.cores = 3)
+options(mc.cores = 4)
 
 #### Read Job Array index value into R
 slurm = Sys.getenv("SLURM_ARRAY_TASK_ID")
@@ -70,14 +70,11 @@ if(any(grepl(res, res_search))){
   stop("The script was terminated.")
 }
 
-## remove biases in list
-bdata$bias_applied = NULL
-
 ## remove simulated abundances from list and save in a separate DF 
-abund = data.frame("N.dom_simulated" = bdata$N.dom,
-                   "N.sub_simulated" = bdata$N.sub)
-bdata$N.dom = NULL
-bdata$N.sub = NULL
+abund = data.frame("N.dom_simulated" = bdata$data$N.dom,
+                   "N.sub_simulated" = bdata$data$N.sub)
+bdata$data$N.dom = NULL
+bdata$data$N.sub = NULL
 
 ## if results are not already present, start the models! 
 print(paste("Begining to run co-abundance simulation test: ", n, " with MCMC settings: ", setting ,
@@ -86,238 +83,118 @@ print(paste("Begining to run co-abundance simulation test: ", n, " with MCMC set
 
 ####### Make the model in BUGS language and run it ####
 
-cat(file = "ZDA_Co_Abundance_Model_final_20250806.jags", 
+cat(file = "ZDA_Co_Abundance_Model_simulation_20250811.jags", 
     
     "model{
-
-  # Priors for both species
-  for (i in 1:2) {
-      
-    # Intercept
-    a0[i] ~ dnorm(0, 1)
-      
-    # FLII
-    a1[i] ~ dnorm(0, 1)
-      
-    # HFP
-    a2[i] ~ dnorm(0, 1)
-    
-    # Elev
-    a3[i] ~ dnorm(0, 1)
-    
-    # community detections
-    a4[i] ~ dnorm(0, 1)
-  
-    # Det intercept
-    b0[i] ~ dnorm(0, 1)
-    
-    # Cams
-    b2[i] ~ dnorm(0, 1)
-      
-    ## OD params for observation model
-    sd.p[i] ~ dunif(0, 5) 
-    tau.p[i] <- pow(sd.p[i], -2) 
-      
-    }
-    
-  ## Species interaction
+  # Regular priors for both species
+  for(i in 1:2){
+    a0[i] ~ dnorm(0, 1)   # state intercept 
+    b0[i] ~ dnorm(0, 1)   # det intercept 
+    a1[i] ~ dnorm(0, 1)   # flii
+    a2[i] ~ dnorm(0, 1)   # hfp
+    a3[i] ~ dnorm(0, 1)   # elev
+    a4[i] ~ dnorm(0, 1)   # comm_det
+    b1[i] ~ dnorm(0, 1)   # sampling effort 
+    # OD params for observation model
+    sd.p[i] ~ dunif(0, 1) 
+    tau.p[i] <- pow(sd.p[i], -2)
+  }
+  # SIV prior 
   a5 ~ dnorm(0, 1)
-    
-  # Landscape RE hyper prior --> define it's variance
-  sigma.a6 ~ dunif(0,5)
-  var.a6 <- 1/(sigma.a6*sigma.a6)
-
-  sigma.a7 ~ dunif(0,5)
-  var.a7 <- 1/(sigma.a7*sigma.a7)
-
-  for (k in 1:narea) {
-
-    a6[k] ~ dnorm(0,var.a6)
-    a7[k] ~ dnorm(0,var.a7)
-
+  
+  # landscape RE hyper priors 
+  sigma.a6 ~ dunif(0, 5)
+  var.a6 <- 1 / pow(sigma.a6, 2)
+  sigma.a7 ~ dunif(0, 5)
+  var.a7 <- 1 / pow(sigma.a7, 2)
+  
+  for (k in 1:narea){
+    a6[k] ~ dnorm(0, var.a6)   # sub ~ area
+    a7[k] ~ dnorm(0, var.a7)   # dom ~ area
   }
   
-  # year RE hyper prior --> define it's variance
-  sigma.a8 ~ dunif(0,5)
-  var.a8 <- 1/(sigma.a8*sigma.a8)
-
-  sigma.a9 ~ dunif(0,5)
-  var.a9 <- 1/(sigma.a9*sigma.a9)
-
-  for (k in 1:nyear) {
-
-    a8[k] ~ dnorm(0,var.a8)
-    a9[k] ~ dnorm(0,var.a9)
-
+  # Year RE hyper priors 
+  sigma.a8 ~ dunif(0, 5)
+  var.a8 <- 1/pow(sigma.a8, 2)
+  sigma.a9 ~ dunif(0, 5)
+  var.a9 <- 1/pow(sigma.a9, 2)
+  
+  for (k in 1:nyear){
+    a8[k] ~ dnorm(0, var.a6)   # sub ~ year
+    a9[k] ~ dnorm(0, var.a7)   # dom ~ year
   }
   
-  # source RE hyper prior --> define it's variance
-  sigma.b3 ~ dunif(0,5)
-  var.b3 <- 1/(sigma.b3*sigma.b3)
-
-  sigma.b4 ~ dunif(0,5)
-  var.b4 <- 1/(sigma.b4*sigma.b4)
-
-  for (k in 1:nsource) {
-
-    b3[k] ~ dnorm(0,var.b3)
-    b4[k] ~ dnorm(0,var.b4)
-
-  }
+  # Source RE hyper prior 
+  sigma.b2 ~ dunif(0, 5)
+  var.b2 <- 1/pow(sigma.b2, 2)
+  sigma.b3 ~ dunif(0, 5)
+  var.b3 <- 1/pow(sigma.b3, 2)
   
-  # Center N.dom by area
-for (k in 1:narea) {
-  Ndom_sum[k] <- 0
-  Ndom_count[k] <- 0
-}
+  for (k in 1:nsource){
+    b2[k] ~ dnorm(0, var.b2)   # sub ~ source
+    b3[k] ~ dnorm(0, var.b3)   # dom ~ source
+  }
 
-for (j in 1:nsites) {
-  Ndom_sum[area[j]] <- Ndom_sum[area[j]] + N.dom[j]
-  Ndom_count[area[j]] <- Ndom_count[area[j]] + 1
-}
+ # State process
+  for(j in 1:nsites){
+    # Dominant
+    log(lambda.dom[j]) <- a0[2] + a1[2]*flii[j] + a2[2]*hfp[j] + a3[2]*elev[j] + a4[2]*comm_det[j] + a7[area[j]] + a9[year[j]]
+    N.dom[j] ~ dpois(lambda.dom[j] * Zdom_area[area[j]])
 
-for (k in 1:narea) {
-  Ndom_mean[k] <- Ndom_sum[k] / Ndom_count[k]
-}
-    
-    
-  # Likelihood
-  # Ecological model for true abundance per site
-  for (j in 1:nsites) {
-    
-    # Abundance of Subordinate Species w/ iZIP
-    N.sub[j] ~ dpois(lambda.sub[j] * Z.sub[j])
+    # Subordinate depends on **latent N.dom** (can use log for stability, but not now)
+    log(lambda.sub[j]) <- a0[1] + a5 * log(N.dom[j] + 1.0E-6) + a1[1]*flii[j] + a2[1]*hfp[j] + a3[1]*elev[j] + a4[1]*comm_det[j] + a6[area[j]] + a8[year[j]]
+    N.sub[j] ~ dpois(lambda.sub[j] * Zsub_area[area[j]])
+  }
 
-      log(lambda.sub[j]) <- a0[1] + a1[1]*flii[j] + a2[1]*hfp[j] + a3[1]*elev[j] + a4[1]*comm_det[j] + a5*(N.dom[j] - Ndom_mean[area[j]]) + a8[year[j]] + a6[area[j]]
+  # Detection
+  for(j in 1:nsites){
+    for(k in 1:nreps){
     
-    # Abundance of Dominant Species w/ iZIP 
-    N.dom[j] ~ dpois(lambda.dom[j] * Z.dom[j])
-    
-      log(lambda.dom[j]) <- a0[2] + a1[2]*flii[j] + a2[2]*hfp[j] + a3[2]*elev[j] + a4[2]*comm_det[j]  + a9[year[j]] + a7[area[j]]
-                      
-                      
-    # Observation model for counts per replicated observation with OD params 
-    for (k in 1:nreps) {
-    
-      ## Subordinate species
-      y.sub[j,k] ~ dbin(p.sub[j,k], N.sub[j])
-      
-        p.sub[j,k] <- 1 / (1 + exp(-lp.lim.sub[j,k]))
-        
-          lp.lim.sub[j,k]<- min(250, max(-250, lp.sub[j,k])) #stabilize logit
-          
-            lp.sub[j,k] <- b0[1] +  b2[1]*cams[j,k] + eps.p.sub[j,k] + b3[source[j]] 
-        
-              eps.p.sub[j,k] <- eps.p.sub.z[j,k] * sd.p[1]
-              
-                eps.p.sub.z[j,k] ~ dnorm(0, 1)
-          
-      
-      ## Dominant species
+      # dominant species detection formula
+      lp.dom[j,k] <- b0[2] + b1[2]*cams[j,k] + eps.p.dom[j,k] + b2[source[j]]
+      # implement a stable logit transformation
+      p.dom[j,k] <- 1 / (1 + exp(-max(-250, min(250, lp.dom[j,k])))) 
+      # calculate det prob
       y.dom[j,k] ~ dbin(p.dom[j,k], N.dom[j])
+      # and the ODRE  
+      eps.p.dom[j,k] ~ dnorm(0, tau.p[2])
       
-        p.dom[j,k] <- 1 / (1 + exp(-lp.lim.dom[j,k]))
-        
-          lp.lim.dom[j,k]<- min(250, max(-250, lp.dom[j,k])) #stabilize logit
-          
-            lp.dom[j,k] <- b0[2] + b2[2]*cams[j,k] + eps.p.dom[j,k] + b4[source[j]]
-              
-              eps.p.dom[j,k] <- eps.p.dom.z[j,k] * sd.p[2]
-                
-                eps.p.dom.z[j,k] ~ dnorm(0, 1)              
-              
-         
-         
-    ### PPC- Subordinate
+      # and fill in replicated matrix
+      y.rep.dom[j,k] ~ dbin(p.dom[j,k], N.dom[j])
       
-    ## Expected count at site j, occasion k
-    exp.sub[j,k]<- N.sub[j] * p.sub[j,k]
+      # subordinate species detection formula 
+      lp.sub[j,k] <- b0[1] + b1[1]*cams[j,k] + eps.p.sub[j,k] + b3[source[j]]
+      # implement a stable logit transformation
+      p.sub[j,k] <- 1 / (1 + exp(-max(-250, min(250, lp.sub[j,k])))) 
+      # calculate det prob
+      y.sub[j,k] ~ dbin(p.sub[j,k], N.sub[j])
+      # and the ODRE
+      eps.p.sub[j,k] ~ dnorm(0, tau.p[1])
       
-    ## Discrepency from Real Data
-    # small denominator added to prevent dividing by zero
-    E.sub[j,k] <- pow((y.sub[j,k] - exp.sub[j,k]), 2) / (exp.sub[j,k] + 0.5) 
+      # and fill in replicated matrix
+      y.rep.sub[j,k] ~ dbin(p.sub[j,k], N.sub[j])
       
-    ## Simulate new sub counts from model 
-    y.rep.sub[j,k] ~ dbin(p.sub[j,k], N.sub[j])
+      # Chi-square discrepancy
+      exp_dom[j,k] <- N.dom[j] * p.dom[j,k]
+      exp_sub[j,k] <- N.sub[j] * p.sub[j,k]
       
-    ## Discrepency from Simulation
-    E.rep.sub[j,k] <- pow((y.rep.sub[j,k] - exp.sub[j,k]), 2) / (exp.sub[j,k] + 0.5)
-      
-      
-      
-    ### PPC- Dominant
-      
-    ## Expected count at site j, occasion k
-    exp.dom[j,k]<- N.dom[j] * p.dom[j,k]
-      
-    ## Discrepency from Real Data
-    # small denominator added to prevent dividing by zero
-    E.dom[j,k] <- pow((y.dom[j,k] - exp.dom[j,k]), 2) / (exp.dom[j,k] + 0.5) 
-      
-    ## Simulate new dom counts from model 
-    y.rep.dom[j,k] ~ dbin(p.dom[j,k], N.dom[j])
-      
-    ## Discrepency from Simulation
-    E.rep.dom[j,k] <- pow((y.rep.dom[j,k] - exp.dom[j,k]), 2) / (exp.dom[j,k] + 0.5)
-      
+      E.dom[j,k]     <- pow((y.dom[j,k]     - exp_dom[j,k]), 2) / (exp_dom[j,k] + 0.5)
+      E.rep.dom[j,k] <- pow((y.rep.dom[j,k] - exp_dom[j,k]), 2) / (exp_dom[j,k] + 0.5)
 
-    } #k
-  } #j
-
-  ## Derived Parameters
+      E.sub[j,k]     <- pow((y.sub[j,k]     - exp_sub[j,k]), 2) / (exp_sub[j,k] + 0.5)
+      E.rep.sub[j,k] <- pow((y.rep.sub[j,k] - exp_sub[j,k]), 2) / (exp_sub[j,k] + 0.5)
+      
+    } # end per nreps 
+  } # end per nsites 
   
-  #Chi-Square Test Statistic- Subordinate
-  fit.sub = sum(E.sub[,])
-  fit.rep.sub = sum(E.rep.sub[,])
-
-  #Chi-Square Test Statistic- Dominant
-  fit.dom = sum(E.dom[,])
-  fit.rep.dom = sum(E.rep.dom[,])
-
-} 
+  ## summarize the ppc values 
+  fit.dom <- sum(E.dom[,])
+  fit.rep.dom <- sum(E.rep.dom[,])
+  
+  fit.sub <- sum(E.sub[,])
+  fit.rep.sub <- sum(E.rep.sub[,])
+}
      ",fill = TRUE)
-
-# #### August 5th, 2025 simple test
-# cat(file = "JAGS_simplified_model_a5_test.jags", 
-#     
-#     "model {
-# 
-#   # Priors
-#   for (i in 1:2) {
-#     a0[i] ~ dnorm(0, 1)         # intercept
-#     a1[i] ~ dnorm(0, 1)         # flii
-#     a2[i] ~ dnorm(0, 1)         # hfp
-#     a3[i] ~ dnorm(0, 1)         # elev
-#     a4[i] ~ dnorm(0, 1)         # comm_det
-#     b0[i] ~ dnorm(0, 1)         # detection intercept
-#     b2[i] ~ dnorm(0, 1)         # cams
-#   }
-# 
-#   # Species interaction parameter
-#   a5 ~ dnorm(0, 1)
-# 
-#   # Likelihood
-#   for (j in 1:nsites) {
-# 
-#     # True abundance
-#     log(lambda.dom[j]) <- a0[2] + a1[2]*flii[j] + a2[2]*hfp[j] + a3[2]*elev[j] + a4[2]*comm_det[j]
-#     log(lambda.sub[j]) <- a0[1] + a1[1]*flii[j] + a2[1]*hfp[j] + a3[1]*elev[j] + a4[1]*comm_det[j] + a5*N.dom[j]
-# 
-#     N.dom[j] ~ dpois(lambda.dom[j] * Z.dom[j])
-#     N.sub[j] ~ dpois(lambda.sub[j] * Z.sub[j])
-# 
-#     for (k in 1:nreps) {
-#       # detection probabilities (no REs, no overdispersion)
-#       logit(p.dom[j,k]) <- b0[2] + b2[2]*cams[j,k]
-#       logit(p.sub[j,k]) <- b0[1] + b2[1]*cams[j,k]
-# 
-#       # observations
-#       y.dom[j,k] ~ dbin(p.dom[j,k], N.dom[j])
-#       y.sub[j,k] ~ dbin(p.sub[j,k], N.sub[j])
-#     }
-#   }
-# }
-# ", fill = TRUE)
 
 
 ### Specify the parameters to be monitored.
@@ -325,7 +202,7 @@ params = c('a0', 'a1', 'a2', 'a3', 'a4', 'a5',    # Abundance parameters
            'b0',  'b2',                           # Detection parameters
            'var.a6','var.a7','a6', 'a7',          # Landscape random effects
            'var.a8','var.a9','a8', 'a9',          # Year random effects
-           # 'var.b3','var.b4','b3', 'b4',          # source random effects
+           'var.b3','var.b4','b3', 'b4',          # source random effects
            "tau.p","eps.p.dom","eps.p.sub",       # OD params
            "eps.p.dom.z", "eps.p.sub.z",          # non-centered OD parameters 
            "fit.sub", "fit.rep.sub",              # Chi2 stat for sub, real then simulated
@@ -335,35 +212,60 @@ params = c('a0', 'a1', 'a2', 'a3', 'a4', 'a5',    # Abundance parameters
            "N.dom", "N.sub"                     
 )          
 
-# #### August 5th, 2025 simple test
-# params = c('a5')
 
-# Specify the initial values
-inits = function() {
-  list(a0=rnorm(2), a1=rnorm(2), a2=rnorm(2), a3=rnorm(2), a4=rnorm(2), a5=rnorm(1),
-       b0=rnorm(2), b2=rnorm(2),
-       sd.p = runif(2, .4, .8), # Experimented and medium values seem to produce better convergence.
-       a6=rnorm(bdata$narea), a7=rnorm(bdata$narea),
-       a8=rnorm(bdata$nyear), a9=rnorm(bdata$nyear),
-       # b3=rnorm(bdata$nsource), b4=rnorm(bdata$nsource),
-       # sigma.a6= runif(1, 3, 5), sigma.a7= runif(1, 3, 5), #crashes w/ inits >= 6, and has better convergence > 2
-       # sigma.a8= runif(1, 3, 5), sigma.a9= runif(1, 3, 5), #havent explored these values at all.
-       # sigma.b3= runif(1, 3, 5), sigma.b4= runif(1, 3, 5), #havent explored these values at all.
-       N.sub = as.vector(apply(bdata$y.sub ,1,max, na.rm=T)),   
-       N.dom = as.vector(apply(bdata$y.dom ,1,max, na.rm=T)),
-       Z.dom = as.vector(rep(as.numeric(NA), length.out = length(bdata$Z.dom))),
-       Z.sub = as.vector(rep(as.numeric(NA), length.out = length(bdata$Z.sub))) 
-  )  # Royle recommends leaving Z as NA, and JAGS says it needs to be numeric          
+# # Specify the initial values
+# inits = function() {
+#   list(a0=rnorm(2), a1=rnorm(2), a2=rnorm(2), a3=rnorm(2), a4=rnorm(2), a5=rnorm(1),
+#        b0=rnorm(2), b2=rnorm(2),
+#        sd.p = runif(2, .4, .8), # Experimented and medium values seem to produce better convergence.
+#        a6=rnorm(bdata$narea), a7=rnorm(bdata$narea),
+#        a8=rnorm(bdata$nyear), a9=rnorm(bdata$nyear),
+#        # b3=rnorm(bdata$nsource), b4=rnorm(bdata$nsource),
+#        # sigma.a6= runif(1, 3, 5), sigma.a7= runif(1, 3, 5), #crashes w/ inits >= 6, and has better convergence > 2
+#        # sigma.a8= runif(1, 3, 5), sigma.a9= runif(1, 3, 5), #havent explored these values at all.
+#        # sigma.b3= runif(1, 3, 5), sigma.b4= runif(1, 3, 5), #havent explored these values at all.
+#        N.sub = as.vector(apply(bdata$y.sub ,1,max, na.rm=T)),   
+#        N.dom = as.vector(apply(bdata$y.dom ,1,max, na.rm=T)),
+#        Z.dom = as.vector(rep(as.numeric(NA), length.out = length(bdata$Z.dom))),
+#        Z.sub = as.vector(rep(as.numeric(NA), length.out = length(bdata$Z.sub))) 
+#   )  # Royle recommends leaving Z as NA, and JAGS says it needs to be numeric          
+# }
+
+### Just do simple inital values for N dom and sub for now 
+make_inits <- function(data_list){
+  # max values observed in matricies 
+  max_y_dom <- apply(data_list$y.dom, 1, max)
+  max_y_sub <- apply(data_list$y.sub, 1, max)
+  
+  # ensure N starts >= observed maxima, and >=1 so log(N+eps) is finite
+  Ndom_init <- pmax(as.integer(max_y_dom + 1L), 1L)
+  Nsub_init <- pmax(as.integer(max_y_sub + 1L), 1L)
+  # Force zero where Z==0
+  Ndom_init[data_list$Zdom_area[data_list$area] == 0] <- 0L
+  Nsub_init[data_list$Zsub_area[data_list$area] == 0] <- 0L
+  
+  # bundle in a list 
+  list(
+    # key params
+    a0 = rnorm(2, 0, 0.2),
+    b0 = rnorm(2, 0, 0.2),
+    a5 = rnorm(1, 0, 0.2),
+    # site covs 
+    a1 = rnorm(2, 0, 0.2),
+    a2 = rnorm(2, 0, 0.2),
+    a3 = rnorm(2, 0, 0.2),
+    a4 = rnorm(2, 0, 0.2),
+    # det covs 
+    b1 = rnorm(2, 0, 0.2),
+    sd.p = runif(2, 0, 0.3),
+    # abundance inital values 
+    N.dom = Ndom_init, #pmax(as.integer(max_y_dom + 1L), 1L),
+    N.sub = Nsub_init #pmax(as.integer(max_y_sub + 1L), 1L)
+  )
 }
 
-# #### August 5th, 2025 simple test
-# inits <- function() {
-#   list(
-#     N.dom =as.vector(apply(bdata$y.dom ,1,max, na.rm=T)),
-#     N.sub = as.vector(apply(bdata$y.sub ,1,max, na.rm=T)),
-#     a5 = rnorm(1, 0, 1)
-#   )
-# }
+inits_list <- list(make_inits(bdata$data), make_inits(bdata$data))
+
 
 # MCMC settings, based on assignment above
 ## Want burn-in to be ~20% of iterations and then thin = (ni - nb) / ideal n.eff (per chain), ideally 30000 in the long one. 
@@ -372,41 +274,21 @@ if(setting == "SHORT"){
   ni <- 1000;  nt <- 2; nb <- 500; nc <- 2; na = NULL      #quick test to make sure code works, 2.5 hr per mod
 }
 if(setting == "MIDDLE"){
-  ni = 10000;  nt = 10; nb = 2000 ; nc <- 3; na = NULL   #examine parameter values --> use this for prelim testing. 36-49 hrs per mod
+  ni = 10000;  nt = 10; nb = 2000 ; nc <- 4; na = NULL   #examine parameter values --> use this for prelim testing. 36-49 hrs per mod
 }
 if(setting == "LONG"){
-  ni = 25000;  nt = 10; nb = 5000 ; nc <- 3; na = NULL  #publication quality run --> ~160 hours per mod, all finish in < 2 weeks! 
+  ni <- 60000; nb <- 20000; nt <- 5; nc <- 4 #publication quality run --> ~160 hours per mod, all finish in < 2 weeks! 
 }
 
-# #### August 5th, 2025 simple test
-# # Bundle data for JAGS
-# jags_data <- list(
-#   nsites = bdata$nsites,
-#   nreps = bdata$nreps,
-#   y.dom = bdata$y.dom,
-#   y.sub = bdata$y.sub,
-#   cams = bdata$cams,
-#   flii = bdata$flii,
-#   hfp = bdata$hfp,
-#   elev = bdata$elev,
-#   comm_det = bdata$comm_det,
-#   Z.dom = bdata$Z.dom,
-#   Z.sub = bdata$Z.sub
-# )
 
 # take the start time 
 start = Sys.time()
 
 ### Run the model
-mod = jags(bdata, inits, params, "ZDA_Co_Abundance_Model_final_20250805.jags",
+mod = jags(bdata$data, inits_list, params, "ZDA_Co_Abundance_Model_simulation_20250811.jags",
            ## MCMC settings
            n.chains = nc, n.adapt = na, n.thin = nt,
            n.iter = ni, n.burnin = nb, parallel = T)
-
-# #### August 5th, 2025 simple test
-# mod <- jags(
-#   data = jags_data, inits = inits, parameters.to.save = params, model.file = "JAGS_simplified_model_a5_test.jags",
-#   n.chains = nc, n.adapt = na, n.thin = nt, n.iter = ni, n.burnin = nb, parallel = T)
 
 # take the end time 
 end = Sys.time()
@@ -492,7 +374,6 @@ year<-substr(Sys.Date(),1,4)
 
 path = paste(paste(paste(paste("results/simulations/coefficent_dataframes/", slurm, "_", setting, "_", "co-abundance_coefficents_state_REs_only_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
 write.csv(s, path, row.names = F)
-
 
 ## Give us an update please!
 print(paste("Finished generating coefficent dataframe for: ", n, " at ", Sys.time(),

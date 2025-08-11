@@ -151,19 +151,19 @@ cat(file = "ZDA_Co_Abundance_Model_final_20250806.jags",
 
   }
   
-  # # source RE hyper prior --> define it's variance
-  # sigma.b3 ~ dunif(0,5)
-  # var.b3 <- 1/(sigma.b3*sigma.b3)
-  # 
-  # sigma.b4 ~ dunif(0,5)
-  # var.b4 <- 1/(sigma.b4*sigma.b4)
-  # 
-  # for (k in 1:nsource) {
-  # 
-  #   b3[k] ~ dnorm(0,var.b3)
-  #   b4[k] ~ dnorm(0,var.b4)
-  # 
-  # }
+  # source RE hyper prior --> define it's variance
+  sigma.b3 ~ dunif(0,5)
+  var.b3 <- 1/(sigma.b3*sigma.b3)
+
+  sigma.b4 ~ dunif(0,5)
+  var.b4 <- 1/(sigma.b4*sigma.b4)
+
+  for (k in 1:nsource) {
+
+    b3[k] ~ dnorm(0,var.b3)
+    b4[k] ~ dnorm(0,var.b4)
+
+  }
   
   # Center N.dom by area
 for (k in 1:narea) {
@@ -193,7 +193,7 @@ for (k in 1:narea) {
     # Abundance of Dominant Species w/ iZIP 
     N.dom[j] ~ dpois(lambda.dom[j] * Z.dom[j])
     
-      log(lambda.dom[j]) <- a0[2] + a1[2]*flii[j] + a2[2]*hfp[j] + a3[2]*elev[j] + a4[2]*comm_det[j]  + a9[year[j]] #+ a7[area[j]]
+      log(lambda.dom[j]) <- a0[2] + a1[2]*flii[j] + a2[2]*hfp[j] + a3[2]*elev[j] + a4[2]*comm_det[j]  + a9[year[j]] + a7[area[j]]
                       
                       
     # Observation model for counts per replicated observation with OD params 
@@ -206,7 +206,7 @@ for (k in 1:narea) {
         
           lp.lim.sub[j,k]<- min(250, max(-250, lp.sub[j,k])) #stabilize logit
           
-            lp.sub[j,k] <- b0[1] +  b2[1]*cams[j,k] + eps.p.sub[j,k] #+ b3[source[j]] 
+            lp.sub[j,k] <- b0[1] +  b2[1]*cams[j,k] + eps.p.sub[j,k] + b3[source[j]] 
         
               eps.p.sub[j,k] <- eps.p.sub.z[j,k] * sd.p[1]
               
@@ -220,7 +220,7 @@ for (k in 1:narea) {
         
           lp.lim.dom[j,k]<- min(250, max(-250, lp.dom[j,k])) #stabilize logit
           
-            lp.dom[j,k] <- b0[2] + b2[2]*cams[j,k] + eps.p.dom[j,k] #+ b4[source[j]]
+            lp.dom[j,k] <- b0[2] + b2[2]*cams[j,k] + eps.p.dom[j,k] + b4[source[j]]
               
               eps.p.dom[j,k] <- eps.p.dom.z[j,k] * sd.p[2]
                 

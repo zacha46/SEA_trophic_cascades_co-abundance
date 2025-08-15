@@ -8,7 +8,7 @@
 
 ## Zachary Amir, Z.Amir@uq.edu.au
 ## Code created: August 11th, 2025
-## Last updated: 
+## Last updated: August 15th, 2025
 
 ## start fresh 
 rm(list = ls())
@@ -31,6 +31,7 @@ nreps   <- 3     # k, columns in the matrix
 narea   <- 4     # number of landscapes for RE
 nyear   <- 3     # number of years for RE 
 nsource <- 2     # number of data providers for RE
+true_siv <- -2   # the true value of the SIV we are simulating
 
 ## inverse logit function, used inside function 
 inv_logit <- function(x) 1/(1+exp(-x))
@@ -85,6 +86,8 @@ coabundance_simulator <- function(nsites, nreps, narea, nyear, nsource,
   sd.p <- runif(2, 0, 1)           # OD RE per species 
   ## bias covariates
   u_state <- rnorm(nsites, 0, u_state_sd)   # site latent driver
+  ## and now one more for the landscape contrast w/ species present/absent
+  # a10 = rnorm(1, 0, 1)             # true presence/absence effect for the simulator; set to 0 if you want pure gradient tests
 
   # Site covariates (scale for stability)
   flii <- scale(rnorm(nsites, 0, 1))[,1]
@@ -116,20 +119,34 @@ coabundance_simulator <- function(nsites, nreps, narea, nyear, nsource,
   ##
   ### State formula 
   
+  ## add a bit of spread in dom abundance
+  eta_dom <- rnorm(nsites, 0, 0.6)
+  
   # expected abundance of dominant species 
-  lambda_dom <- exp(a0[2] + a1[2]*flii + a2[2]*hfp + a3[2]*elev + a4[2]*comm_det + a7_area[area] + a9_year[year] + if(bias_unmeas_state){u_state}else{0}) 
+  lambda_dom <- exp(a0[2] + a1[2]*flii + a2[2]*hfp + a3[2]*elev + a4[2]*comm_det + a7_area[area] + a9_year[year] + eta_dom + if(bias_unmeas_state){u_state}else{0}) 
   # Draw dominant counts first w/ iZIP 
   N_dom <- rpois(nsites, lambda_dom) * Zdom_area[area]
   
-  # Subordinate mean depends on latent N.dom 
-  if(log_dom){
-    # can use log for stability
-    lp_sub <- a0[1] + a1[1]*flii + a2[1]*hfp + a3[1]*elev + a4[1]*comm_det + a5*log(N_dom + 1) + a6_area[area] + a8_year[year] + if(bias_unmeas_state){u_state}else{0}
-  }else{
-    ## Center N_dom by calculating the Z-score: value - mean / sd 
-    N_dom_c <- (N_dom - mean(N_dom))/sd(N_dom)
-    lp_sub <- a0[1] + a1[1]*flii + a2[1]*hfp + a3[1]*elev + a4[1]*comm_det + a5*N_dom_c + a6_area[area] + a8_year[year] + if(bias_unmeas_state){u_state}else{0}
-  } # end log condition
+  ### Build interaction regressor
+  #presence/absence contrast 
+  Zdom_j <- Zdom_area[area]  # 1 if dominant present in this site's landscape, 0 if extirpated
+  
+  # continuous gradient built from N.dom only in predator-present landscapes
+  siv_raw <- if (log_dom){log(N_dom + 1e-6)}else{ as.numeric(N_dom) }
+  
+  ## Calculate mean and standard deviation to normalize N.dom but only wihin present sites. 
+  present <- (Zdom_j == 1L)
+  mu_present <- if(any(present)){ mean(siv_raw[present]) }else{ 0 }
+  sd_present <- if(any(present)){ sd(siv_raw[present]) + 1e-6 }else{ 1 }
+  # Create a vector where we assume all absent 
+  siv_x <- rep(0, nsites)
+  # but where present, fill in w/ a standardized value 
+  siv_x[present] <- (siv_raw[present] - mu_present) / sd_present
+  
+  #Create the linear predictor for the subordinate that is dependent on the SIV_x (N.dom)
+  ## And include the new a10 landscape contrasts effect 
+  lp_sub <- a0[1] + a1[1]*flii + a2[1]*hfp + a3[1]*elev + a4[1]*comm_det + a5*siv_x + a6_area[area] + a8_year[year] + if(bias_unmeas_state){u_state}else{0}
+  # end log condition
   ## clamp the linear predictor to a more narrow range to prevent overflow
   lp_sub <- pmax(pmin(lp_sub, 20), -20)   
   lambda_sub <- exp(lp_sub)
@@ -226,7 +243,10 @@ coabundance_simulator <- function(nsites, nreps, narea, nyear, nsource,
                 cams = cams,
                 nyear = nyear, year = as.numeric(year), 
                 nsource = nsource, source = as.numeric(source),
-                N.dom = N_dom, N.sub = N_sub),
+                N.dom = N_dom, N.sub = N_sub, 
+                # Gather constants and 0/1 per site 
+                siv_mu = mu_present, siv_sd = sd_present,  
+                Zdom_j = as.integer(Zdom_j)),       
     # and also keep the true values for comparison later 
     truth = list(a0=a0, a5=a5, b0=b0,
                  Zdom_area=Zdom_area, Zsub_area=Zsub_area, sd.p = sd.p,
@@ -234,24 +254,80 @@ coabundance_simulator <- function(nsites, nreps, narea, nyear, nsource,
   )
 } # end function
 
-#### Test the function! 
+### Also import a ChatGPT function to structure the iZIP and landscape relationship clearly and consistently
+make_area_izip_design <- function(nsites, narea,
+                                  # dom/sub combos
+                                  narea_11, narea_10, narea_01, narea_00,
+                                  sites_per_area = NULL){
+  stopifnot(narea_11 + narea_10 + narea_01 + narea_00 == narea)
+  
+  # If not provided, split sites evenly across areas
+  if (is.null(sites_per_area)) {
+    q <- rep(floor(nsites / narea), narea)
+    if (sum(q) < nsites) q[seq_len(nsites - sum(q))] <- q[seq_len(nsites - sum(q))] + 1L
+  } else {
+    stopifnot(length(sites_per_area) == narea, sum(sites_per_area) == nsites)
+    q <- sites_per_area
+  }
+  
+  # Build area ids
+  area <- rep(seq_len(narea), times = q)
+  
+  # Assign the 4 strata in a fixed order (or shuffle once if you prefer)
+  lab <- c(rep("11", narea_11), rep("10", narea_10),
+           rep("01", narea_01), rep("00", narea_00))
+  # Map to Z arrays at area level
+  Zdom_area <- Zsub_area <- integer(narea)
+  for (i in seq_len(narea)) {
+    if (lab[i] == "11") { Zdom_area[i] <- 1; Zsub_area[i] <- 1 }
+    if (lab[i] == "10") { Zdom_area[i] <- 1; Zsub_area[i] <- 0 }
+    if (lab[i] == "01") { Zdom_area[i] <- 0; Zsub_area[i] <- 1 }
+    if (lab[i] == "00") { Zdom_area[i] <- 0; Zsub_area[i] <- 0 }
+  }
+  # return a list 
+  list(area = area, Zdom_area = Zdom_area, Zsub_area = Zsub_area)
+} # end function 
+
+# ## clean up testing
+# rm(cams, idx_by_area, lp_dom, lp_sub, neighbors, raw_effort, u_det, y_dom, y_sub,
+#    a0,a1,a10,a2,a3,a4,a5,a6_area,a7_area,a8_year,a9_year, area, nsource, nb,
+#    b0,b1,b2_source, b3_source, bias_doublecount, bias_sp_autocorr, bias_unmeas_det,
+#    bias_unmeas_state, comm_det, dc_rate, elev, eps_dom, eps_sub, flii, grp, hfp, j, k,
+#    lambda_dom, lambda_sub, mu_present, log_dom, N_dom, N_sub, narea, nreps, nsites, nyear,
+#    p_cross, p_dom, p_sub, pos, present, q, rho_sp, sd_present, sd.p, sigma_a6, sigma_a7,
+#    sigma_a8, sigma_a9, sigma_b2, sigma_b3, siv_raw, siv_x, source, true_siv, u_det_sd, u_state,
+#    u_state_sd, y_base_dom, y_base_sub, year, Zdom_area, Zdom_j, Zsub_area)
+
+#
+##
+###
+#### Test the functions! 
+
+## Set seed for reproduciblity
+set.seed(2025)
 
 ## Define key values for the function
-nsites  <- 60; nreps <- 3
-narea   <- 4
+nsites  <- 120; nreps <- 4
+narea   <- 8
 nyear   <- 2
 nsource <- 2
-area   <- rep(1:narea, times=c(20,15,15,10))
-Zdom_area <- c(1, 1, 0, 1)  # area 3 absent for dominant
-Zsub_area <- c(0, 1, 1, 1)  # area 1 absent for subordinate
+## Create a iZIP area relationship with 4 areas with both present, 2 with dom-only, 2 with sub-only, 0 with both absent
+design <- make_area_izip_design(nsites, narea, narea_11=4, narea_10=2, narea_01=2, narea_00=0)
+# extract key info here
+area <- design$area
+Zdom_area <- design$Zdom_area
+Zsub_area <- design$Zsub_area
+# area   <- rep(1:narea, times = rep(nsites/narea, narea))
+# Zdom_area <- c(1, 1, 0, 1)  # area 3 absent for dominant
+# Zsub_area <- c(0, 1, 1, 1)  # area 1 absent for subordinate
 
 ## Use the function to simulate a dataset 
 sim <- coabundance_simulator(nsites, nreps, narea, nyear, nsource, 
-                             true_siv = 1, log_dom = T, area = area, 
+                             true_siv = -2, log_dom = T, area = area, 
                              Zdom_area = Zdom_area, Zsub_area = Zsub_area,
                              bias_doublecount = FALSE, bias_sp_autocorr = FALSE, 
                              bias_unmeas_state = FALSE, bias_unmeas_det = FALSE)
-
+rm(nsites, nreps, narea, nyear, nsource, area, Zdom_area, Zsub_area)
 
 ##### Load a JAGS model and inital values #####
 jags_model <- "
@@ -260,59 +336,83 @@ model{
   for(i in 1:2){
     a0[i] ~ dnorm(0, 1)   # state intercept 
     b0[i] ~ dnorm(0, 1)   # det intercept 
-    a1[i] ~ dnorm(0, 1)   # flii
-    a2[i] ~ dnorm(0, 1)   # hfp
-    a3[i] ~ dnorm(0, 1)   # elev
-    a4[i] ~ dnorm(0, 1)   # comm_det
-    b1[i] ~ dnorm(0, 1)   # sampling effort 
-    # OD params for observation model
-    sd.p[i] ~ dunif(0, 1) 
-    tau.p[i] <- pow(sd.p[i], -2)
+    # a1[i] ~ dnorm(0, 1)   # flii
+    # a2[i] ~ dnorm(0, 1)   # hfp
+    # a3[i] ~ dnorm(0, 1)   # elev
+    # a4[i] ~ dnorm(0, 1)   # comm_det
+    # b1[i] ~ dnorm(0, 1)   # sampling effort
+    # # OD params for observation model
+    # sd.p[i] ~ dunif(0, 1)
+    # tau.p[i] <- pow(sd.p[i], -2)
   }
   # SIV prior 
   a5 ~ dnorm(0, 1)
   
-  # landscape RE hyper priors 
-  sigma.a6 ~ dunif(0, 5)
-  var.a6 <- 1 / pow(sigma.a6, 2)
-  sigma.a7 ~ dunif(0, 5)
-  var.a7 <- 1 / pow(sigma.a7, 2)
+  # # presence/absence main effect
+  # a10 ~ dnorm(0, 1)
   
-  for (k in 1:narea){
-    a6[k] ~ dnorm(0, var.a6)   # sub ~ area
-    a7[k] ~ dnorm(0, var.a7)   # dom ~ area
-  }
-  
-  # Year RE hyper priors 
-  sigma.a8 ~ dunif(0, 5)
-  var.a8 <- 1/pow(sigma.a8, 2)
-  sigma.a9 ~ dunif(0, 5)
-  var.a9 <- 1/pow(sigma.a9, 2)
-  
-  for (k in 1:nyear){
-    a8[k] ~ dnorm(0, var.a6)   # sub ~ year
-    a9[k] ~ dnorm(0, var.a7)   # dom ~ year
-  }
-  
-  # Source RE hyper prior 
-  sigma.b2 ~ dunif(0, 5)
-  var.b2 <- 1/pow(sigma.b2, 2)
-  sigma.b3 ~ dunif(0, 5)
-  var.b3 <- 1/pow(sigma.b3, 2)
-  
-  for (k in 1:nsource){
-    b2[k] ~ dnorm(0, var.b2)   # sub ~ source
-    b3[k] ~ dnorm(0, var.b3)   # dom ~ source
-  }
+  # # landscape RE hyper priors
+  # sigma.a6 ~ dunif(0, 5)
+  # var.a6 <- 1 / pow(sigma.a6, 2)
+  # sigma.a7 ~ dunif(0, 5)
+  # var.a7 <- 1 / pow(sigma.a7, 2)
+  # 
+  # for (k in 1:narea){
+  #   a6[k] ~ dnorm(0, var.a6)   # sub ~ area
+  #   a7[k] ~ dnorm(0, var.a7)   # dom ~ area
+  # }
+  # 
+  # # Year RE hyper priors
+  # sigma.a8 ~ dunif(0, 5)
+  # var.a8 <- 1/pow(sigma.a8, 2)
+  # sigma.a9 ~ dunif(0, 5)
+  # var.a9 <- 1/pow(sigma.a9, 2)
+  # 
+  # for (k in 1:nyear){
+  #   a8[k] ~ dnorm(0, var.a6)   # sub ~ year
+  #   a9[k] ~ dnorm(0, var.a7)   # dom ~ year
+  # }
+  # 
+  # # Source RE hyper prior
+  # sigma.b2 ~ dunif(0, 5)
+  # var.b2 <- 1/pow(sigma.b2, 2)
+  # sigma.b3 ~ dunif(0, 5)
+  # var.b3 <- 1/pow(sigma.b3, 2)
+  # 
+  # for (k in 1:nsource){
+  #   b2[k] ~ dnorm(0, var.b2)   # sub ~ source
+  #   b3[k] ~ dnorm(0, var.b3)   # dom ~ source
+  # }
 
  # State process
   for(j in 1:nsites){
+  
     # Dominant
-    log(lambda.dom[j]) <- a0[2] + a1[2]*flii[j] + a2[2]*hfp[j] + a3[2]*elev[j] + a4[2]*comm_det[j] + a7[area[j]] + a9[year[j]]
+    log(lambda.dom[j]) <- a0[2] 
+    ## Site-covariates
+    #+ a1[2]*flii[j] + a2[2]*hfp[j] + a3[2]*elev[j] + a4[2]*comm_det[j] 
+    ## Random effects 
+    #+ a7[area[j]] + a9[year[j]]
+    
+    ## extract N.sub from the formula w/ iZIP 
     N.dom[j] ~ dpois(lambda.dom[j] * Zdom_area[area[j]])
+    
+    # SIV regressor (fixed centring from data to avoid chasing noise)
+    zdom[j]     <- log(N.dom[j] + 1.0E-6)
+    zdom.std[j] <- (zdom[j] - siv_mu) / siv_sd
+    # gate it to present landscapes so extinct landscapes contribute 0 to the slope
+    zdom.gated[j] <- zdom.std[j] * Zdom_j[j]
 
-    # Subordinate depends on **latent N.dom** (can use log for stability, but not now)
-    log(lambda.sub[j]) <- a0[1] + a5 * log(N.dom[j] + 1.0E-6) + a1[1]*flii[j] + a2[1]*hfp[j] + a3[1]*elev[j] + a4[1]*comm_det[j] + a6[area[j]] + a8[year[j]]
+    ## Subordinate depends on **latent N.dom** (can use log for stability, but not now)
+    log(lambda.sub[j]) <- a0[1]
+    ## SIV parameter using the gradient only where present
+    + a5  * zdom.gated[j]   
+    ## site-covariates
+    #+ a1[1]*flii[j] + a2[1]*hfp[j] + a3[1]*elev[j] + a4[1]*comm_det[j] 
+    ## random effects
+    #+ a6[area[j]] + a8[year[j]]
+    
+    ## extract N.sub from the formula w/ iZIP 
     N.sub[j] ~ dpois(lambda.sub[j] * Zsub_area[area[j]])
   }
 
@@ -321,25 +421,27 @@ model{
     for(k in 1:nreps){
     
       # dominant species detection formula
-      lp.dom[j,k] <- b0[2] + b1[2]*cams[j,k] + eps.p.dom[j,k] + b2[source[j]]
+      lp.dom[j,k] <- b0[2] #+ b1[2]*cams[j,k] + eps.p.dom[j,k] + b2[source[j]]
       # implement a stable logit transformation
       p.dom[j,k] <- 1 / (1 + exp(-max(-250, min(250, lp.dom[j,k])))) 
       # calculate det prob
       y.dom[j,k] ~ dbin(p.dom[j,k], N.dom[j])
+      
       # and the ODRE  
-      eps.p.dom[j,k] ~ dnorm(0, tau.p[2])
+      # eps.p.dom[j,k] ~ dnorm(0, tau.p[2])
       
       # and fill in replicated matrix
       y.rep.dom[j,k] ~ dbin(p.dom[j,k], N.dom[j])
       
       # subordinate species detection formula 
-      lp.sub[j,k] <- b0[1] + b1[1]*cams[j,k] + eps.p.sub[j,k] + b3[source[j]]
+      lp.sub[j,k] <- b0[1] #+ b1[1]*cams[j,k] + eps.p.sub[j,k] + b3[source[j]]
       # implement a stable logit transformation
       p.sub[j,k] <- 1 / (1 + exp(-max(-250, min(250, lp.sub[j,k])))) 
       # calculate det prob
       y.sub[j,k] ~ dbin(p.sub[j,k], N.sub[j])
+      
       # and the ODRE
-      eps.p.sub[j,k] ~ dnorm(0, tau.p[1])
+      # eps.p.sub[j,k] ~ dnorm(0, tau.p[1])
       
       # and fill in replicated matrix
       y.rep.sub[j,k] ~ dbin(p.sub[j,k], N.sub[j])
@@ -403,9 +505,35 @@ make_inits <- function(data_list){
   )
 }
 
-inits_list <- list(make_inits(sim$data), make_inits(sim$data))
+inits_list <- list(make_inits(sim$data), 
+                   make_inits(sim$data),
+                   make_inits(sim$data))
 
 ##### Fit the model and inspect diagnostics #####
+
+# ### compute a data‑based proxy for the standardization of N.dom to include in the model
+# # grab max values per site
+# max_y_dom <- apply(sim$data$y.dom, 1, max)
+# # create an observable proxy of Z for dom species
+# zdom_proxy <- log(max_y_dom + 1)
+# # Extract Z dom from sim data
+# Zdom_j     <- sim$data$Zdom_area[ sim$data$area ]
+# # and grab the values that are present
+# present    <- as.integer(Zdom_j == 1)
+# 
+# ## Calculate the mean and standard deviations of the proxy
+# mu_present <- if (any(present==1)) mean(zdom_proxy[present==1]) else 0
+# sd_present <- if (any(present==1)) sd(zdom_proxy[present==1]) + 1e-6 else 1
+# 
+# ## and include back in the list
+# data_jags <- within(sim$data, {
+#   zdom_mu   <- mu_present
+#   zdom_sd   <- sd_present
+#   Zdom_j    <- Zdom_j
+#   I_present <- present
+# })
+# # clean up
+# rm(max_y_dom, zdom_proxy, Zdom_j, present, mu_present, sd_present)
 
 # # load DIC to track deviance in the model 
 # load.module("dic") 
@@ -429,7 +557,7 @@ model_path <- tempfile(fileext = ".jags")
 writeLines(jags_model, con = model_path)
 
 # 2) Run jagsUI with the file path
-params <- c("a0","a1","a2","a3","a4","a5","b0","b1","sd.p", "N.dom", "N.sub",
+params <- c("a0","b0", "a5", #"a1","a2","a3","a4","a5","b0","b1","sd.p", "N.dom", "N.sub",
             "fit.dom","fit.rep.dom","fit.sub","fit.rep.sub") # no 'deviance' unless DIC=TRUE
 ## remove simulated abundances from list and save in a separate DF 
 abund = data.frame("N.dom_simulated" = sim$data$N.dom,
@@ -437,17 +565,27 @@ abund = data.frame("N.dom_simulated" = sim$data$N.dom,
 sim$data$N.dom = NULL
 sim$data$N.sub = NULL
 
+# MCMC settings
+## Want burn-in to be ~20% of iterations and then thin = (ni - nb) / ideal n.eff (per chain), ideally 30000 in the long one. 
+### Assess n.eff via (ni - nb)/nt * nc 
+# ni = 5500; nb = 1500; nt = 50; nc = 2
+# ni = 5000; nb = 2000; nt = 5; nc = 3
+ni = 15000; nb = 5000; nt = 10; nc = 3
+(ni - nb)/nt * nc 
+
+## set parallell processing power
+options(mc.cores = nc)
+
 # 3) call the model 
 mod <- jagsUI::jags(data   = sim$data,
                     inits  = inits_list,
                     parameters.to.save = params,
                     model.file = model_path,
-                    n.chains = 2,
-                    n.adapt  = 1000,
-                    n.burnin = 1000,
-                    n.iter   = 3000,  # total iterations INCLUDING burn-in
-                    n.thin   = 50,
-                    parallel = TRUE,   # TRUE on HPC
+                    n.chains = nc,
+                    n.burnin = nb,
+                    n.iter   = ni,  
+                    n.thin   = nt,
+                    parallel = TRUE,  
                     DIC      = FALSE)
 # print(mod, 2)
 
@@ -467,7 +605,7 @@ bayes_p_sub <- mean(mod$sims.list$fit.rep.sub > mod$sims.list$fit.sub)
 a_sub = mod$sims.list$fit.sub
 b_sub = mod$sims.list$fit.rep.sub
 a_dom = mod$sims.list$fit.dom
-b_sub = mod$sims.list$fit.rep.dom
+b_dom = mod$sims.list$fit.rep.dom
 
 # c-hat calculation 
 chat_dom <- mean(a_dom / b_dom)
@@ -482,6 +620,9 @@ cat("\nTrue SIV:", sim$truth$a5,
     "\nBayes p-value (sub):", round(bayes_p_sub,3),
     "\nc-hat (dom):", round(chat_dom,3),
     "\nc-hat (sub):", round(chat_sub,3), "\n")
+
+# inspect the traceplot here
+jagsUI::traceplot(mod, "a5")
 
 ## Also compare true vs simulated latent abundance 
 
@@ -535,7 +676,7 @@ rm(abund, coeff, dic.out, est.dat, inits_list, jm, M, mcmc_mat, mod, samp, sim, 
    vars, years, Zdom_area, Zsub_area)
 
 
-#### Simulate different scenarios #### 
+##### Simulate different scenarios #### 
 
 ## the idea here is that we get a range of SIVs and different biases
 a5_values = c(-2, -1, 0, 1, 2)
@@ -648,4 +789,188 @@ path = paste("~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_
 
 ## save this as a RDS object
 saveRDS(final_list, path)
+
+###### Inspect simulation results from HPC ######
+
+## start fresh 
+rm(list = ls())
+
+# save working directory to where the results live in dropbox 
+wd = "~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/results/"
+
+# and list all relevant files 
+files = list.files(paste(wd, "MIDDLE_simulations_August_2025", sep = ""), recursive = T)
+
+#
+##
+### Coefficient data frame
+
+## First, subset for coefficent results
+files_coeff = files[grepl("coefficent_dataframes/", files)]
+# import each one
+res = list()
+for(i in 1:length(files_coeff)){
+  # import the file
+  d = read.csv(paste(wd, "MIDDLE_simulations_August_2025/", files_coeff[i], sep = ""))
+  # save in the list
+  res[[i]] = d
+  # save with the test name
+  names(res)[i] = str_extract(files_coeff[i], "(?<=coefficents_).*(?=_\\d{8}\\.csv)")
+}
+rm(d, i, files_coeff)
+
+## Combine in to a DF
+coeff = do.call(rbind, res)
+rownames(coeff) = NULL
+
+# extract true a5 and bias as new columns
+coeff <- coeff %>%
+  mutate(
+    true_a5 = as.numeric(str_match(sim_test, "a5_([^_]+)_bias_")[,2]),
+    bias = str_match(sim_test, "bias_(.*)$")[,2]
+  )
+unique(coeff$true_a5)
+unique(coeff$bias) # both are good!
+
+#
+##
+### PPC data frame 
+
+## First, subset for coefficent results
+files_ppc = files[grepl("PPC_dataframes/", files)]
+# import each one
+res = list()
+for(i in 1:length(files_ppc)){
+  # import the file 
+  d = read.csv(paste(wd, "MIDDLE_simulations_August_2025/", files_ppc[i], sep = ""))
+  # # grab the random effect test 
+  # d$RE_test = str_extract(files_ppc[i], "(?<=values_)[^_]+_REs?|[^_]+_RE(?=_only)")
+  # save in the list 
+  res[[i]] = d
+  # save with the test name 
+  names(res)[i] = str_extract(files_ppc[i], "a5.*(?=_\\d{8}\\.csv)")
+}
+rm(d, i, files_ppc)
+
+## Combine in to a DF 
+ppc = do.call(rbind, res)
+rownames(ppc) = NULL
+
+# extract true a5 and bias as new columns
+ppc <- ppc %>%
+  mutate(
+    true_a5 = as.numeric(str_match(sim_test, "a5_([^_]+)_bias_")[,2]),
+    bias = str_match(sim_test, "bias_(.*)$")[,2]
+  )
+unique(ppc$true_a5)
+unique(ppc$bias) # both are good! 
+
+#### Apply support levels here
+## Bayes p-value
+ppc$BPV_valid = "No"
+ppc$BPV_valid[ppc$BPV.dom >= 0.15 & ppc$BPV.dom <= 0.85 &
+                ppc$BPV.sub >= 0.15 & ppc$BPV.sub <= 0.85] = "Yes"
+table(ppc$BPV_valid[!is.na(ppc$Interaction_Estimate)]) 
+
+## over dispersion, C-hat 
+ppc$OD_valid = "No"
+ppc$OD_valid[ppc$Chat.dom >= 0.95 & ppc$Chat.dom <= 1.3 &
+               ppc$Chat.sub >= 0.95 & ppc$Chat.sub <= 1.3] = "Yes"
+table(ppc$OD_valid[!is.na(ppc$Interaction_Estimate)]) 
+
+## Rhat for SIV
+ppc$parameter_valid = "No"
+ppc$parameter_valid[ppc$Rhat >= 0.99 & ppc$Rhat <= 1.1] = "Yes"
+table(ppc$parameter_valid[!is.na(ppc$Interaction_Estimate)]) 
+
+## Create support levels when combining w/ direction
+ppc$support[ppc$BPV_valid == "No" |
+              ppc$OD_valid == "No" |
+              ppc$parameter_valid == "No"] = "unsupported_poor_fit" # lowest level of support --> bad mod.
+ppc$support[ppc$BPV_valid == "Yes" & 
+              ppc$OD_valid == "Yes" &
+              ppc$parameter_valid == "Yes" &
+              ppc$Significance == "Non-Significant"] = "unsupported_unclear_SIV" # mid-low support --> good mod, but not important
+ppc$support[ppc$BPV_valid == "Yes" & 
+              ppc$OD_valid == "Yes" &
+              ppc$parameter_valid == "Yes" &
+              ppc$Significance == "Significant" &
+              ppc$true_a5 < 0  &
+              ppc$Interaction_Estimate > 0] = "unsupported_wrong_direction" # almost supportive --> good model, significant result, but not in correct direction for hypothesis.  
+ppc$support[ppc$BPV_valid == "Yes" & 
+              ppc$OD_valid == "Yes" &
+              ppc$parameter_valid == "Yes" &
+              ppc$Significance == "Significant" &
+              ppc$true_a5 > 0 &
+              ppc$Interaction_Estimate < 0] = "unsupported_wrong_direction" # Same as above, but applied for bottom-up
+## assign which models support our hypothesis
+ppc$support[ppc$BPV_valid == "Yes" & 
+              ppc$OD_valid == "Yes" &
+              ppc$parameter_valid == "Yes" &
+              ppc$Significance == "Significant" &
+              ppc$true_a5 < 0  &
+              ppc$Interaction_Estimate <= 0] = "Supported" # good model, significant result, in correct direction for hypothesis.  
+ppc$support[ppc$BPV_valid == "Yes" & 
+              ppc$OD_valid == "Yes" &
+              ppc$parameter_valid == "Yes" &
+              ppc$Significance == "Significant" &
+              ppc$true_a5 > 0 &
+              ppc$Interaction_Estimate >= 0] = "Supported" # Same as above, but applied for bottom-up direction. 
+# Check results 
+table(ppc$support) # most are a poor fit 
+
+#
+##
+### abundance data frame 
+
+## First, subset for coefficent results
+files_abund = files[grepl("prediction_dataframes/", files)]
+# import each one
+res = list()
+for(i in 1:length(files_abund)){
+  # import the file
+  d = read.csv(paste(wd, "MIDDLE_simulations_August_2025/", files_abund[i], sep = ""))
+  # save in the list
+  res[[i]] = d
+  # save with the test name
+  names(res)[i] = str_extract(files_abund[i], "(?<=comparison_).*(?=_\\d{8}\\.csv)")
+}
+rm(d, i, files_abund)
+
+## Combine in to a DF
+abund = do.call(rbind, res)
+rownames(abund) = NULL
+
+# extract true a5 and bias as new columns
+abund <- abund %>%
+  mutate(
+    true_a5 = as.numeric(str_match(sim_test, "a5_([^_]+)_bias_")[,2]),
+    bias = str_match(sim_test, "bias_(.*)$")[,2]
+  )
+unique(abund$true_a5)
+unique(abund$bias) # both are good!
+
+#
+##
+###
+#### Inspect results 
+
+## first inspect no bias -> can model recover true value?
+dat = ppc[ppc$bias == "none", ]
+dat[order(dat$true_a5), c("true_a5", "Interaction_Estimate","lower","upper", "Rhat", "Significance", "support",
+                          "BPV.dom","BPV.sub","Chat.dom", "Chat.sub" )]
+## UPDATE, still struggling to recover true values AND there are still some large Rhat values. 
+# ideally the Rhat should be much lower on the shorter chains too, not just the long ones. 
+
+
+
+# # inspect one RE test at a time 
+# dat = dat[order(dat$true_a5),] # some very large Rhats, insepct the true mod
+# dat[dat$RE_test == "no_REs", c("true_a5", "Interaction_Estimate","lower","upper", "Rhat", "Significance", "support")]
+
+
+#
+#
+#
+#
   

@@ -5,7 +5,7 @@
 ### Data has already been formatted to into the proper data bundle to run the co-abundance model on the HPC 
 ## The code to see how data was simulated can be found here: scripts/Step0_co-abundance_simulation.R
 
-## Submitted to HPC on August 11th, 2024
+## Submitted to HPC on August 14th, 2024
 # Zachary Amir, z.amir@uq.edu.au
 
 ####### Set up #####
@@ -263,21 +263,24 @@ make_inits <- function(data_list){
     N.sub = Nsub_init #pmax(as.integer(max_y_sub + 1L), 1L)
   )
 }
-
-inits_list <- list(make_inits(bdata$data), make_inits(bdata$data))
+## Store in a list per chain! 
+inits_list <- list(make_inits(bdata$data), 
+                   make_inits(bdata$data),
+                   make_inits(bdata$data), 
+                   make_inits(bdata$data))
 
 
 # MCMC settings, based on assignment above
 ## Want burn-in to be ~20% of iterations and then thin = (ni - nb) / ideal n.eff (per chain), ideally 30000 in the long one. 
 ### Assess n.eff via (ni - nb)/nt * nc 
 if(setting == "SHORT"){
-  ni <- 1000;  nt <- 2; nb <- 500; nc <- 2; na = NULL      #quick test to make sure code works, 2.5 hr per mod
+  ni <- 1000;  nt <- 2; nb <- 500; nc <- 4; na = NULL      #quick test to make sure code works, 2.5 hr per mod
 }
 if(setting == "MIDDLE"){
   ni = 10000;  nt = 10; nb = 2000 ; nc <- 4; na = NULL   #examine parameter values --> use this for prelim testing. 36-49 hrs per mod
 }
 if(setting == "LONG"){
-  ni <- 60000; nb <- 20000; nt <- 5; nc <- 4 #publication quality run --> ~160 hours per mod, all finish in < 2 weeks! 
+  ni <- 60000; nb <- 20000; nt <- 5; nc <- 4; na = NULL  #publication quality run --> ~160 hours per mod, all finish in < 2 weeks! 
 }
 
 
@@ -372,7 +375,7 @@ day<-substr(Sys.Date(),9, 10)
 month<-substr(Sys.Date(),6,7)
 year<-substr(Sys.Date(),1,4)
 
-path = paste(paste(paste(paste("results/simulations/coefficent_dataframes/", slurm, "_", setting, "_", "co-abundance_coefficents_state_REs_only_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
+path = paste(paste(paste(paste("results/simulations/coefficent_dataframes/", slurm, "_", setting, "_", "co-abundance_coefficents_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
 write.csv(s, path, row.names = F)
 
 ## Give us an update please!
@@ -421,7 +424,7 @@ day<-substr(Sys.Date(),9, 10)
 month<-substr(Sys.Date(),6,7)
 year<-substr(Sys.Date(),1,4)
 
-path = paste(paste(paste(paste("results/simulations/PPC_dataframes/", slurm, "_", setting, "_BPV_and_Chat_values_state_REs_only_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
+path = paste(paste(paste(paste("results/simulations/PPC_dataframes/", slurm, "_", setting, "_BPV_and_Chat_values_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
 write.csv(da, path)
 
 print(paste("Finished generating PPC plotdata dataframe for: ", n, " at ", Sys.time(),
@@ -478,7 +481,7 @@ day<-substr(Sys.Date(),9, 10)
 month<-substr(Sys.Date(),6,7)
 year<-substr(Sys.Date(),1,4)
 
-path = paste(paste(paste(paste("results/simulations/prediction_dataframes/", slurm, "_", setting, "_estimated_abundance_SIMULATION_comparison_results_state_REs_only_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
+path = paste(paste(paste(paste("results/simulations/prediction_dataframes/", slurm, "_", setting, "_estimated_abundance_SIMULATION_comparison_results_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
 write.csv(est.dat, path)
 
 print(paste("Finished generating prediction dataframes for: ", n, " at ", Sys.time(),

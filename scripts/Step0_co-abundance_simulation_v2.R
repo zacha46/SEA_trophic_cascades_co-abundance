@@ -511,46 +511,6 @@ inits_list <- list(make_inits(sim$data),
 
 ##### Fit the model and inspect diagnostics #####
 
-# ### compute a data‑based proxy for the standardization of N.dom to include in the model
-# # grab max values per site
-# max_y_dom <- apply(sim$data$y.dom, 1, max)
-# # create an observable proxy of Z for dom species
-# zdom_proxy <- log(max_y_dom + 1)
-# # Extract Z dom from sim data
-# Zdom_j     <- sim$data$Zdom_area[ sim$data$area ]
-# # and grab the values that are present
-# present    <- as.integer(Zdom_j == 1)
-# 
-# ## Calculate the mean and standard deviations of the proxy
-# mu_present <- if (any(present==1)) mean(zdom_proxy[present==1]) else 0
-# sd_present <- if (any(present==1)) sd(zdom_proxy[present==1]) + 1e-6 else 1
-# 
-# ## and include back in the list
-# data_jags <- within(sim$data, {
-#   zdom_mu   <- mu_present
-#   zdom_sd   <- sd_present
-#   Zdom_j    <- Zdom_j
-#   I_present <- present
-# })
-# # clean up
-# rm(max_y_dom, zdom_proxy, Zdom_j, present, mu_present, sd_present)
-
-# # load DIC to track deviance in the model 
-# load.module("dic") 
-# 
-# # Create the model object and compile it 
-# jm <- jags.model(textConnection(jags_model),
-#                  data=sim$data,
-#                  inits=inits_list,
-#                  n.chains=2, n.adapt=500)
-# # Burn in 1000 iterations (i.e. update w/out saving )
-# update(jm, 1000)
-# # select which variables to monitor 
-# vars <- c("a0","a1","a2","a3","a4","a5","b0","b1","sd.p",
-#           "fit.dom","fit.rep.dom","fit.sub","fit.rep.sub","deviance")
-# # Draw the MCMC samples 
-# samp <- coda.samples(jm, variable.names = vars, n.iter=2000, thin=2)
-
 ### Can also run jagsUI style?
 # 1) Save the model string to a real file
 model_path <- tempfile(fileext = ".jags")

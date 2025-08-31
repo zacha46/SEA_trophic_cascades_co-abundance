@@ -1,5 +1,10 @@
 ### Co-abundance models - simulation study 
 
+# Import libraries
+library(ggplot2)
+library(tidyverse)
+library(jagsUI)
+
 # Scenarios
 
 # these are just ideas. We may need to structure main scenarios around common cam trap pitfalls such as double counting, overdispersion, autocorrelation, etc
@@ -25,123 +30,125 @@
 # Getting started with a framework
 
 # For later inspection, set random seed
-set.seed(2025)
+set.seed(2026)
 
-# Set # sites, i.e. camera
-n_sites <- 100
-
-# Set landscapes e.g. 'Singapore'
-n_landscapes <- 3
-
-# Allocate the cameras to our landscapes
-sites_per_landscape <- c(40, 40, 20)
-
-# bring in some controlling logic
-stopifnot(n_sites == sum(sites_per_landscape))
-
-# Create the landscape attribute based on # sites
-landscape <- rep(1:3, times = sites_per_landscape)
-
-# Introduce landscapes where species are extirpated (for IZIP modelling)
-range_land <- c(1, 1, 0)
-is_in_range <- range_land[landscape]
-
-# Number of species - always 2 for now.
-n_species <- 2
-
-# Number of visits or sampling occasions. Start with 10
-n_rep <- 10
-
-# Simulate presence and absence of species in each landscape
-psi <- c(0.7, 0.7)
-
-z <- matrix(0, nrow = n_sites, ncol = n_species)
-for (s in 1:n_species) {
-  z[, s] <- rbinom(n_sites, 1, psi[s]) * is_in_range
-}
-
-##### Generate covariates
-
-# not all landscapes are equal and some have higher base abundances due to unmeasured variation
-b0 <- rep(log(2), n_species)
-
-# Landscapes random effects
-b_landscapes <- rnorm(n_landscapes, mean = 0, sd=0.3) 
-
-# A forest integrity - type covariate; good for both species
-bFLLI <- rep(1.5, n_species)
-
-# Forest Landscape Integrity Index (0–10 scaled) - the actual covariate values
-flli <- as.numeric(scale(pmin(pmax(runif(n_sites, 2, 9) + rnorm(n_sites, 0, 0.7), 0), 10))) # site-level spread
-
-# A hunting/poaching type covariate, maybe worse for the predator (e.g. tiger)
-bHFP <- c(-1.5, -0.3)
-
-# Human Footprint Index (0–50 scaled, but right-skewed)
-hfp <- as.numeric(scale(100 * rbeta(n_sites, shape1 = 3, shape2 = 6)))
-
-# A elevation type covariate - mixed results. good for predator bad for prey (just an example)
-bELEV <- c(1, -1)
-
-# Elevation: mostly lowland, with random hilltops/uplands
-elev <- as.numeric(scale(ifelse(runif(n_sites) < 0.8,
-               runif(n_sites, 0, 300),                    # 80% lowland
-               ifelse(runif(n_sites) < 0.7,
-                      runif(n_sites, 300, 800),           # 14% mid-elev
-                      runif(n_sites, 800, 2000)))))         # 6% upland
-
-
-# Generate SIV. This should be a single, 'true' parameter that gets muddied by the rest. But we assume it is a natural 'law' of sorts.
-bSIV <- -2
-
-##### Generate Lambdas and Ns
-lambda <- matrix(NA, n_sites, n_species)
-N <- matrix(0, n_sites, n_species)
-
-# Dominant - always sp 1
-lambda[,1] <- exp(b0[1] + bFLLI[1] * flli + bHFP[1] * hfp + bELEV[1] * elev + b_landscapes[landscape])
-for(i in 1:n_sites){
-  N[i,1] <- rpois(1, lambda[i,1] * z[i,1])
-}
-
-# Subordinate - always sp 2
-abu.dom <- log1p(N[,1])
-lambda[,2] <- exp(b0[2] + bFLLI[2] * flli + bHFP[2] * hfp + bELEV[2] * elev + bSIV * abu.dom + b_landscapes[landscape])
-for(i in 1:n_sites){
-  N[i,2] <- rpois(1, lambda[i,2] * z[i,2])
-}
-
-##### Generate detections and repeated visits
-
-# Set detection proabilities - vanilla to start, add covariates later
-p <- c(0.6, 0.4)
-
-# Generate the fill detection matrix
-y <- array(NA, c(n_sites, n_rep, n_species))
-for (s in 1:n_species) {
-  for (i in 1:n_sites) {
-    for (j in 1:n_rep) {
-      y[i,j,s] <- rbinom(1, N[i,s], p[s])
+# Bundled all previous work into a function. We construct count histories here
+simulate_coabundance_matrix <- function(n_sites = 100, # Number of sampling units
+                                        n_landscapes = 3, # Number of landscapes
+                                        sites_per_landscape = c(40, 40, 20), # Allocation of SUs in landscapes
+                                        range_land = c(1, 1, 0), # Species ranges per landscape
+                                        n_species = 2, # Number of species - always 2 for co-abundance models
+                                        n_rep = 10, # Number of sampling occasions or 'visits'
+                                        psi = c(0.7, 0.7), # Base probability for a species to inhabit a site. If 1, defaults to the full range
+                                        b0 = c(log(2), log(2)), # State formula intercept
+                                        bFLLI = c(0.8, 0.8), # Forest Integrity Beta; good for both species
+                                        bHFP = c(-0.7, -0.3), # HFP Beta; worse for predators, but bad for both
+                                        bELEV = c(0.5, -0.2), # Elevation Beta; good for predators, a bit bad for prey usually
+                                        bSIV = 0.5, # Species Interaction Value. Negative means Dom suppresses sub (top down) and vice versa is bottom up.
+                                        p = c(0.6, 0.4),
+                                        sd_landscapes = 0.3,
+                                        unmeasured_SD = 0.1){
+  
+  # bring in some controlling logic
+  stopifnot(n_sites == sum(sites_per_landscape))
+  stopifnot(n_landscapes == length(sites_per_landscape))
+  # Create the landscape attribute based on # sites
+  landscape <- rep(1:n_landscapes, times = sites_per_landscape)
+  
+  # Introduce landscapes where species are extirpated (for IZIP modelling)
+ # range_land <- c(1, 1, 0) # needs to be species dimension!
+  is_in_range <- range_land[landscape]
+  
+  # Simulate presence and absence of species in each landscape
+  z <- matrix(0, nrow = n_sites, ncol = n_species)
+  for (s in 1:n_species) {
+    z[, s] <- rbinom(n_sites, 1, psi[s]) * is_in_range
+  }
+  
+  ##### Generate covariates
+  
+  # Landscapes random effects
+  b_landscapes <- rnorm(n_landscapes, mean = 0, sd=sd_landscapes) 
+  
+  # A forest integrity - type covariate; good for both species
+  # Forest Landscape Integrity Index (0–10 scaled) - the actual covariate values
+  flli <- as.numeric(scale(pmin(pmax(runif(n_sites, 2, 9) + rnorm(n_sites, 0, 0.7), 0), 10))) # site-level spread
+  
+  # A hunting/poaching type covariate, maybe worse for the predator (e.g. tiger)
+  # Human Footprint Index (0–50 scaled, but right-skewed)
+  hfp <- as.numeric(scale(100 * rbeta(n_sites, shape1 = 3, shape2 = 6)))
+  
+  # A elevation type covariate - mixed results. good for predator bad for prey (just an example)
+  # Elevation: mostly lowland, with random hilltops/uplands
+  elev <- as.numeric(scale(ifelse(runif(n_sites) < 0.8,
+                                  runif(n_sites, 0, 300),                    # 80% lowland
+                                  ifelse(runif(n_sites) < 0.7,
+                                         runif(n_sites, 300, 800),           # 14% mid-elev
+                                         runif(n_sites, 800, 2000)))))         # 6% upland
+  
+  ##### Generate Lambdas and Ns
+  lambda <- matrix(NA, n_sites, n_species)
+  N <- matrix(0, n_sites, n_species)
+  
+  # Dominant - always sp 1
+  lambda[,1] <- exp(b0[1] + bFLLI[1] * flli + bHFP[1] * hfp + bELEV[1] * elev + b_landscapes[landscape] + rnorm(n_sites, 0, unmeasured_SD)) 
+  for(i in 1:n_sites){
+    N[i,1] <- rpois(1, lambda[i,1] * z[i,1])
+  }
+  
+  # Subordinate - always sp 2
+  abu.dom <- log1p(N[,1])
+  lambda[,2] <- exp(b0[2] + bFLLI[2] * flli + bHFP[2] * hfp + bELEV[2] * elev + bSIV * abu.dom + b_landscapes[landscape] + rnorm(n_sites, 0, unmeasured_SD))
+  for(i in 1:n_sites){
+    N[i,2] <- rpois(1, lambda[i,2] * z[i,2])
+  }
+  
+  ##### Generate detections and repeated visits
+  # Generate the fill detection matrix
+  y <- array(NA, c(n_sites, n_rep, n_species))
+  for (s in 1:n_species) {
+    for (i in 1:n_sites) {
+      for (j in 1:n_rep) {
+        y[i,j,s] <- rbinom(1, N[i,s], p[s])
+      }
     }
   }
-}
+  
+  ##### Bundle up data for modelling
+  sim <- list()
+  
+  sim$data <- list(
+    n_sites = n_sites,
+    nreps = n_rep,
+    y.dom = y[,,1],
+    y.sub = y[,,2],
+    Z.dom = z[,1],
+    Z.sub = z[,2],
+    flii = flli,
+    hfp = hfp,
+    elev = elev,
+    narea = n_landscapes,
+    area = landscape
+  )
+  
+  sim$true <- list(
+    a0 = b0,
+    a1 = bFLLI,
+    a2 = bHFP,
+    a3 = bELEV,
+    a5 = bSIV,
+    sigma.a6 = sd_landscapes,
+    lambda.dom = lambda[,1],
+    lambda.sub = lambda[,2],
+    N.dom = N[,1],
+    N.sub = N[,2]
+  )
+  
+  return(sim)
+} # Species specific detection probabilties
 
-##### Bundle up data for modelling
-sim <- list()
-
-sim$data <- list(
-  n_sites = n_sites,
-  nreps = n_rep,
-  y.dom = y[,,1],
-  y.sub = y[,,2],
-  Z.dom = z[,1],
-  Z.sub = z[,2],
-  flii = flli,
-  hfp = hfp,
-  elev = elev,
-  narea = n_landscapes,
-  area = landscape
-)
+# Assign our count history matrix
+sim <- simulate_coabundance_matrix()
 
 ##### Fit the model!
 
@@ -363,10 +370,10 @@ inits_list <- list(make_inits(sim$data),
 
 # 2) Run jagsUI with the file path
 params <- c("a0","b0", "a5", "a1","a2","a3",#"a4","a5","b0","b1","sd.p", "N.dom", "N.sub",
-            "a6", "lambda.sub", "lambda.dom", "N.dom", "N.sub") # no 'deviance' unless DIC=TRUE
+            "sigma.a6", "lambda.sub", "lambda.dom", "N.dom", "N.sub") # no 'deviance' unless DIC=TRUE
 
 # MCMC settings
-ni = 4000; nb = 500; nt = 5; nc = 3
+ni = 6000; nb = 1000; nt = 10; nc = 3
 
 ## set parallell processing power
 options(mc.cores = nc)
@@ -385,49 +392,79 @@ mod <- jagsUI::jags(data   = sim$data,
 
 ##### Post-fitting analyses!
 
-extract_jags_param <- function(jags_out, param_name) {
-  # jags_out = object returned by jagsUI
-  # param_name = string, e.g., "a1[1]"
+##### Plotting key parameters
+extract_true_and_jags <- function(true_list, jags_out, param_names) {
   
-  summary_table <- jags_out$summary  # contains mean, sd, 2.5%, 50%, 97.5%, etc.
+  # --- Extract true values ---
+  true_df <- do.call(rbind, lapply(param_names, function(nm) {
+    if (!nm %in% names(true_list)) {
+      stop("Parameter ", nm, " not found in the list")
+    }
+    
+    vals <- true_list[[nm]]
+    
+    if (length(vals) == 2) {
+      names_out <- paste0(nm, c("_dom", "_sub"))
+    } else {
+      names_out <- nm
+    }
+    
+    data.frame(parameter = names_out, true = vals, stringsAsFactors = FALSE)
+  }))
   
-  if (!param_name %in% rownames(summary_table)) {
-    stop(paste("Parameter", param_name, "not found in JAGS output"))
-  }
+  rownames(true_df) <- NULL
   
-  param_summary <- summary_table[param_name, c("2.5%", "50%", "97.5%")]
-  names(param_summary) <- c("lower", "median", "upper")
+  # --- Extract JAGS posterior summaries ---
+  summary_table <- jags_out$summary
+  jags_df <- do.call(rbind, lapply(true_df$parameter, function(pn) {
+    if (grepl("_dom$", pn)) {
+      jags_name <- sub("_dom$", "[1]", pn)
+    } else if (grepl("_sub$", pn)) {
+      jags_name <- sub("_sub$", "[2]", pn)
+    } else {
+      jags_name <- pn
+    }
+    
+    if (!jags_name %in% rownames(summary_table)) {
+      stop("Parameter ", jags_name, " not found in JAGS output")
+    }
+    
+    vals <- summary_table[jags_name, c("2.5%", "50%", "97.5%")]
+    data.frame(
+      parameter = pn,
+      lower = vals["2.5%"],
+      median = vals["50%"],
+      upper = vals["97.5%"],
+      stringsAsFactors = FALSE
+    )
+  }))
   
-  return(param_summary)
+  rownames(jags_df) <- NULL
+  
+  # --- Merge true and estimated ---
+  merged_df <- merge(true_df, jags_df, by = "parameter")
+  return(merged_df)
 }
 
-extract_jags_param(mod,'a5')
+# Example usage
+params <- c("a0", "a1", "a2", "a3", "a5", "sigma.a6")
+df_compare <- extract_true_and_jags(sim$true, mod, params)
 
-plot_jags_param <- function(jags_out, param_names, true_values, main=NULL) {
-  library(ggplot2)
-  
-  # Extract summaries
-  summaries <- t(sapply(param_names, function(p) extract_jags_param(jags_out, p)))
-  
-  df <- data.frame(
-    param = factor(param_names, levels=param_names),
-    lower = summaries[,"lower"],
-    median = summaries[,"median"],
-    upper = summaries[,"upper"],
-    true = true_values
-  )
-  
-  ggplot(df, aes(x=param, y=median)) +
-    geom_point(color="blue", size=3) +
-    geom_errorbar(aes(ymin=lower, ymax=upper), width=0.2, color="blue") + ylim(3, -3)+
-    geom_point(aes(y=true), color="red", shape=18, size=3) +
-    ylab("Parameter value") +
-    xlab("Parameter") +
-    ggtitle(ifelse(is.null(main), "JAGS parameter estimates", main)) +
-    theme_minimal() +
-    theme(axis.text.x = element_text(angle=45, hjust=1))
-}
+# Preserve the order in the dataframe (including duplicates)
+df_compare$parameter <- fct_rev(fct_inorder(df_compare$parameter))
 
-plot_jags_param(mod, 'a5', true_values = -2)
+# Plot our estimates
+ggplot(df_compare, aes(x = parameter)) +
+  geom_linerange(aes(ymin = lower, ymax = upper), color = "skyblue", size = 1.5) +
+  geom_point(aes(y = median), color = "blue", size = 2) +
+  geom_point(aes(y = true), color = "red", shape = 18, size = 3) +
+  coord_flip() +
+  labs(
+    y = "Parameter value",
+    x = "",
+    title = "JAGS posterior intervals vs true values"
+  ) +
+  theme_minimal(base_size = 14) + theme_bw()
+
 
 

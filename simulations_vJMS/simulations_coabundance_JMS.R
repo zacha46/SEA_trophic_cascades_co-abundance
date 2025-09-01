@@ -485,14 +485,15 @@ simulate_coabundance_matrix <- function(n_sites = 160, # Number of sampling unit
                                         n_species = 2, # Number of species - always 2 for co-abundance models
                                         n_rep = 10, # Number of sampling occasions or 'visits'
                                         psi = c(1, 1), # Base probability for a species to inhabit a site. If 1, defaults to the full range
-                                        b0 = c(log(5), log(20)), # State formula intercept
+                                        b0 = c(log(5), log(10)), # State formula intercept
                                         bFLLI = c(0.4, 0.4), # Forest Integrity Beta; good for both species
                                         bHFP = c(-0.2, -0.1), # HFP Beta; worse for predators, but bad for both
                                         bELEV = c(0.3, -0.2), # Elevation Beta; good for predators, a bit bad for prey usually
-                                        bSIV = -1, # Species Interaction Value. Negative means Dom suppresses sub (top down) and vice versa is bottom up.
+                                        bSIV = -2, # Species Interaction Value. Negative means Dom suppresses sub (top down) and vice versa is bottom up.
                                         sd_landscapes = 0.2,
                                         sd_source = 0.2,
-                                        unmeasured_SD = 0.2){
+                                        unmeasured_SD = 0.2,
+                                        model_count_overdispersion = T){
   
   # bring in some controlling logic
   stopifnot(n_sites == sum(sites_per_landscape))
@@ -536,17 +537,26 @@ simulate_coabundance_matrix <- function(n_sites = 160, # Number of sampling unit
   lambda <- matrix(NA, n_sites, n_species)
   N <- matrix(0, n_sites, n_species)
   
+  
   # Dominant - always sp 1
   lambda[,1] <- exp(b0[1] + bFLLI[1] * flli + bHFP[1] * hfp + bELEV[1] * elev + b_landscapes[landscape] + rnorm(n_sites, 0, unmeasured_SD)) 
   for(i in 1:n_sites){
-    N[i,1] <- rpois(1, lambda[i,1] * z[i,1])
+    if(model_count_overdispersion){
+      N[i,1] <- rnbinom(1, mu = lambda[i,1] * z[i,1], size = 1.5)
+    }else{
+      N[i,1] <- rpois(1, lambda[i,1] * z[i,1])
+    }
   }
   
   # Subordinate - always sp 2
   abu.dom <- log1p(N[,1])
   lambda[,2] <- exp(b0[2] + bFLLI[2] * flli + bHFP[2] * hfp + bELEV[2] * elev + bSIV * abu.dom + b_landscapes[landscape] + rnorm(n_sites, 0, unmeasured_SD))
   for(i in 1:n_sites){
-    N[i,2] <- rpois(1, lambda[i,2] * z[i,2])
+    if(model_count_overdispersion){
+    N[i,2] <- rnbinom(1, mu = lambda[i,2] * z[i,2], size = 1.5)
+    }else{
+      N[i,2] <- rpois(1, lambda[i,2] * z[i,2])
+    }
   }
   
   ##### Generate detections and repeated visits
@@ -849,7 +859,7 @@ params <- c("a0","b0", "a5", "a1","a2","a3",#"a4","a5","b0","b1","sd.p", "N.dom"
             "lambda.dom", "N.dom", "N.sub") # no 'deviance' unless DIC=TRUE
 
 # MCMC settings
-ni = 5000; nb = 1000; nt = 10; nc = 3
+ni = 4000; nb = 1000; nt = 10; nc = 3
 
 ## set parallell processing power
 options(mc.cores = nc)
@@ -865,6 +875,136 @@ mod <- jagsUI::jags(data   = sim$data,
                     n.thin   = nt,
                     parallel = TRUE,  
                     DIC      = FALSE)
+
+
+
+#### playing with spatial autocorrelation
+gen_coords_by_landscape <- function(landscape, method = c("grid","random"),
+                                    xlim = c(0,1), ylim = c(0,1),
+                                    island_gap = 5){
+  method <- match.arg(method)
+  n_sites <- length(landscape)
+  n_land <- length(unique(landscape))
+  coords <- matrix(NA, nrow = n_sites, ncol = 2)
+  
+  for(L in unique(landscape)){
+    idx <- which(landscape == L)
+    nL <- length(idx)
+    
+    # coords within island L
+    if(method == "grid"){
+      nside <- ceiling(sqrt(nL))
+      xs <- seq(xlim[1], xlim[2], length.out = nside)
+      ys <- seq(ylim[1], ylim[2], length.out = nside)
+      grid <- expand.grid(x = xs, y = ys)
+      base_coords <- grid[seq_len(nL), ]
+    } else {
+      base_coords <- data.frame(
+        x = runif(nL, xlim[1], xlim[2]),
+        y = runif(nL, ylim[1], ylim[2])
+      )
+    }
+    
+    # shift island L by offset so it doesn’t overlap others
+    offset_x <- (L-1) * island_gap
+    coords[idx, ] <- cbind(base_coords$x + offset_x, base_coords$y)
+  }
+  
+  colnames(coords) <- c("x","y")
+  coords
+}
+
+coords <- gen_coords_by_landscape(sim$data$area,
+                        method = 'grid')
+
+# build dataframe for ggplot
+df <- data.frame(
+  x = coords[,1],
+  y = coords[,2],
+  landscape = factor(landscape)
+)
+
+# plot
+ggplot(df, aes(x = x, y = y)) +
+  geom_tile()+  # adjust binwidth for resolution
+  facet_wrap(~landscape) +             # one panel per landscape (optional)
+  coord_equal() +
+  scale_fill_viridis_c() +
+  theme_minimal() +
+  labs(title = "Hex-binned site coordinates by landscape",
+       x = "X", y = "Y", fill = "Count")
+
+make_spatial_field_by_land <- function(coords, landscape, phi = 0.2, sigma = 1, scale = TRUE){
+  # coords: data.frame/matrix with x,y for all sites
+  # landscape: integer/factor vector length n_sites
+  n <- nrow(coords)
+  sp_effect <- numeric(n)
+  for(L in unique(landscape)){
+    idx <- which(landscape == L)
+    if(length(idx) == 1){
+      sp_effect[idx] <- 0
+      next
+    }
+    sub_coords <- coords[idx, , drop=FALSE]
+    d <- as.matrix(dist(sub_coords))
+    Sigma <- (sigma^2) * exp(-d / phi)
+    Sigma <- Sigma + diag(1e-6, nrow(Sigma))
+    R <- chol(Sigma)
+    fld <- as.numeric(t(R) %*% rnorm(length(idx)))
+    if(scale) fld <- as.numeric(scale(fld))
+    sp_effect[idx] <- fld
+  }
+  sp_effect
+}
+# example usage:
+# coords <- gen_coords_by_landscape(landscape, "grid")
+# spf <- make_spatial_field_by_land(coords, landscape, phi=0.15, sigma=0.8)
+# lambda_log <- log(lambda[,1]) + uplift_strength * spf
+
+spf <- make_spatial_field_by_land(coords, sim$data$area,
+                                  phi = 0.5, sigma=1)
+
+
+# Build dataframe for plotting
+df_spf <- data.frame(
+  x = coords[,1],
+  y = coords[,2],
+  landscape = factor(landscape),
+  spf = spf
+)
+
+# Visualise as coloured points
+ggplot(df_spf[1:80,], aes(x = x, y = y, fill = spf)) +
+  geom_tile(size = 3) +
+  facet_wrap(~landscape) +
+  scale_fill_viridis_c(option = "plasma") +
+  coord_equal() +
+  theme_minimal() +
+  labs(title = "Spatial autocorrelation field per landscape",
+       colour = "Spatial effect")
+
+library(ggplot2)
+library(dplyr)
+
+# Subset a single landscape
+df1 <- df_spf %>% filter(landscape == 2)
+
+# Plot as hex grid coloured by spf
+ggplot(df1, aes(x = x, y = y, fill = spf)) +
+  geom_tile() +  # aggregate spf per hex
+  scale_fill_viridis_c(option = "plasma") +
+  coord_equal() +
+  theme_minimal() +
+  labs(title = "Spatial field as hex grid (Landscape 1)",
+       fill = "Spatial effect")
+
+
+# Now we just paste this in to our sim function!
+
+# test autocorr and then move to double counting
+
+
+
 
 
 

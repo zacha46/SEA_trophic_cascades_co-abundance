@@ -493,7 +493,7 @@ simulate_coabundance_matrix <- function(n_sites = 160, # Number of sampling unit
                                         sd_landscapes = 0.2,
                                         sd_source = 0.2,
                                         unmeasured_SD = 0.2,
-                                        model_count_overdispersion = T){
+                                        model_count_overdispersion = F){
   
   # bring in some controlling logic
   stopifnot(n_sites == sum(sites_per_landscape))
@@ -859,7 +859,7 @@ params <- c("a0","b0", "a5", "a1","a2","a3",#"a4","a5","b0","b1","sd.p", "N.dom"
             "lambda.dom", "N.dom", "N.sub") # no 'deviance' unless DIC=TRUE
 
 # MCMC settings
-ni = 4000; nb = 1000; nt = 10; nc = 3
+ni = 4000; nb = 500; nt = 10; nc = 3
 
 ## set parallell processing power
 options(mc.cores = nc)
@@ -934,7 +934,8 @@ ggplot(df, aes(x = x, y = y)) +
   labs(title = "Hex-binned site coordinates by landscape",
        x = "X", y = "Y", fill = "Count")
 
-make_spatial_field_by_land <- function(coords, landscape, phi = 0.2, sigma = 1, scale = TRUE){
+make_spatial_field_by_land <- function(coords, landscape, phi = 0.2, 
+                                       sigma = 1, scale = TRUE, threshold =.75){
   # coords: data.frame/matrix with x,y for all sites
   # landscape: integer/factor vector length n_sites
   n <- nrow(coords)
@@ -952,6 +953,10 @@ make_spatial_field_by_land <- function(coords, landscape, phi = 0.2, sigma = 1, 
     R <- chol(Sigma)
     fld <- as.numeric(t(R) %*% rnorm(length(idx)))
     if(scale) fld <- as.numeric(scale(fld))
+    
+    # thresholding to keep only strong positive values
+    fld[fld <= threshold] <- 0
+    fld <- fld / 1
     sp_effect[idx] <- fld
   }
   sp_effect
@@ -962,7 +967,7 @@ make_spatial_field_by_land <- function(coords, landscape, phi = 0.2, sigma = 1, 
 # lambda_log <- log(lambda[,1]) + uplift_strength * spf
 
 spf <- make_spatial_field_by_land(coords, sim$data$area,
-                                  phi = 0.5, sigma=1)
+                                  phi = 10, sigma=6.5)
 
 
 # Build dataframe for plotting
@@ -974,7 +979,7 @@ df_spf <- data.frame(
 )
 
 # Visualise as coloured points
-ggplot(df_spf[1:80,], aes(x = x, y = y, fill = spf)) +
+ggplot(df_spf, aes(x = x, y = y, fill = spf)) +
   geom_tile(size = 3) +
   facet_wrap(~landscape) +
   scale_fill_viridis_c(option = "plasma") +
@@ -987,7 +992,7 @@ library(ggplot2)
 library(dplyr)
 
 # Subset a single landscape
-df1 <- df_spf %>% filter(landscape == 2)
+df1 <- df_spf %>% filter(landscape == 1)
 
 # Plot as hex grid coloured by spf
 ggplot(df1, aes(x = x, y = y, fill = spf)) +
@@ -1003,8 +1008,344 @@ ggplot(df1, aes(x = x, y = y, fill = spf)) +
 
 # test autocorr and then move to double counting
 
+# Bundled all previous work into a function. We construct count histories here
+simulate_coabundance_matrix <- function(n_sites = 160, # Number of sampling units
+                                        n_landscapes = 5, # Number of landscapes
+                                        sites_per_landscape = c(40, 40, 20, 30, 30), # Allocation of SUs in landscapes
+                                        range_land = matrix(c(1, 1, 0, 1, 1,
+                                                              1, 1, 0, 1, 1), 
+                                                            byrow = T,
+                                                            nrow=2), # Species ranges per landscape
+                                        n_species = 2, # Number of species - always 2 for co-abundance models
+                                        n_rep = 10, # Number of sampling occasions or 'visits'
+                                        psi = c(.8, .5), # Base probability for a species to inhabit a site. If 1, defaults to the full range
+                                        b0 = c(log(2), log(20)), # State formula intercept
+                                        bFLLI = c(0.4, 0.2), # Forest Integrity Beta; good for both species
+                                        bHFP = c(-0.2, -0.1), # HFP Beta; worse for predators, but bad for both
+                                        bELEV = c(0.3, -0.2), # Elevation Beta; good for predators, a bit bad for prey usually
+                                        bSIV = -.5, # Species Interaction Value. Negative means Dom suppresses sub (top down) and vice versa is bottom up.
+                                        sd_landscapes = 0.2,
+                                        sd_source = 0.2,
+                                        unmeasured_SD = 0,
+                                        model_count_overdispersion = F,
+                                        model_spatial_autocorrelation = T,
+                                        model_double_counting = F, double_rate = 0.05){
+  
+  # bring in some controlling logic
+  stopifnot(n_sites == sum(sites_per_landscape))
+  stopifnot(n_landscapes == length(sites_per_landscape))
+  # Create the landscape attribute based on # sites
+  landscape <- rep(1:n_landscapes, times = sites_per_landscape)
+  
+  # Introduce landscapes where species are extirpated (for IZIP modelling)
+  is_in_range <- matrix(NA, nrow = n_sites, ncol = n_species)
+  is_in_range[,1] <- range_land[1,landscape]
+  is_in_range[,2] <- range_land[2,landscape]
+  
+  # Simulate presence and absence of species in each landscape
+  z <- matrix(0, nrow = n_sites, ncol = n_species)
+  for (s in 1:n_species) {
+    z[, s] <- rbinom(n_sites, 1, psi[s]) * is_in_range[,s]
+  }
+  
+  ##### Generate covariates
+  
+  # Landscapes random effects
+  b_landscapes <- rnorm(n_landscapes, mean = 0, sd=sd_landscapes) 
+  
+  # A forest integrity - type covariate; good for both species
+  # Forest Landscape Integrity Index (0–10 scaled) - the actual covariate values
+  flli <- as.numeric(scale(pmin(pmax(runif(n_sites, 2, 9) + rnorm(n_sites, 0, 0.7), 0), 10))) # site-level spread
+  
+  # A hunting/poaching type covariate, maybe worse for the predator (e.g. tiger)
+  # Human Footprint Index (0–50 scaled, but right-skewed)
+  hfp <- as.numeric(scale(100 * rbeta(n_sites, shape1 = 3, shape2 = 6)))
+  
+  # A elevation type covariate - mixed results. good for predator bad for prey (just an example)
+  # Elevation: mostly lowland, with random hilltops/uplands
+  elev <- as.numeric(scale(ifelse(runif(n_sites) < 0.8,
+                                  runif(n_sites, 0, 300),                    # 80% lowland
+                                  ifelse(runif(n_sites) < 0.7,
+                                         runif(n_sites, 300, 800),           # 14% mid-elev
+                                         runif(n_sites, 800, 2000)))))         # 6% upland
+  
+  ##### Generate Lambdas and Ns
+  lambda <- matrix(NA, n_sites, n_species)
+  N <- matrix(0, n_sites, n_species)
+  
+  # Set up a spatial covariate effect for spatial autocorrelation
+  # It will be 0 unless we trigger the setting
+  spatial_effect <- rep(0, n_sites)
+  
+  if(model_spatial_autocorrelation){
+    coords <- gen_coords_by_landscape(landscape,
+                                      method = 'grid')
+    
+    # Assign X and Y coordinates in an imaginary CRS, for use later in residual analysis
+    x = coords[,1]
+    y = coords[,2]
+    
+    # Create the spatial covariate through Cholesky sampling from a Gaussian Random Field 
+    # Going to leave these parameters set because they work well
+    spatial_effect <- make_spatial_field_by_land(coords, landscape,
+                                      phi = 10, sigma=6.5) 
+    
+    # come back here if you eant to add a size parameter controlling the mangitude of uplift from spatial effect
+    # also come back if we want to simulate something a different effect for the other species, currently they are same
+  }
+  
+  
+  # Dominant - always sp 1
+  lambda[,1] <- exp(b0[1] + bFLLI[1] * flli + bHFP[1] * hfp + bELEV[1] * elev + b_landscapes[landscape] + rnorm(n_sites, 0, unmeasured_SD) + spatial_effect) 
+  for(i in 1:n_sites){
+    if(model_count_overdispersion){
+      N[i,1] <- rnbinom(1, mu = lambda[i,1] * z[i,1], size = 2)
+    }else{
+      N[i,1] <- rpois(1, lambda[i,1] * z[i,1])
+    }
+  }
+  
+  # Subordinate - always sp 2
+  abu.dom <- log1p(N[,1])
+  lambda[,2] <- exp(b0[2] + bFLLI[2] * flli + bHFP[2] * hfp + bELEV[2] * elev + bSIV * abu.dom + b_landscapes[landscape] + rnorm(n_sites, 0, unmeasured_SD) + spatial_effect)
+  for(i in 1:n_sites){
+    if(model_count_overdispersion){
+      N[i,2] <- rnbinom(1, mu = lambda[i,2] * z[i,2], size = 2)
+    }else{
+      N[i,2] <- rpois(1, lambda[i,2] * z[i,2])
+    }
+  }
+  
+  ##### Generate detections and repeated visits
+  
+  a0 = c(0, 0)
+  a1 = c(1,1)
+  
+  # Add some sources for our sites
+  n_sources = 3
+  source_per_site = c(50, 45, 65)
+  stopifnot(sum(source_per_site) == n_sites)
+  source <- rep(1:n_sources, times = source_per_site)
+  a_source <- rnorm(n_sources, mean = 0, sd = sd_source)
+  
+  # Create the cams covariate
+  cams_vec <- as.numeric(scale(pmin(rpois(n_sites, 2) + 1, 9)))
+  cams <- matrix(rep(cams_vec, n_rep), nrow = n_sites, ncol = n_rep)
+  p.dom <- matrix(NA, nrow = n_sites, ncol = n_rep)
+  p.sub <- matrix(NA, nrow = n_sites, ncol = n_rep)
+  # for each site 
+  for(i in 1:n_sites){
+    # and for each rep 
+    for(j in 1:n_rep){
+      eps_dom <- rnorm(1, 0, 0.1)
+      eps_sub <- rnorm(1, 0, 0.1)
+      ## Detection linear predictor is same for both species, w/ different intercepts/coefficents
+      p.dom[i,j] = plogis(a0[1] + a1[1]*cams[i,j] + a_source[source[i]] + eps_dom)
+      p.sub[i,j] = plogis(a0[2] + a1[2]*cams[i,j] + a_source[source[i]] + eps_sub)
+    }
+  }
+  
+  # Generate the fill detection matrix
+  y.dom <- array(NA, c(n_sites, n_rep))
+  y.sub <- array(NA, c(n_sites, n_rep))
+  for (i in 1:n_sites) {
+    for (j in 1:n_rep) {
+      y.dom[i,j] <- rbinom(1, N[i,1], p.dom[i,j])
+      y.sub[i,j] <- rbinom(1, N[i,2], p.sub[i,j])
+    }
+  }
+  
+  # Model double counting
+  if(model_double_counting){
+    for(i in 1:n_sites){
+      for(j in 1:n_rep){
+        y.dom[i,j] <- y.dom[i,j] + rbinom(1, y.dom[i,j], double_rate)
+        y.sub[i,j] <- y.sub[i,j] + rbinom(1, y.sub[i,j], double_rate)
+      }
+    }
+  }
+  
+  
+  ##### Bundle up data for modelling
+  sim <- list()
+  
+  sim$data <- list(
+    n_sites = n_sites,
+    nreps = n_rep,
+    y.dom = y.dom,
+    y.sub = y.sub,
+    Z.dom = z[,1], #huh
+    Z.sub = z[,2], #huh
+    flii = flli,
+    hfp = hfp,
+    elev = elev,
+    cams = cams,
+    narea = n_landscapes,
+    area = landscape,
+    nsource = n_sources,
+    source = source
+    
+  )
+  
+  sim$true <- list(
+    a0 = b0,
+    a1 = bFLLI,
+    a2 = bHFP,
+    a3 = bELEV,
+    a5 = bSIV,
+    b0 = a0,
+    b2 = a1,
+    sigma.a6 = sd_landscapes,
+    sigma.b3 = sd_source,
+    lambda.dom = lambda[,1],
+    lambda.sub = lambda[,2],
+    N.dom = N[,1],
+    N.sub = N[,2],
+    p.dom = p.dom,
+    p.sub = p.sub,
+    x = x,
+    y = y,
+    spatial_effect = spatial_effect
+  )
+  
+  return(sim)
+} 
+
+sim <- simulate_coabundance_matrix()
+
+# tough recovering w/ spatial autocorrelation, explore why
+cols <- ifelse(sim$true$spatial_effect > 0, "red", adjustcolor("grey50", alpha.f = 0.5))
+plot(mod$mean$N.sub[100:130]~mod$mean$N.dom[100:130], col=cols, pch=19)
+
+sim$true$N.dom
+
+
+
+cols <- ifelse(apply(sim$data$y.dom, 1, max) > 0, adjustcolor("red", alpha.f = 0.5), adjustcolor("grey50", alpha.f = 0.5))
+
+plot(sim$true$N.sub~sim$true$N.dom, col = cols, pch=19,
+     ylab = "N - Subordinant",
+     xlab = "N - Dominant")
+
+legend("topright",
+       legend = c("Predator present", "Predator absent", paste0("SIV = ", sim$true$a5)),
+       col = c(adjustcolor("red", alpha.f = 0.5), 
+               adjustcolor("grey50", alpha.f = 0.5),
+               adjustcolor("grey50", alpha.f = 0)),
+       pch = 19, pt.cex = 1.2, bty = "n")
+
+plot(sim$true$N.sub~sim$data$flii, col = cols, pch=19,
+     ylab = "N - Subordinant",
+     xlab = "Forest Integrity")
+
+legend("topright",
+       legend = c("Predator present", "Predator absent", paste0("SIV = ", sim$true$a5)),
+       col = c(adjustcolor("red", alpha.f = 0.5), 
+               adjustcolor("grey50", alpha.f = 0.5),
+               adjustcolor("grey50", alpha.f = 0)),
+       pch = 19, pt.cex = 1.2, bty = "n")
+
+
+# Build dataframe for plotting
+df_spf <- data.frame(
+  x = sim$true$x,
+  y = sim$true$y,
+  landscape = factor(sim$data$area),
+  spf = sim$true$spatial_effect
+)
+
+# Visualise as coloured points
+ggplot(df_spf[41:80,], aes(x = x, y = y, fill = spf)) +
+  geom_tile(size = 3) +
+  facet_wrap(~landscape) +
+  scale_fill_viridis_c(option = "plasma") +
+  coord_equal() +
+  theme_minimal() +
+  labs(title = "Spatial autocorrelation field per landscape",
+       colour = "Spatial effect")
+
+params <- c("a0", "a1", "a2", "a3", "a5", "sigma.a6", "sigma.b3")
+df_compare <- extract_true_and_jags(sim$true, mod, params)
+
+# Preserve the order in the dataframe (including duplicates)
+df_compare$parameter <- fct_rev(fct_inorder(df_compare$parameter))
+
+# Plot our estimates
+ggplot(df_compare, aes(x = parameter)) +
+  geom_linerange(aes(ymin = lower, ymax = upper), color = "skyblue", size = 1.5) +
+  geom_point(aes(y = median), color = "blue", size = 2) +
+  geom_point(aes(y = true), color = "red", shape = 18, size = 3) +
+  coord_flip() +
+  labs(
+    y = "Parameter value",
+    x = "",
+    title = "JAGS posterior intervals vs true values"
+  ) +
+  theme_minimal(base_size = 14) + theme_bw()
 
 
 
 
 
+#--------------------------------------------------
+# Spillover function
+#--------------------------------------------------
+apply_spillover <- function(N = sim$data$y.dom, coords, spillover_rate= 3.5){
+  # N: matrix of site × species (true latent abundances)
+  # coords: site coordinates (n_sites × 2)
+  # movement_scale: distance decay parameter for kernel
+  # spillover_strength: proportion of neighbor abundance contributing
+  
+  n_sites   <- nrow(N)
+  n_species <- ncol(N)
+  
+  # distance matrix
+  dmat <- as.matrix(dist(coords))
+  
+  # nearest-neighbor kernel (only sites exactly 1 unit away)
+  K <- (dmat <= 1) * 1
+  diag(K) <- 0
+  # normalize rows (so contributions sum to 1)
+  row_sums <- rowSums(K)
+  row_sums[row_sums == 0] <- 1   # avoid division by zero
+  W <- K / row_sums
+  
+  # initialize effective abundance
+  N_eff <- N
+  spill.tracker <- rep(1,length = nrow(N))
+  for(s in 1:n_species){
+    for(site in 1:n_sites){
+      # neighbors' total abundance
+      neighbor_abund <- sum(N[,s] * W[site,])
+      
+      # Poisson draw for spillover individuals
+      n_spill <- rpois(1, lambda = spillover_rate * neighbor_abund)
+      if(n_spill > 0){spill.tracker[site] <- 2}
+      # add to focal site
+      N_eff[site,s] <- N_eff[site,s] + n_spill
+    }
+  }
+  
+  return(N_eff)
+}
+
+t1 <- apply(N_eff, 1, max)
+t2 <- apply(N, 1, max)
+
+plot(t1~t2, col = spill.tracker, pch=19)
+
+K <- matrix(0, n_sites, n_sites)
+
+for(i in 1:n_sites){
+  for(j in 1:n_sites){
+    if(i == j) next
+    dx <- abs(coords[i,1] - coords[j,1])
+    dy <- abs(coords[i,2] - coords[j,2])
+    if(diagonal){
+      if((dx <= 1) & (dy <= 1)) K[i,j] <- 1
+    } else {
+      if((dx == 1 & dy == 0) | (dx == 0 & dy == 1)) K[i,j] <- 1
+    }
+  }
+}
+diagonal = F

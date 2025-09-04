@@ -82,7 +82,7 @@ model{
     # Abundance of Subordinate Species w/ iZIP
     N.sub[j] ~ dpois(lambda.sub[j] * Z.sub[j])
 
-      log(lambda.sub[j]) <- a0[2] + a1[2]*flii[j] + a2[2]*hfp[j] + a3[2]*elev[j] + a5 * N.dom[j] + a6[area[j]] 
+      log(lambda.sub[j]) <- a0[2] + a1[2]*flii[j] + a2[2]*hfp[j] + a3[2]*elev[j] + a5 * log(1+N.dom[j]) + a6[area[j]] 
     
     # Abundance of Dominant Species w/ iZIP 
     N.dom[j] ~ dpois(lambda.dom[j] * Z.dom[j])

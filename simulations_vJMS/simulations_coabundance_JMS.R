@@ -859,7 +859,7 @@ params <- c("a0","b0", "a5", "a1","a2","a3",#"a4","a5","b0","b1","sd.p", "N.dom"
             "lambda.dom", "N.dom", "N.sub") # no 'deviance' unless DIC=TRUE
 
 # MCMC settings
-ni = 4000; nb = 500; nt = 10; nc = 3
+ni = 4000; nb = 1000; nt = 10; nc = 3
 
 ## set parallell processing power
 options(mc.cores = nc)
@@ -1012,24 +1012,25 @@ ggplot(df1, aes(x = x, y = y, fill = spf)) +
 simulate_coabundance_matrix <- function(n_sites = 160, # Number of sampling units
                                         n_landscapes = 5, # Number of landscapes
                                         sites_per_landscape = c(40, 40, 20, 30, 30), # Allocation of SUs in landscapes
-                                        range_land = matrix(c(1, 1, 0, 1, 1,
-                                                              1, 1, 0, 1, 1), 
+                                        range_land = matrix(c(1, 1, 0, 0, 1,
+                                                              1, 0, 0, 1, 1), 
                                                             byrow = T,
-                                                            nrow=2), # Species ranges per landscape
+                                                            nrow = 2), # Species ranges per landscape
                                         n_species = 2, # Number of species - always 2 for co-abundance models
                                         n_rep = 10, # Number of sampling occasions or 'visits'
-                                        psi = c(.8, .5), # Base probability for a species to inhabit a site. If 1, defaults to the full range
-                                        b0 = c(log(2), log(20)), # State formula intercept
-                                        bFLLI = c(0.4, 0.2), # Forest Integrity Beta; good for both species
+                                        psi = c(1, 1), # Base probability for a species to inhabit a site. If 1, defaults to the full range. This actually helps us model Z-Inflation... another case!
+                                        b0 = c(log(2), log(15)), # State formula intercept
+                                        bFLLI = c(0.4, 0.4), # Forest Integrity Beta; good for both species
                                         bHFP = c(-0.2, -0.1), # HFP Beta; worse for predators, but bad for both
                                         bELEV = c(0.3, -0.2), # Elevation Beta; good for predators, a bit bad for prey usually
-                                        bSIV = -.5, # Species Interaction Value. Negative means Dom suppresses sub (top down) and vice versa is bottom up.
-                                        sd_landscapes = 0.2,
-                                        sd_source = 0.2,
-                                        unmeasured_SD = 0,
+                                        bSIV = -1.5, # Species Interaction Value. Negative means Dom suppresses sub (top down) and vice versa is bottom up.
+                                        sd_landscapes = 0.2, # RE
+                                        sd_source = 0.2, # RE
+                                        unmeasured_SD = 0.2, # Unmeaasured covariate/variation
                                         model_count_overdispersion = F,
-                                        model_spatial_autocorrelation = T,
-                                        model_double_counting = F, double_rate = 0.05){
+                                        model_spatial_autocorrelation = F,
+                                        model_double_counting = F, double_rate = 0.05,
+                                        model_spatial_spillover = T, spillover_rate = 0.05){
   
   # bring in some controlling logic
   stopifnot(n_sites == sum(sites_per_landscape))
@@ -1155,6 +1156,44 @@ simulate_coabundance_matrix <- function(n_sites = 160, # Number of sampling unit
     }
   }
   
+  # For modelling spatial spillover. Important to put this before the double counting process,
+  # as spillover is a 'real' ecological process and double counting is just human detection error!
+  
+  if(model_spatial_spillover){
+
+        
+        # bringing in our handy spillover function here. Need to call twice and spillover will be different
+        # per species, which makes good sense ecologically.
+
+        # once over for Dominant species
+        temp.dom <- apply_spillover_y(y_mat = y.dom,
+                                      coords = coords,
+                                      landscape = landscape,
+                                      spillover_rate = spillover_rate,
+                                      cutoff = 0.17, # if we change the number of sites, this will need to change. Can use pythagoras to determine automatically - but keep simple for now
+                                      kernel = "binary", 
+                                      decay_scale = 0.1,
+                                      seed = NULL)
+        
+        # feed back into count history
+        y.dom <- temp.dom$y_eff
+        spill.matrix.dom <- temp.dom$n_spill
+        
+        # once more for subordinate
+        temp.sub <- apply_spillover_y(y_mat = y.sub,
+                                      coords = coords,
+                                      landscape = landscape,
+                                      spillover_rate = spillover_rate,
+                                      cutoff = 0.17, # if we change the number of sites, this will need to change. Can use pythagoras to determine automatically - but keep simple for now
+                                      kernel = "binary", 
+                                      decay_scale = 0.1,
+                                      seed = NULL)
+        # feed back into count history
+        y.sub <- temp.sub$y_eff
+        spill.matrix.sub <- temp.sub$n_spill
+
+  }
+  
   # Model double counting
   if(model_double_counting){
     for(i in 1:n_sites){
@@ -1174,8 +1213,10 @@ simulate_coabundance_matrix <- function(n_sites = 160, # Number of sampling unit
     nreps = n_rep,
     y.dom = y.dom,
     y.sub = y.sub,
-    Z.dom = z[,1], #huh
-    Z.sub = z[,2], #huh
+   # Z.dom = z[,1], 
+   # Z.sub = z[,2],
+    Z.dom = is_in_range[,1],
+    Z.sub = is_in_range[,2],
     flii = flli,
     hfp = hfp,
     elev = elev,
@@ -1205,7 +1246,9 @@ simulate_coabundance_matrix <- function(n_sites = 160, # Number of sampling unit
     p.sub = p.sub,
     x = x,
     y = y,
-    spatial_effect = spatial_effect
+    spatial_effect = spatial_effect,
+    spill.matrix.dom = spill.matrix.dom,
+    spill.matrix.sub = spill.matrix.sub
   )
   
   return(sim)
@@ -1245,6 +1288,11 @@ legend("topright",
                adjustcolor("grey50", alpha.f = 0)),
        pch = 19, pt.cex = 1.2, bty = "n")
 
+domy.mod <- apply(mod$mean$y.dom, 1, max)
+domy.true <- apply(sim$data$y.dom, 1, max)
+
+plot(mod$mean$lambda.dom~sim$data$Z.dom, col=cols, pch=19)
+plot(mod$mean$lambda.sub~sim$true$lambda.sub, col=cols, pch=19)
 
 # Build dataframe for plotting
 df_spf <- data.frame(
@@ -1290,7 +1338,7 @@ ggplot(df_compare, aes(x = parameter)) +
 #--------------------------------------------------
 # Spillover function
 #--------------------------------------------------
-apply_spillover <- function(N = sim$data$y.dom, coords, spillover_rate= 3.5){
+apply_spillover <- function(N = sim$true$N.dom, coords = coords, spillover_rate= 3.5){
   # N: matrix of site × species (true latent abundances)
   # coords: site coordinates (n_sites × 2)
   # movement_scale: distance decay parameter for kernel
@@ -1303,7 +1351,7 @@ apply_spillover <- function(N = sim$data$y.dom, coords, spillover_rate= 3.5){
   dmat <- as.matrix(dist(coords))
   
   # nearest-neighbor kernel (only sites exactly 1 unit away)
-  K <- (dmat <= 1) * 1
+  K <- (dmat <= .2) * 1
   diag(K) <- 0
   # normalize rows (so contributions sum to 1)
   row_sums <- rowSums(K)
@@ -1313,21 +1361,23 @@ apply_spillover <- function(N = sim$data$y.dom, coords, spillover_rate= 3.5){
   # initialize effective abundance
   N_eff <- N
   spill.tracker <- rep(1,length = nrow(N))
-  for(s in 1:n_species){
-    for(site in 1:n_sites){
-      # neighbors' total abundance
-      neighbor_abund <- sum(N[,s] * W[site,])
-      
-      # Poisson draw for spillover individuals
-      n_spill <- rpois(1, lambda = spillover_rate * neighbor_abund)
-      if(n_spill > 0){spill.tracker[site] <- 2}
-      # add to focal site
-      N_eff[site,s] <- N_eff[site,s] + n_spill
-    }
+  
+  for(site in 1:n_sites){
+    # neighbors' total abundance
+    neighbor_abund <- sum(N[,] * W[site,])
+    
+    # Poisson draw for spillover individuals
+    n_spill <- rpois(1, lambda = spillover_rate * neighbor_abund)
+    if(n_spill > 0){spill.tracker[site] <- 2}
+    # add to focal site
+    N_eff[site,] <- N_eff[site,s] + n_spill
   }
+  
   
   return(N_eff)
 }
+
+apply_spillover()
 
 t1 <- apply(N_eff, 1, max)
 t2 <- apply(N, 1, max)
@@ -1349,3 +1399,183 @@ for(i in 1:n_sites){
   }
 }
 diagonal = F
+
+
+apply_spillover_scalar <- function(N_vec = sim$true$N.sub, coords = data.frame(x = sim$true$x,
+                                                                               y = sim$true$y), 
+                                   landscape = sim$data$area,
+                                   spillover_rate = 3.05,
+                                   cutoff = 0.2,
+                                   kernel = c("binary", "exp"),
+                                   decay_scale = 0.1,
+                                   seed = 2025) {
+  # N_vec: numeric vector, length = n_sites
+  # coords: n_sites x 2 matrix/data.frame of x,y (as from gen_coords_by_landscape)
+  # landscape: integer/factor vector length n_sites
+  # cutoff: max distance for binary adjacency
+  # kernel: "binary" uses d <= cutoff; "exp" uses exp(-d/decay_scale) (still masked by landscape)
+  if(!is.null(seed)) set.seed(seed)
+  kernel <- match.arg(kernel)
+  n_sites <- length(N_vec)
+  
+  # distance matrix
+  dmat <- as.matrix(dist(coords))
+  
+  # same-landscape mask
+  same_land <- outer(landscape, landscape, "==")
+  
+  # raw kernel
+  if(kernel == "binary") {
+    K <- (dmat <= cutoff) * 1
+  } else { # exponential distance-decay
+    K <- exp(-dmat / decay_scale)
+  }
+  diag(K) <- 0L
+  
+  # force zero between landscapes
+  K[!same_land] <- 0
+  
+  # normalize rows -> W
+  row_sums <- rowSums(K)
+  no_nb <- which(row_sums == 0)
+  row_sums[row_sums == 0] <- 1    # avoid div-by-zero
+  W <- K / row_sums
+  if(length(no_nb) > 0) W[no_nb, ] <- 0   # explicit zero rows for isolated cells
+  
+  # neighbor abundance (vectorized)
+  neighbor_abund <- as.numeric(W %*% N_vec)   # n_sites x 1
+  
+  # spillover draws (vectorized)
+  lambda_vec <- spillover_rate * neighbor_abund
+  n_spill_vec <- rpois(n_sites, lambda = lambda_vec)
+  
+  # effective abundance (non-iterative: based on original N_vec)
+  N_eff <- N_vec + n_spill_vec
+  
+  tracker <- ifelse(n_spill_vec > 0, 2L, 1L)  # 1 = no spill, 2 = got spill
+  
+  list(N_eff = N_eff,
+       n_spill = n_spill_vec,
+       neighbor_abund = neighbor_abund,
+       W = W,
+       K = K,
+       tracker = tracker)
+}
+
+ret <- apply_spillover_scalar(kernel = "binary")
+
+plot(ret$N_eff ~ sim$true$N.sub, pch=19, col = as.factor(ret$tracker))
+
+# with Y's
+
+apply_spillover_y <- function(y_mat=sim$data$y.dom,
+                              coords= data.frame(x = sim$true$x,
+                                                 y = sim$true$y),
+                              landscape = sim$data$area,
+                              spillover_rate = 0.05,
+                              cutoff = 0.17,
+                              kernel = c("binary", "exp"),
+                              decay_scale = 0.1,
+                              seed = NULL) {
+  # y_mat: n_sites x n_visits integer matrix
+  # coords: n_sites x 2 numeric coords
+  # landscape: length n_sites, grouping factor
+  # cutoff: distance cutoff for binary kernel
+  # kernel: "binary" or "exp"
+  
+  if(!is.null(seed)) set.seed(seed)
+  kernel <- match.arg(kernel)
+  
+  n_sites  <- nrow(y_mat)
+  n_visits <- ncol(y_mat)
+  
+  coords <- as.matrix(coords)
+  storage.mode(coords) <- "numeric"
+  
+  # distance matrix
+  dmat <- as.matrix(dist(coords))
+  
+  # same-landscape mask
+  same_land <- outer(landscape, landscape, "==")
+  
+  # kernel
+  if(kernel == "binary") {
+    K <- (dmat <= cutoff) * 1
+  } else {
+    K <- exp(-dmat / decay_scale)
+  }
+  diag(K) <- 0L
+  K[!same_land] <- 0
+  
+  # normalize rows
+  row_sums <- rowSums(K)
+  row_sums[row_sums == 0] <- 1
+  W <- K / row_sums
+  W[row_sums == 0, ] <- 0
+  
+  # initialize
+  y_eff      <- y_mat
+  n_spill    <- matrix(0L, n_sites, n_visits)
+  neigh_abund <- matrix(0, n_sites, n_visits)
+  
+  # loop over visits (spill calculated independently per replicate)
+  for(v in 1:n_visits) {
+    neighbor_counts <- as.numeric(W %*% y_mat[, v])
+    neigh_abund[, v] <- neighbor_counts
+    
+    lambda_vec <- spillover_rate * neighbor_counts
+    spill_draw <- rpois(n_sites, lambda_vec)
+    
+    n_spill[, v] <- spill_draw
+    y_eff[, v]   <- y_eff[, v] + spill_draw
+  }
+  
+  list(y_eff = y_eff,
+       n_spill = n_spill,
+       neighbor_counts = neigh_abund,
+       W = W,
+       K = K)
+}
+
+ret <- apply_spillover_y(kernel = "binary")
+
+
+
+
+plot(ret$y_eff ~ sim$data$y.dom,
+     pch = 19, col = cols,type='n',
+     xlab = "Original counts (site 1)",
+     ylab = "With spillover (site 1)", xlim = c(0,max(sim$data$y.dom)),
+     ylim = c(0,max(ret$y_eff)))
+for(i in 35){
+ cols <- ifelse(ret$n_spill[i, ] > 0, adjustcolor("red", alpha.f = 0.5), adjustcolor("grey50", alpha.f = 0.5))
+  
+ points(ret$y_eff[i,] ~ sim$data$y.dom[i,],
+        pch = 19, col = cols)
+}
+abline(0,1,col="grey", lty =2)
+
+legend("topleft",
+       legend = c("Spillage", "No Spillage"),
+       col = c(adjustcolor("red", alpha.f = 0.5), 
+               adjustcolor("grey50", alpha.f = 0.5)),
+       pch = 19, pt.cex = 1.2, bty = "n")
+
+df <- data.frame(
+  site = seq_len(nrow(coords)),  # row index
+  x = coords[,1],
+  y = coords[,2],
+  N = sim$true$N.dom  # site-level abundance
+)
+
+ggplot(df[1:40,], aes(x = x, y = y, fill = N)) +
+  geom_tile(width = 0.2, height = 0.2) +   # small squares for heatmap
+  geom_text(aes(label = site), color = "white", size = 3)+
+  scale_fill_viridis_c(option = "plasma") +
+  coord_equal() +
+  theme_minimal() +
+  labs(fill = "Abundance", title = "Dominant species abundance heatmap")
+
+
+
+

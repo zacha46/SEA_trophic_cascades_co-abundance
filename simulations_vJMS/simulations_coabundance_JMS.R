@@ -583,7 +583,7 @@ extract_true_and_jags <- function(true_list, jags_out, param_names) {
 set.seed(2026)
 
 # Zach's model
-Co_abundance_OD <- "simulations_vJMS/Co-abundance OD.txt"
+Co_abundance_OD <- "simulations_vJMS/Co_abundance_simulation_model.txt"
 writeLines("
 model{
 
@@ -796,7 +796,7 @@ ggplot(df_compare, aes(x = parameter)) +
 
 
 
-
+sim <- sim_data_list[[21]]
 
 
 for(i in 1:10){
@@ -1516,5 +1516,206 @@ apply_spillover_y <- function(y_mat,
        W = W,
        K = K)
 }
+
+
+
+
+### test
+collected[[1,"indices"]][[1]]
+for(slurm in collected[[1,"indices"]][[1]]){
+  df_compare <- readRDS(paste0("/Users/sassen/Desktop/01_HPC_COA_Simulations/results/simulation_output_",slurm,".rds"))$parameters
+  print(slurm)
+  
+  # Preserve the order in the dataframe (including duplicates)
+  df_compare$parameter <- fct_rev(fct_inorder(df_compare$parameter))
+  
+  # Plot our estimates
+  p<- ggplot(df_compare, aes(x = parameter)) +
+    geom_linerange(aes(ymin = lower, ymax = upper), color = "skyblue", size = 1.5) +
+    geom_point(aes(y = median), color = "blue", size = 2) +
+    geom_point(aes(y = true), color = "red", shape = 18, size = 3) +
+    coord_flip() +
+    labs(
+      y = "Parameter value",
+      x = "",
+      title = "JAGS posterior intervals vs true values"
+    ) +
+    theme_minimal(base_size = 14) + theme_bw()
+  print(p)
+  Sys.sleep(2)
+  
+}
+
+library(dplyr)
+
+collected <- simulation_parameter_grid%>%
+  group_by(scenario_name, SIV) %>%
+  summarise(indices = list(index), .groups = "drop")
+
+collected[1,"indices"]
+
+
+
+# pick first 5 groups
+i <- 1:5  
+
+
+combinations <- unique(collected[, c("scenario_name", 'SIV')])
+
+
+
+
+plot_group <- function(indices, title_suffix = "") {
+  # read and bind all replicates for the group
+  df_all <- map_dfr(indices, function(slurm) {
+    df <- readRDS(paste0("/Users/sassen/Desktop/01_HPC_COA_Simulations/results/simulation_output_", slurm, ".rds"))$parameters
+    df$replicate_id <- slurm
+    df
+  })
+  
+  # preserve parameter order
+  df_all$parameter <- fct_rev(fct_inorder(df_all$parameter))
+  
+  # plot all replicates on same figure
+  ggplot(df_all, aes(x = parameter, group = replicate_id)) +
+    geom_linerange(aes(ymin = lower, ymax = upper), color = "skyblue", alpha = 0.4, size=1.5) +
+    geom_point(aes(y = median), color = "blue", size = 1.5, alpha = 0.7) +
+    geom_point(aes(y = true), color = "red", shape = 18, size = 3) +
+    coord_flip() +
+    labs(
+      y = "Parameter value",
+      x = "",
+      title = paste("Posterior intervals vs true values", title_suffix)
+    ) +
+    theme_minimal(base_size = 14) + theme_bw()
+}
+
+# Example: plot for group i = 1
+p1 <- plot_group(collected[[1,"indices"]][[1]], title_suffix = "Group 1")
+print(p1)
+
+
+#-------------
+library(dplyr)
+library(ggplot2)
+library(purrr)
+
+# To show Zach
+unique(simulation_parameter_grid[, c('scenario','scenario_name')])
+
+# Gather input params
+collected <- simulation_parameter_grid%>%
+  group_by(scenario_name, SIV) %>%
+  summarise(indices = list(index), .groups = "drop")
+
+# Plotting utility
+plot_scenario <- function(scenario, collected) {
+  # filter collected to only the scenario
+  scenario_df <- collected %>% 
+    filter(scenario_name == scenario)
+  
+  df_all <- map2_dfr(
+    scenario_df$indices, scenario_df$SIV,
+    function(indices, siv) {
+      map_dfr(indices, function(slurm) {
+        print(slurm)
+        df <- readRDS(
+          paste0("/Users/sassen/Desktop/01_HPC_COA_Simulations/results/simulation_output_", slurm, ".rds")
+        )$parameters
+      })
+    }
+  )
+  
+  filtered.siv <- df_all |>
+    filter(parameter == 'a5')
+  
+  # plot all SIVs
+  ggplot(filtered.siv, aes(x = true, y = median)) +
+    geom_linerange(aes(ymin = lower, ymax = upper), color = "skyblue", alpha = 0.4, size=1.5) +
+    geom_point(color = "blue", size = 2, alpha = 0.6) +
+    geom_point(aes(y = true), color = "red", shape = 18, size = 3) +
+    geom_line(aes(y=0)) +
+    annotate("text", 
+             x = -1, 
+             y = 1.3, 
+             hjust = -0, vjust = 0.1,
+             label = paste("Replicates: 10"),
+             size = 4) +
+    labs(
+      x = "True SIV",
+      y = "Posterior Estimate",
+      title = paste0("Posterior SIV | ",unique(scenario_df$scenario_name) )
+    ) +
+    theme_minimal(base_size = 14) + theme_classic()
+}
+
+#### 1 Base
+p_base <- plot_scenario("Base", collected)
+print(p_base)
+
+#### 2a Unmeasured Variation - Low
+p_2a <- plot_scenario("Unmeasured Variation - Low", collected)
+print(p_2a)
+
+#### 2b Unmeasured Variation - High
+p_2b <- plot_scenario("Unmeasured Variation - High", collected)
+print(p_2b)
+
+#### 3a State Process Overdispersion - Low
+p_3a <- plot_scenario("State Process Overdispersion - Low", collected)
+print(p_3a)
+
+#### 3b State Process Overdispersion - High
+p_3b <- plot_scenario("State Process Overdispersion - High", collected)
+print(p_3b)
+
+#### 4a  Unmeasured Spatial Covariate - Low
+p_4a <- plot_scenario("Unmeasured Spatial Covariate - Low", collected)
+print(p_4a)
+
+#### 4b  Unmeasured Spatial Covariate - High
+p_4b <- plot_scenario("Unmeasured Spatial Covariate - High", collected)
+print(p_4b)
+
+#### 5a  Double Counting - Low
+p_5a <- plot_scenario("Double Counting - Low", collected)
+print(p_5a)
+
+#### 5b  Double Counting - High
+p_5b <- plot_scenario("Double Counting - High", collected)
+print(p_5b)
+
+#### 6a  Spatial Spillover - Low
+p_6a <- plot_scenario("Spatial Spillover - Low", collected)
+print(p_6a)
+
+#### 6b  Spatial Spillover - Low
+p_6b <- plot_scenario("Spatial Spillover - High", collected)
+print(p_6b)
+
+
+
+#### SHowing how the simulation affects things
+
+# spillover 21 low, 22 high
+sim <- sim_data_list[[22]]
+simulation_parameter_grid[22,]
+
+for(i in 1:10){
+  lgcol<-ifelse(sim$true$spillout.matrix.sub[,i] | sim$true$spillin.matrix.sub[,i]  ,adjustcolor("red", alpha.f = 0.5), adjustcolor("grey50", alpha.f = 0.5))
+  plot(sim$true$N.sub+1 ~ sim$true$N.sub, col = lgcol, pch=19, type='n',
+       xlab = 'True N before Spillover',
+       ylab = "True N after Spillover")
+  
+  inpoints <- sim$true$spillin.matrix.sub[,i]
+  outpoints <- sim$true$spillout.matrix.sub[,i]
+  
+  points((inpoints + sim$true$N.sub - outpoints)  ~sim$true$N.sub, col = lgcol, pch=19)
+  Sys.sleep(1)
+}
+
+
+
+
 
 

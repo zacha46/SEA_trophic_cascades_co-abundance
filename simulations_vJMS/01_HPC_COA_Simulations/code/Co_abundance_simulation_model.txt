@@ -147,10 +147,13 @@ model{
   #Chi-Square Test Statistic- Subordinate
   fit.sub = sum(E.sub[,])
   fit.rep.sub = sum(E.rep.sub[,])
+  p.val.sub <- step(fit.rep.sub - fit.sub)
+  c.hat.sub <- fit.rep.sub / fit.sub
 
   #Chi-Square Test Statistic- Dominant
   fit.dom = sum(E.dom[,])
   fit.rep.dom = sum(E.rep.dom[,])
-
+  p.val.dom <- step(fit.rep.dom - fit.dom)
+  c.hat.dom <- fit.rep.dom / fit.dom
 } 
 

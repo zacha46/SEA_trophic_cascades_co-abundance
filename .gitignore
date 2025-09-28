@@ -54,3 +54,6 @@ scripts/SLURM_code/OLD/
 *.xlsx
 *.rdata
 *.nc
+
+# Ignore OLD results
+results_final/OLD/

@@ -9,26 +9,26 @@ library(tidyverse)
 library(vegan)
 
 #### import the data --> use relative file names so updates will work easily! 
-species = readRDS(paste("data/ZDA_UMF/", 
-                        list.files("data/ZDA_UMF/")[grepl("species_vector", list.files("data/ZDA_UMF/"))],
+species = readRDS(paste("data/UMF/", 
+                        list.files("data/UMF/")[grepl("species_vector", list.files("data/UMF/"))],
                         sep = ""))
-group_sp = readRDS(paste("data/ZDA_UMF/", 
-                        list.files("data/ZDA_UMF/")[grepl("group_living", list.files("data/ZDA_UMF/"))],
-                        sep = ""))
-caps = read.csv(paste("data/ZDA_UMF/", 
-                      list.files("data/ZDA_UMF/")[grepl("clean_captures", list.files("data/ZDA_UMF/"))],
+# group_sp = readRDS(paste("data/UMF/", 
+#                         list.files("data/UMF/")[grepl("group_living", list.files("data/UMF/"))],
+#                         sep = ""))
+caps = read.csv(paste("data/UMF/", 
+                      list.files("data/UMF/")[grepl("clean_captures", list.files("data/UMF/"))],
                       sep = ""))
-meta = read.csv(paste("data/ZDA_UMF/", 
-                      list.files("data/ZDA_UMF/")[grepl("clean_metadata", list.files("data/ZDA_UMF/"))],
+meta = read.csv(paste("data/UMF/", 
+                      list.files("data/UMF/")[grepl("clean_metadata", list.files("data/UMF/"))],
                       sep = ""))
 
 # ### Local testing
 # species = readRDS(paste("data_GitHub/",
 #                         list.files("data_GitHub/")[grepl("species_vector", list.files("data_GitHub/"))],
 #                         sep = ""))
-# group_sp = readRDS(paste("data_GitHub/",
-#                          list.files("data_GitHub/")[grepl("group_living", list.files("data_GitHub/"))],
-#                          sep = ""))
+# # group_sp = readRDS(paste("data_GitHub/",
+# #                          list.files("data_GitHub/")[grepl("group_living", list.files("data_GitHub/"))],
+# #                          sep = ""))
 # caps = read.csv(paste("data_GitHub/",
 #                      list.files("data_GitHub/")[grepl("clean_captures", list.files("data_GitHub/"))],
 #                      sep = ""))
@@ -56,7 +56,7 @@ print(paste("this SLURM_ARRAY_INDEX is: ", slurm,
             "and it's running species: ", sp, sep = " "))
 
 ## Add a conditional statement if there are already relevant results in the results folder
-if(any(grepl(sp, list.files("results/ZDA_UMF")))) {
+if(any(grepl(sp, list.files("results/UMF")))) {
   
   ## If true
   ## Print a message stating so
@@ -114,6 +114,29 @@ for(j in 1:length(unique(c$cell_id))){
   mat[j,indx]=0 # at row J, across all sampling occasions, put a zero there
 }
 
+# ## Before filling in the matrix, determine if we need to limit group sizes
+# if(sp %in% group_sp) {
+
+# Grab all relevant counts for the current species
+sp_counts <- c[["total_indiv_records"]][c$Species == sp]
+sp_counts <- sp_counts[!is.na(sp_counts) & sp_counts > 0] # make sure no NA or zeros to skew calculations
+
+# Calculate mean and max counts
+mean_count <- mean(sp_counts)
+max_count <- max(sp_counts)
+
+# Determine species-specific cap limit based on rules (adjust as needed)
+cap_val <- if (mean_count > 10 || max_count > 20) {
+  7
+} else if (mean_count > 5 || max_count > 10) {
+  5
+} else if (mean_count > 3 || max_count > 5) {
+  3
+} else {
+  Inf
+} # end cap_val condition
+# } # end group sp condition
+
 ## Fill in the matrix based on sampling unit and sampling occasion
 for(j in 1:length(unique(c$cell_id))){ #repeat for each sampling unit
   
@@ -122,28 +145,33 @@ for(j in 1:length(unique(c$cell_id))){ #repeat for each sampling unit
   a = c[c$cell_id == su & c$Species == sp,] #subset captures data for specific sampling unit and for specific species
   
   # Fill in matrix w/ count data 
-  if(nrow(a)>0 ){ #Bypass cameras without a detection and leave them as zero
+  if(nrow(a)>0){ #Bypass cameras without a detection and leave them as zero
     
     for(s in 1:length(a$Date)){ #repeat for each Date detected at the sampling unit
       
       d = a$Date[s] #specify the sampling date
       
+      # Grab the relevant count
+      fill_count = round(max(unique(a[["total_indiv_records"]][a$Date == d]))) 
+      # max to be safe if there is more than one value, tho unlikely.
+      # round to be sure its a whole number, in case its not (pigs in sumatra!!)
+      
       indx = a$seq[a$cell_id == su & a$Date == d] #specify the matching date index
       
       ### Add a conditional for species that appear in large groups 
-      if(sp %in% group_sp){
+      # if(sp %in% group_sp){
         
-        # Convert all individuals to groups
-        a$total_indiv_records[a$Species %in% group_sp
-                              & a$total_indiv_records > 0]=  1
+        # # Convert all individuals to groups
+        # a$total_indiv_records[a$Species %in% group_sp
+        #                       & a$total_indiv_records > 0]=  1
         
-        mat[su,indx]= unique(a$total_indiv_records[a$Date == d])
+        mat[su,indx]= fill_count
         
-      }else{ #for all other Species, use counts
-        
-        mat[su,indx]= max(unique(a$total_indiv_records[a$Date == d])) ## add max to bypass a tragulus typo. 
-        
-      } # end group conditional
+      # }else{ #for all other Species, use counts
+      #   
+      #   mat[su,indx]= max(unique(a$total_indiv_records[a$Date == d])) ## add max to bypass a tragulus typo. 
+      #   
+      # } # end group conditional
     } # end per date loop 
   } # end nrow conditional statement
 }# end matrix filling loop 
@@ -333,5 +361,5 @@ date = paste(year,month,day, sep = "")
 
 # Save it! 
 path = paste(slurm, "_", sp, "_UMF_list_", date, ".RDS", sep = "")
-saveRDS(umf, paste("results/ZDA_UMF/", path, sep = ""))
+saveRDS(umf, paste("results/UMF/", path, sep = ""))
 

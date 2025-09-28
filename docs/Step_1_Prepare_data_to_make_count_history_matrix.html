@@ -352,7 +352,7 @@ display: none;
 <h1 class="title toc-ignore">Step 1 Prepare data to make count history
 matrix</h1>
 <h4 class="author">Zachary Amir</h4>
-<h4 class="date">2025-03-06 11:35:31</h4>
+<h4 class="date">2025-06-03 09:59:31</h4>
 
 </div>
 
@@ -485,10 +485,30 @@ increase model speed and efficiency.</p>
 captures. This is an acceptable amount.</p>
 <p>I have also determined which species need to be analyzed as groups
 instead of inviduals because of very large group sizes cause N-mixture
-models to crash and create unrealistic estimates. <strong>This includes
-9 species: Bos_gaurus, Cuon_alpinus, Macaca_arctoides,
-Macaca_fascicularis, Macaca_nemestrina, Muntiacus_genus, Rusa_unicolor,
-Sus_barbatus, Sus_scrofa</strong>.</p>
+models to crash and create unrealistic estimates.</p>
+<ul>
+<li>Species with <strong>mean counts greater than 10 or maximum counts
+greater than 20</strong> were limited to 7 and this includes:
+Tragulus_genus, Sus_scrofa, Sus_barbatus, Rusa_unicolor,
+Macaca_nemestrina, Macaca_fascicularis, Macaca_arctoides,
+Lophura_diardi, Helarctos_malayanus, Cuon_alpinus, Bos_gaurus.</li>
+<li>Species with <strong>mean counts greater than 5 or maximum counts
+greater than 10</strong> were limited to 5 and this includes:
+Varanus_salvator, Ursus_thibetanus, Muntiacus_genus, Lophura_ignita,
+Hystrix_crassispinis, Hystrix_brachyura, Argusianus_argus.</li>
+<li>Species with <strong>mean counts greater than 3 or maximum counts
+greater than 5</strong> were limited to 3 and this includes:
+Viverra_zibetha, Viverra_tangalunga, Trichys_fasciculata,
+Tapirus_indicus, Prionailurus_bengalensis, Paradoxurus_hermaphroditus,
+Panthera_tigris, Lophura_nycthemera, Herpestes_urva,
+Hemigalus_derbyanus.</li>
+<li>All other species did not have their counts limited, and this
+includes: Viverricula_indica, Viverra_megaspila, Pardofelis_marmorata,
+Panthera_pardus, Paguma_larvata, Neofelis_genus, Martes_flavigula,
+Manis_javanica, Lophura_bulweri, Herpestes_brachyurus, Diplogale_hosei,
+Catopuma_temminckii, Capricornis_genus, Atherurus_macrourus,
+Arctonyx_collaris, Arctictis_binturong.</li>
+</ul>
 <p>The key spatial variables that will get included in each species’
 N-mixture model to account for habitat filtering are:
 <strong>Avg_FLLI_5km, Avg_altitude_5km,

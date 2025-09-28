@@ -28,8 +28,8 @@ As a reminder, the co-abundance models were implemented on this R script: script
 ## this is the data that was used to create data bundles. Will be useful for comparisons later
 
 ## set WD to dropbox where the data lives
-# wd = paste("/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step1_output/")
-wd = paste(getwd(), "/data_GitHub/", sep = "") # update for github
+wd = paste("/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step1_output/")
+# wd = paste(getwd(), "/data_GitHub/", sep = "") # update for github
 
 ## Import clean cam trap data here for referencing
 og_resamp_captures = read.csv(paste(wd,
@@ -44,18 +44,23 @@ og_resamp_meta = read.csv(paste(wd,
 
 ## first, I will import the bundled data to generate a vector of relevant species pairs 
 # but since I split the bundled data into multiple files, I must import them all. 
-# files = list.files(paste(wd,"data/step2_output_CoA_bundles/", sep = ""))
-files = list.files(paste(getwd(),"/data_CoA_bundles/", sep = ""))
+wd = paste("/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/")
+files = list.files(paste(wd,"step2_output_CoA_bundles/", sep = ""))
+# files = list.files(paste(getwd(),"/data_CoA_bundles/", sep = "")) # update for github
 files = files[grepl("Bundled", files)]
 files = files[!grepl("MISSING", files)] # avoid reading in repeated data 
+# currently only interested in preferred
+# files = files[grepl("preferred", files)]
+# and must have GB
+files = files[grepl("GB", files)]
 
 # import them all
 res = list()
 for(i in 1:length(files)){
   
   # import
-  # b = readRDS(paste(wd, "data/step2_output_CoA_bundles/", files[i], sep = ""))
-  b = readRDS(paste(getwd(),"/data_CoA_bundles/", files[i], sep = ""))
+  b = readRDS(paste(wd, "step2_output_CoA_bundles/", files[i], sep = ""))
+  # b = readRDS(paste(getwd(),"/data_CoA_bundles/", files[i], sep = "")) # update for GitHub
   
   # and save
   res[[i]] = b
@@ -84,14 +89,13 @@ rm(res)
 ## save vector of relevant species pairs
 all_combos = names(bdata)
 
-
 ```
 
 ```{r import coefficent dataframes}
 
 ## set WD to dropbox where the data lives
-# wd = paste("/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/")
-wd = paste(getwd(), "/results_final/", sep = "") # update for github
+wd = paste("/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/")
+# wd = paste(getwd(), "/results_final/", sep = "") # update for github
 
 # First, list all result files
 files = list.files(wd, recursive = T)
@@ -100,14 +104,16 @@ files = files[!grepl("OE", files)]
 files = files[!grepl("counterfactual1|counterfactual2|counterfactual3|counterfactual4|counterfactual5|counterfactual6|counterfactual7", files)]
 
 ## specify the MCMC setting were interested in 
-setting = "LONG"
+# setting = "LONG"
+setting = "MIDDLE"
+# setting = "SHORT"
 
 ## Specify the spatial scale we are interested in 
 scale = "5km"
 
 ## Specify the specific iteration of tests were interested in
-# options are "Jan_2024", "Sep_2024" "Oct2024", and "Dec2024"
-time = "Dec2024"
+# options are "Jan_2024", "Sep_2024" "Oct2024", "Dec2024", "June_2025", and "July_2025"
+time = "Sep_2024"
 
 # Subset for the MCMC settings were interested in 
 files = files[grepl(setting, files)]
@@ -153,8 +159,8 @@ for(i in 1:length(files)){
   }# end multiple file conditon
 
   # import 
-  # d = read.csv(paste(wd, "results/", file, sep = ""))
-  d = read.csv(paste("results_final/", file, sep = "")) # update for github
+  d = read.csv(paste(wd, file, sep = ""))
+  # d = read.csv(paste("results_final/", file, sep = "")) # update for github
   
   ## if there are pesky row.names, remove em!
   d$X = NULL
@@ -187,9 +193,10 @@ coeff$dom_sp = gsub("DOM-", "", coeff$dom_sp)
 coeff$sub_sp = gsub("SUB-", "", coeff$sub_sp)
 
 
-### Inspect which species pairs are present/missing, 20250124, LONG settings
+### Inspect which species pairs are present/missing, 20250604, MIDDLE settings
 setdiff(all_combos, coeff$Species_Pair) 
-## 4 models missing --> currently running on HPC. 
+## 1 models missing --> "SUB-Panthera_pardus~DOM-Muntiacus_genus", position 13
+# "one node produced an error: Error in node y.dom[716,3]"
 
 # save the missing mods 
 missing = setdiff(all_combos, coeff$Species_Pair)
@@ -335,19 +342,24 @@ table(preform$mod_completion)
 
 ## Fully completed by Feb 2025
 
+## 1 missing from MIDDLE preferred testing
+
 ```
 
 ```{r Import PPC dataframes}
 
 # First, list all result files
-# files = list.files(paste(wd, "results/", sep = ""), recursive = T)
-files = list.files(wd, recursive = T) # update for github
+files = list.files(paste(wd, "results/", sep = ""), recursive = T)
+# files = list.files(wd, recursive = T) # update for github
 # We dont want OE files (that informed GB requirements) or counter-factuals
 files = files[!grepl("OE", files)]
-files = files[!grepl("counterfactual1|counterfactual2|counterfactual3|counterfactual4|counterfactual5|counterfactual6|counterfactual7", files)]
+files = files[!grepl("counterfactual1|counterfactual2|counterfactual3|counterfactual4|counterfactual5|counterfactual6", files)]
 
 ## specify the MCMC setting were interested in 
-setting = "LONG"
+# setting = "LONG"
+setting = "MIDDLE"
+# setting = "SHORT"
+
 
 # Subset for the MCMC settings were interested in 
 files = files[grepl(setting, files)]
@@ -395,8 +407,8 @@ for(i in 1:length(files)){
   }# end multiple file conditon
   
   ## read the file 
-  # d = read.csv(paste(wd, "results/", file, sep = ""))
-  d = read.csv(paste("results_final/", file, sep = "")) # update for github
+  d = read.csv(paste(wd, "results/", file, sep = ""))
+  # d = read.csv(paste("results_final/", file, sep = "")) # update for github
 
   
   ## add the MCMC setting
@@ -426,9 +438,9 @@ str(ppc_values) # looks mostly good!
 ppc_values$X = NULL # damn row names 
 
 
-### Inspect which species pairs are present/missing, 20241220, LONG settings
+### Inspect which species pairs are present/missing, 20250609, MIDDLE settings
 setdiff(all_combos, ppc_values$Species_Pair) 
-## 193 mods missing, mostly community 
+## same as missing above 
 
 # save the missing mods 
 missing = setdiff(all_combos, ppc_values$Species_Pair)
@@ -583,6 +595,7 @@ str(preform[preform$mod_completion == "uncompleted",]) #same missing ones from b
 preform$BPV_valid = "No"
 preform$BPV_valid[preform$BPV.dom >= 0.15 & preform$BPV.dom <= 0.85 &
                     preform$BPV.sub >= 0.15 & preform$BPV.sub <= 0.85] = "Yes"
+# preform$BPV_valid = "Yes" # for testing, lets ignore Bayes p-value for now. 
 table(preform$BPV_valid[!is.na(preform$Interaction_Estimate)]) 
 # majority are valid 
 
@@ -645,6 +658,7 @@ preform$Species_Pair[is.na(preform$Interaction_Estimate) & preform$preference ==
 anyNA(preform$Interaction_Estimate[preform$preference == "community"]) # MUST BE F! but can proceed before F, just make sure to come back here!
 
 
+
 ## Assign 3 levels of non-support --> 
 # unsupported_wrong_direction (old version was unsupported_1) 
 # unsupported_unclear_SIV (old version was unsupported_2) 
@@ -668,6 +682,7 @@ preform$support[preform$BPV_valid == "Yes" &
                   preform$Significance == "Significant" &
                   preform$direction == "bottom-up" &
                   preform$Interaction_Estimate < 0] = "unsupported_wrong_direction" # Same as above, but applied for bottom-up direction. 
+
 ## assign which models support our hypothesis
 preform$support[preform$BPV_valid == "Yes" & 
                   preform$OD_valid == "Yes" &
@@ -687,6 +702,7 @@ table(preform$support);anyNA(preform$support) # must be F for NA!
 
 
 #### Do the same thing, but with the conservative values
+
 ## Assign 3 levels of non-support --> unsupported_wrong_direction, unsupported_unclear_SIV, unsupported_poor_fit
 preform$support_conserv[preform$BPV_valid_conserv == "No" |
                           preform$OD_valid_conserv == "No" |
@@ -848,7 +864,8 @@ It is important to inspect the diagnostics of the models before we interpret res
 
 3) The third key value is the __C-hat overdispersion value__, where models are deemed to not have any overdispersion in detections if values are between 0.95 and 1.3. **Across all models `r round(as.numeric(table(preform$OD_valid[!is.na(preform$Interaction_Estimate)])[1]/ length(preform$Species_Pair[!is.na(preform$Interaction_Estimate)]) * 100), 2)` percent of models contain remaining overdispersion of detections not accounted for in the detection formula**. This is composed of `r length(preform$Species_Pair[preform$OD_valid == "No" & preform$preference == "preferred" & !is.na(preform$Interaction_Estimate)])` preferred models and `r length(preform$Species_Pair[preform$OD_valid == "No" & preform$preference == "community" &  !is.na(preform$Interaction_Estimate)])` community models. 
 
-4) The fourth value is __the direction of the SIV based on our hypotheses__, where top-down models should have a significant negative relationship and bottom-up models should have a significant positive relationship. As a reminder, top-down models are when large carnivores are the dominant species and bottom-up models are where large carnivores are the subordinate species. For the preferred top-down models, `r length(preform$Species_Pair[preform$Significance == "Significant" & preform$direction == "top-down" & preform$Interaction_Estimate <= 0 & preform$preference == "preferred" ])` models meet these conditions. For the preferred bottom-up models, `r length(preform$Species_Pair[preform$Significance == "Significant" & preform$direction == "bottom-up" & preform$Interaction_Estimate >= 0 & preform$preference == "preferred" ])` models meet these conditions. For the community top-down models, `r length(preform$Species_Pair[preform$Significance == "Significant" & preform$direction == "top-down" & preform$Interaction_Estimate <= 0 & preform$preference == "community" ])` models meet these conditions. For the community bottom-up models, `r length(preform$Species_Pair[preform$Significance == "Significant" & preform$direction == "bottom-up" & preform$Interaction_Estimate >= 0 & preform$preference == "community" ])` models meet these conditions.
+4) The fourth value is __the direction of the SIV based on our hypotheses__, where top-down models should have a significant negative relationship and bottom-up models should have a significant positive relationship. As a reminder, top-down models are when large carnivores are the dominant species and bottom-up models are where large carnivores are the subordinate species. For the preferred top-down models, `r length(preform$Species_Pair[preform$Significance == "Significant" & preform$direction == "top-down" & preform$Interaction_Estimate <= 0 & preform$preference == "preferred" & !is.na(preform$Interaction_Estimate)])` models meet these conditions. For the preferred bottom-up models, `r length(preform$Species_Pair[preform$Significance == "Significant" & preform$direction == "bottom-up" & preform$Interaction_Estimate >= 0 & preform$preference == "preferred" & !is.na(preform$Interaction_Estimate)])` models meet these conditions. For the community top-down models, `r length(preform$Species_Pair[preform$Significance == "Significant" & preform$direction == "top-down" & preform$Interaction_Estimate <= 0 & preform$preference == "community" & !is.na(preform$Interaction_Estimate)])` models meet these conditions. For the community bottom-up models, `r length(preform$Species_Pair[preform$Significance == "Significant" & preform$direction == "bottom-up" & preform$Interaction_Estimate >= 0 & preform$preference == "community" & !is.na(preform$Interaction_Estimate)])` models meet these conditions.
+
 
 ## Unsupported results  
 
@@ -937,19 +954,146 @@ unique(dho$cell_id[dho$cell_id %in% bp$cell_id]) # both were oonly detected at o
 
 ```
 
+```{r Inspect goodness of fit from new tests, eval=FALSE}
+
+## which mods have invalid BPV?
+table(preform$BPV_valid)
+check = preform[preform$BPV_valid == "No",]
+sort(table(check$dom_species)) # mostly predators 
+sort(table(check$sub_species)) # same story -> sampling bias, tho mostly dhole! 
+table(check$direction) # mostly top-down
+
+## check which critter the poor fit lies with 
+# top-down dominant species
+check_td_dom = check[check$direction == "top-down" & check$BPV.dom < 0.15 | check$BPV.dom > 0.85, ]
+sort(table(check_td_dom$dom_species)) # all predators represented, but dhole are the most by far. Group living species with issues?
+# rm(check_td_dom)
+
+## top-down subordinate 
+check_td_sub = check[check$direction == "top-down" & check$BPV.sub < 0.15 | check$BPV.sub > 0.85, ]
+sort(table(check_td_sub$sub_species)) #bears,  pigs, sambar, and 2 macaca sp all equally represented. 
+
+## then combine to check for overlap 
+check_td = rbind(check_td_sub, check_td_dom)
+dim(check_td);dim(distinct(check_td)) # repeats are present
+## which td mods had both species w/ poor fit?
+na.omit(check_td$Species_Pair[duplicated(check_td$Species_Pair)]) # all subordinate species are classic group-size issue critters! 
+
+
+# bottom-up subordinate species
+check_bu_dom = check[check$direction == "bottom-up" & check$BPV.dom < 0.15 | check$BPV.dom > 0.85, ]
+sort(table(check_bu_dom$dom_species)) # group size critters tend to be more common
+# rm(check_td_dom)
+
+## bottom-up subordinate 
+check_bu_sub = check[check$direction == "bottom-up" & check$BPV.sub < 0.15 | check$BPV.sub > 0.85, ]
+sort(table(check_bu_sub$sub_species)) #only dhole are present here... suspicuous! 
+
+## then combine to check for overlap 
+check_bu = rbind(check_bu_sub, check_bu_dom)
+dim(check_bu);dim(distinct(check_bu)) # repeats are present
+## which bu mods had both species w/ poor fit?
+na.omit(check_bu$Species_Pair[duplicated(check_bu$Species_Pair)]) # Dhole is the only subordinate species here, then its all its possible prey... 
+
+## inspect dhole specifically 
+summary(preform$BPV.dom[grepl("DOM-Cuon_alpinus", preform$Species_Pair)]) # always too low 
+summary(preform$BPV.sub[grepl("SUB-Cuon_alpinus", preform$Species_Pair)]) # also too low 
+## inspect matrix 
+mat_sub = as.vector(bdata$`SUB-Cuon_alpinus~DOM-Muntiacus_genus`$y.sub)
+summary(mat_sub[!is.na(mat_sub) & mat_sub > 0])
+# inspect the spread
+hist(mat_sub[!is.na(mat_sub) & mat_sub > 0])
+hist(log(mat_sub)[!is.na(mat_sub) & mat_sub > 0]) # log doesnt look much different, when we remove zeros and NA 
+## repeat for dominant
+mat_dom = as.vector(bdata$`SUB-Rusa_unicolor~DOM-Cuon_alpinus`$y.dom)
+summary(mat_dom[!is.na(mat_dom) & mat_dom > 0]) # v similar (or same) as dom 
+## how many observatons above 3?
+mat_dom = mat_dom[!is.na(mat_dom) & mat_dom > 0] # remove zero and NA 
+length(mat_dom[mat_dom>3]) # 63
+
+### To contrast dholes, is there a species that always had a good fit?
+sort(table(preform$sub_species[preform$support != "poor_fit" & 
+                                 preform$direction == "bottom-up"])) # neofelis, followed by tigers for top-down mods 
+sort(table(preform$dom_species[preform$support != "poor_fit" &
+                                 preform$direction == "top-down"])) # neofelis for top-down mods ## inspect tiger and CL bpv values
+summary(preform$BPV.dom[grepl("DOM-Neofelis_genus", preform$Species_Pair)])
+
+
+## Lets also quickly inspect Rhat values for SIV
+summary(preform$Rhat) # median is good. 
+length(preform$Rhat[preform$Rhat > 1.2]) # 70 mods had bad convergence
+table(preform$direction[preform$Rhat > 1.2]) # mostly top-down...
+table(preform$dom_species[preform$Rhat > 1.2 & 
+                            preform$direction == "top-down" &
+                            preform$preference == "preferred"]) # mostly CL and leopard, others are equally represented
+
+## Keep an eye out for underfitting!! Happens when bayes p-value is too small
+summary(preform$BPV.dom[preform$direction == "top-down"]) # max = .39,  mean/median = 0.15
+summary(preform$BPV.sub[preform$direction == "top-down"]) # max = .4, mean/media = 0.16
+summary(preform$BPV.dom[preform$direction == "bottom-up"]) # max = .4,  mean/median = 0.2
+summary(preform$BPV.sub[preform$direction == "bottom-up"]) # max = .4, mean/media = 0.2
+# possibly due to tighgtly constrainted prior SIV parameter. 
+
+
+# clean up 
+rm(mat_dom, mat_sub, check_bu, check_bu_dom, 
+   check_bu_sub, check_td, check_td_dom, check_td_sub)
+
+```
+
+```{r Determine which models are missing from results, eval=FALSE}
+# isloate the missing species pairs 
+missing_mods = preform$Species_Pair[is.na(preform$Interaction_Estimate)]
+# create DF to store results 
+res = data.frame(matrix(nrow = 0, ncol = 3))
+names(res)[1:3] = c("Species_Pair", "data_file", "position")
+# find all relevant data files
+wd = paste("/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/")
+files = list.files(paste(wd,"step2_output_CoA_bundles/", sep = ""))
+# files = list.files(paste(getwd(),"/data_CoA_bundles/", sep = "")) # update for github
+files = files[grepl("Bundled", files)]
+files = files[!grepl("MISSING", files)] # avoid reading in repeated data 
+# and must have GB
+files = files[grepl("GB", files)]
+# loop thru em 
+for(i in 1:length(missing_mods)){
+  # one sp pair
+  sp = missing_mods[i]
+  
+  # check each file 
+  for(l in 1:length(files)){
+    # import data
+    dat = readRDS(paste(wd, "step2_output_CoA_bundles/", files[l], sep = ""))
+    if(sp %in% names(dat)){
+      # save in the results 
+      res[i, "Species_Pair"] = sp
+      res[i, "data_file"] = files[l]
+      res[i, "position"] = which(names(dat) == sp)
+    }else{
+      # skip to next file 
+      next
+    } # end conditional for names 
+  } # end per file
+} # end per missing mod 
+rm(files, i,l,sp)
+
+```
+
+
 # Sensitivity test results 
 
 ```{r Import sensitivity test coefficents}
 
 # First, list all result files
-# files = list.files(paste(wd, "results/", sep = ""), recursive = T)
-files = list.files(wd, recursive = T) # update for github
+files = list.files(paste(wd, "results/", sep = ""), recursive = T)
+# files = list.files(wd, recursive = T) # update for github
 # We dont want OE files (that informed GB requirements)
 files = files[!grepl("OE", files)]
 
 ## specify the MCMC setting were interested in 
-# setting = "MIDDLE"
-setting = "LONG" # its finally time !
+# setting = "SHORT"
+setting = "MIDDLE"
+# setting = "LONG" # its finally time !
 
 # Subset for the MCMC settings were interested in 
 files = files[grepl(setting, files)]
@@ -1028,8 +1172,8 @@ for(i in 1:length(files_list)){
     #               function(x) grepl(x, f)))){
       
           # import it
-    # dat = read.csv(paste(wd, "results/", f, sep = ""))
-    dat = read.csv(paste("results_final/", f, sep = "")) # update for github
+    dat = read.csv(paste(wd, "results/", f, sep = ""))
+    # dat = read.csv(paste("results_final/", f, sep = "")) # update for github
     
     # add the MCMC setting
     dat$MCMC_setting = setting
@@ -1102,14 +1246,15 @@ rm(coeff_pref, pref_pairs)
 
 ```{r Import sensitivity test PPC values}
 # First, list all result files
-# files = list.files(paste(wd, "results/", sep = ""), recursive = T)
-files = list.files(wd, recursive = T) # update for github
+files = list.files(paste(wd, "results/", sep = ""), recursive = T)
+# files = list.files(wd, recursive = T) # update for github
 # We dont want OE files (that informed GB requirements)
 files = files[!grepl("OE", files)]
 
 ## specify the MCMC setting were interested in 
-# setting = "MIDDLE"
-setting = "LONG"
+# setting = "SHORT"
+setting = "MIDDLE"
+# setting = "LONG"
 
 # Subset for the MCMC settings were interested in 
 files = files[grepl(setting, files)]
@@ -1185,8 +1330,8 @@ for(i in 1:length(files_list)){
     #               function(x) grepl(x, f)))){
       
       # import it
-      # dat = read.csv(paste(wd, "results/", f, sep = ""))
-      dat = read.csv(paste("results_final/", f, sep = "")) # update for github
+      dat = read.csv(paste(wd, "results/", f, sep = ""))
+      # dat = read.csv(paste("results_final/", f, sep = "")) # update for github
       
       # add the MCMC setting
       dat$MCMC_setting = setting
@@ -1245,10 +1390,12 @@ rm(ppc_pref)
 
 ```{r Import sensitivity data bundles}
 ## The idea is to track which models are completed vs not
-# cf_data_files = list.files(paste(wd, "data/step2_output_CoA_bundles/counterfactual_testing/", sep = ""), recursive = T)
-cf_data_files = list.files("data_CoA_bundles/counterfactual_testing/") # update for github 
+cf_data_files = list.files(paste(wd, "data/step2_output_CoA_bundles/", sep = ""), recursive = T)
+# cf_data_files = list.files("data_CoA_bundles/") # update for github 
 ## remove old files
-cf_data_files = cf_data_files[! grepl("OLD/", cf_data_files)]
+cf_data_files = cf_data_files[! grepl("OLD", cf_data_files)]
+## select for counterfactaul data
+cf_data_files = cf_data_files[grepl("counterfactual", cf_data_files)]
 
 ## import and save in a dataframe of results
 cf_mods = data.frame(matrix(NA, ncol = 2))
@@ -1257,8 +1404,8 @@ for(i in 1:length(cf_data_files)){
   # grab empty df
   df = cf_mods[0,]
   # make a path
-  # path = paste(wd, "data/step2_output_CoA_bundles/counterfactual_testing/", cf_data_files[i], sep = "")
-  path = paste("data_CoA_bundles/counterfactual_testing/", cf_data_files[i], sep = "")
+  path = paste(wd, "data/step2_output_CoA_bundles/", cf_data_files[i], sep = "")
+  # path = paste("data_CoA_bundles/counterfactual_testing/", cf_data_files[i], sep = "") # update for github
   # import
   dat = readRDS(path)
   # grab the names
@@ -1353,6 +1500,7 @@ ppc_values_cf$support[ppc_values_cf$BPV_valid == "Yes" &
                         ppc_values_cf$Significance == "Significant" &
                         ppc_values_cf$direction == "bottom-up" &
                         ppc_values_cf$Interaction_Estimate < 0] = "unsupported_wrong_direction" # Same as above, but applied for bottom-up direction. 
+                        
 ## assign which models support our hypothesis
 ppc_values_cf$support[ppc_values_cf$BPV_valid == "Yes" & 
                         ppc_values_cf$OD_valid == "Yes" &
@@ -1426,6 +1574,7 @@ agree_comm = c(a,b)
 rm(a,b)
 
 ```
+
 
 ```{r split out sensitivity tests on a per species pair basis}
 
@@ -1676,8 +1825,8 @@ Save these results to GitHub, in this file directory: **/results_final/step3_out
 ```{r Save relevant dataframes}
 
 ## first, set the working directory where we will save these files
-# wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step3_output_combined_results"
-wd = paste(getwd(), "/results_final/step3_output_combined_results", sep = "")
+wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step3_output_combined_results"
+# wd = paste(getwd(), "/results_final/step3_output_combined_results", sep = "")
 
 ## and grab the date! 
 day<-str_sub(Sys.Date(),-2)
@@ -1729,6 +1878,10 @@ path = paste(wd, "/model_performance_and_SIVs_", nrow(preform_sub), "_completed_
 # save it
 write.csv(preform_sub, path, row.names = F)
 
+```
+
+```{r save counterfactual results}
+
 ### CF coefficients
 
 # make a saving path 
@@ -1760,7 +1913,7 @@ key_mods_sorted <- key_mods %>%
 write.csv(key_mods_sorted, path, row.names = F)
 
 
-### Also, good idea to save the 11 species we will need good prediciton graphs of later
+### Also, good idea to save the species we will need good prediciton graphs of later
 save = bdata[names(bdata)%in% c(agree_pref, agree_comm)]
 # make a path
 path = paste(wd, "/Bundled_data_for_co-abundance_predictions_", length(c(agree_pref, agree_comm)), "_key_species_pairs_",date, ".RDS", sep = "")

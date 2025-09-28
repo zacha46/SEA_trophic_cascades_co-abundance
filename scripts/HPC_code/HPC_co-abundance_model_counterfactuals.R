@@ -33,23 +33,18 @@ setting = Sys.getenv("SETTING")  # MCMC setting
 #### Also read in counterfactual settings! 
 counter = Sys.getenv("COUNTER")
 
-
 #### List all possible bundled data files 
-files = list.files("data/co-abundance")[grepl("Bundled_data", list.files("data/co-abundance/"))]
+files = list.files("data/bundled_data")[grepl("Bundled_data", list.files("data/bundled_data/"))]
 
 # #for local testing
-# files = list.files("data_GitHub_CoA_bundles/counterfactual_testing/")[grepl("Bundled_data", list.files("data_GitHub_CoA_bundles/counterfactual_testing/"))]
-
-# ## Subset files for proper pref setting
-# files = files[grepl(pref, files)]
-# ## and for proper GB setting
-# f = files[grepl(gb, files)]
+# setwd("/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step2_output_CoA_bundles/")
+# files = list.files()[grepl("Bundled_data", list.files())]
 
 ## Subset files for proper counterfactual test 
 f = files[grepl(counter, files)]
 
 ### Import the formatted data
-dat = readRDS(paste("data/co-abundance/", f ,sep = ""))
+dat = readRDS(paste("data/bundled_data/", f ,sep = ""))
 
 # #for local testing
 # dat = readRDS(paste("data_GitHub_CoA_bundles/counterfactual_testing/", f ,sep = ""))
@@ -67,7 +62,7 @@ n = names(dat)[slurm]
 res =  paste(setting, "_", counter, "_co-abundance_coefficents_", n, sep = "")
 
 # Second, list all completed results
-res_search = list.files("results/co-abundance/dec2024_counterfactual_coefficent_dataframes/")
+res_search = list.files("results/counterfactual_coefficent_dataframes/")
 
 # If the newly constructed file name matches ANY values already present in results,
 if(any(grepl(res, res_search))){
@@ -89,6 +84,27 @@ bdata$cams = apply(bdata$cams, 2, as.numeric)
 ## new variable got saved as a 2D matrix, but needs to be a vector, so convert
 bdata$comm_det = as.vector(bdata$comm_det)
 
+## determine if top-down or bottom-up
+if(grepl("DOM-Panthera_tigris|DOM-Panthera_pardus|DOM-Cuon_alpinus|DOM-Neofelis_genus", n)){interaction_type = "top-down"}
+if(grepl("SUB-Panthera_tigris|SUB-Panthera_pardus|SUB-Cuon_alpinus||SUB-Neofelis_genus", n)){interaction_type = "bottom-up"}
+
+# Set truncation bounds for species interaction parameter
+if (interaction_type == "top-down") {
+  a5_lower <- -3   # -3 is smallest it can be
+  a5_upper <- 0    # cant be above zero
+} else if (interaction_type == "bottom-up") {
+  a5_lower <- 0    # cant be below zero
+  a5_upper <- 3    # 3 is largest it can be
+} else {
+  stop("interaction_type must be either 'top-down' or 'bottom-up'")
+}
+
+## save in bdata
+bdata$a5_lower = a5_lower
+bdata$a5_upper = a5_upper
+# rm(a5_upper, a5_lower, interaction_type)
+
+
 ## if results are not already present, start the models! 
 print(paste("Begining to run co-abundance model for: ", n, " with MCMC settings: ", setting ,
             "with counter-factual test: ",counter, " and is starting at ", Sys.time(), sep = ""))
@@ -96,7 +112,7 @@ print(paste("Begining to run co-abundance model for: ", n, " with MCMC settings:
 
 ####### Make the model in BUGS language and run it ####
 
-cat(file = "ZDA_Co_Abundance_Model_final_20241201.jags", 
+cat(file = "ZDA_Co_Abundance_Model_final_20250603.jags", 
     
     "model{
 
@@ -131,8 +147,8 @@ cat(file = "ZDA_Co_Abundance_Model_final_20241201.jags",
       
     }
     
-  ## Species interaction
-  a5 ~ dnorm(0, 0.01)
+  ## Species interaction, truncated based on top-down or bottom-up
+  a5 ~ dnorm(0, 0.01) T(a5_lower, a5_upper)
     
   # Landscape RE hyper prior --> define it's variance
   sigma.a6 ~ dunif(0,5)
@@ -283,10 +299,12 @@ params = c('a0', 'a1', 'a2', 'a3', 'a4', 'a5',    # Abundance parameters
            # "N.dom", "N.sub"                     # NOT monitoring abundance per site to save RAM on LONG mods. 
 )                         
 
+# Generate valid initial value for truncated version of a5
+init_a5 <- runif(1, min = a5_lower + 0.01, max = a5_upper - 0.01) # add small buffer (0.01) to avoid edges of truncated range
 
 # Specify the initial values
 inits = function() {
-  list(a0=rnorm(2), a1=rnorm(2), a2=rnorm(2), a3=rnorm(2), a4=rnorm(2), a5=rnorm(1),
+  list(a0=rnorm(2), a1=rnorm(2), a2=rnorm(2), a3=rnorm(2), a4=rnorm(2), a5=init_a5,
        b0=rnorm(2), b2=rnorm(2),
        sd.p = runif(2, .4, .8), # Experimented and medium values seem to produce better convergence.
        a6=rnorm(bdata$narea), a7=rnorm(bdata$narea),
@@ -306,20 +324,20 @@ inits = function() {
 ## Want burn-in to be ~20% of iterations and then thin = (ni - nb) / ideal n.eff (per chain), ideally 30000 in the long one. 
 ### Assess n.eff via (ni - nb)/nt * nc 
 if(setting == "SHORT"){
-  ni <- 3000;  nt <- 5; nb <- 60; nc <- 3; na = NULL      #quick test to make sure code works, 2.5 hr per mod
+  ni <- 3000;  nt <- 5; nb <- 60; nc <- 3; na = 1000      #quick test to make sure code works, 2.5 hr per mod
 }
 if(setting == "MIDDLE"){
-  ni = 50000;  nt = 20; nb = 10000 ; nc <- 3; na = NULL   #examine parameter values --> use this for prelim testing. 36-49 hrs per mod
+  ni = 75000;  nt = 18; nb = 15000 ; nc <- 3; na = 8000    #examine parameter values --> use this for prelim testing. 36-49 hrs per mod
 }
 if(setting == "LONG"){
-  ni = 250000;  nt = 20; nb = 50000 ; nc <- 3; na = NULL  #publication quality run --> ~160 hours per mod, all finish in < 2 weeks! 
+  ni = 250000;  nt = 20; nb = 50000 ; nc <- 3; na = 10000  #publication quality run --> ~160 hours per mod, all finish in < 2 weeks! 
 }
 
 # take the start time 
 start = Sys.time()
 
 ### Run the model 
-mod = jags(bdata, inits, params, "ZDA_Co_Abundance_Model_final_20241201.jags",
+mod = jags(bdata, inits, params, "ZDA_Co_Abundance_Model_final_20250603.jags",
            ## MCMC settings
            n.chains = nc, n.adapt = na, n.thin = nt, 
            n.iter = ni, n.burnin = nb, parallel = T)
@@ -401,7 +419,7 @@ day<-substr(Sys.Date(),9, 10)
 month<-substr(Sys.Date(),6,7)
 year<-substr(Sys.Date(),1,4)
 
-path = paste(paste(paste(paste("results/co-abundance/dec2024_counterfactual_coefficent_dataframes/", slurm, "_", setting, "_", counter, "_co-abundance_coefficents_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
+path = paste(paste(paste(paste("results/counterfactual_coefficent_dataframes/", slurm, "_", setting, "_", counter, "_co-abundance_coefficents_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
 write.csv(s, path, row.names = F)
 
 
@@ -587,7 +605,7 @@ day<-substr(Sys.Date(),9, 10)
 month<-substr(Sys.Date(),6,7)
 year<-substr(Sys.Date(),1,4)
 
-path = paste(paste(paste(paste("results/co-abundance/dec2024_counterfactual_PPC_dataframes/", slurm, "_", setting, "_", counter, "_BPV_and_Chat_values_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
+path = paste(paste(paste(paste("results/counterfactual_PPC_dataframes/", slurm, "_", setting, "_", counter, "_BPV_and_Chat_values_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
 write.csv(da, path)
 
 print(paste("Finished generating PPC plotdata dataframe for: ", n, " at ", Sys.time(),

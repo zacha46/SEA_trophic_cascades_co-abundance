@@ -23,14 +23,14 @@
 #SBATCH --time=336:00:00
 
 # SPECIFY THE JOB ARRAY-
-#SBATCH --array=1-94
+#SBATCH --array=1-64
 
 # SPECIFY THE JOB NAME
 #SBATCH --job-name=CF3
 
 # SPECIFY .err AND .out FILE LOCATIONS
-#SBATCH --output=OE/co-abundance/slurm-%A_%a.out
-#SBATCH --error=OE/co-abundance/slurm-%A_%a.err
+#SBATCH --output=OE/output/slurm-%A_%a.out
+#SBATCH --error=OE/error/slurm-%A_%a.err
 
 # LOAD THE RELEVANT MODULE
 module load rjags/4-10-foss-2021a-r-4.1.0 
@@ -50,4 +50,4 @@ cd $SLURM_SUBMIT_DIR
 pwd
 
 # LOAD THE R SCRIPT, SUBMIT JOB FROM /scratch/user/uqzamir/, AND SPECIFY THE ARRAY INDEX 
-Rscript code/co-abundance/HPC_co-abundance_model_counterfactuals.R $SLURM_ARRAY_TASK_ID
+srun Rscript code/HPC_co-abundance_model_new_var_comm_det.R $SLURM_ARRAY_TASK_ID

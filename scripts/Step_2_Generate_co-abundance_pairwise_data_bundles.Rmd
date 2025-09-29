@@ -16,7 +16,7 @@ rm(list = ls())
 library(tidyverse)  # For basic data wrangling
 library(plyr)       # For data summaries
 
-### Create a saving paths to Dropbox of GitHub 
+### Create import/saving paths to Dropbox or GitHub 
 github = F # set to TRUE if saving to git 
 if(github){
   save_path = "~/GitHub Repositories/SEA_trophic_cascades_co-abundance/data_CoA_bundles/"

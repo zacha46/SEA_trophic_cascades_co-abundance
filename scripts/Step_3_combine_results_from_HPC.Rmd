@@ -15,7 +15,7 @@ rm(list = ls())
 ## load libraries
 library(tidyverse)        ## For basic data wrangling
 
-### Create a saving paths to Dropbox of GitHub 
+### Create import/saving paths to Dropbox or GitHub 
 github = F # set to TRUE if saving to git 
 if(github){
   import_legacy_dat_path = "~/GitHub Repositories/SEA_trophic_cascades_co-abundance/data_GitHub/"

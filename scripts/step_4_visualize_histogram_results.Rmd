@@ -20,13 +20,24 @@ library(cowplot)          ## For arranging plots
 ## establish preferred plot style, either per "species" or "model"
 plot_type = "species-pairs" # "models"
 
+### Create import/saving paths to Dropbox or GitHub 
+github = F # set to TRUE if saving to git 
+if(github){
+  import_results_path = "~/GitHub Repositories/SEA_trophic_cascades_co-abundance/results_final/step3_output_combined_results/"
+  save_fig_path = "~/GitHub Repositories/SEA_trophic_cascades_co-abundance/figures/step4_output_figs/"
+  save_dat_path = "~/GitHub Repositories/SEA_trophic_cascades_co-abundance/figures/step4_output_summarized_results_for_figs/"
+}else{
+  import_results_path = "~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step3_output_combined_results/"
+  save_fig_path = "~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/figures/step4_output_figs/"
+  save_dat_path = "~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/figures/step4_output_summarized_results_for_figs/"
+}
+
 ```
 
 ```{r Import collated model performance data from step 3}
 
 ### Set the working directory where the data lives
-# wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step3_output_combined_results/"
-wd = paste(getwd(), "/results_final/step3_output_combined_results/", sep = "") #update for github
+wd = import_results_path
 
 ## list all relevant files
 files = list.files(wd)
@@ -1243,8 +1254,7 @@ The plots and data used to inform this document are saved in the GitHub Reposito
 ```{r Save everything! }
 
 ## specify the new working directory to save figures
-# wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/figures/step4_output_figs/"
-wd = paste(getwd(), "/figures/step4_output_figs/", sep = "") # update for github
+wd = save_fig_path
 
 # Grab the date
 day<-str_sub(Sys.Date(),-2)
@@ -1288,9 +1298,7 @@ for(i in 1:length(all_plots)){
 rm(i, p, n, path)
 
 ## now save the summarized data with a new wd
-# wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/figures/step4_output_summarized_results_for_figs/"
-wd = paste(getwd(), "/figures/step4_output_summarized_results_for_figs/", sep = "") # update for github
-
+wd = save_dat_path
 
 ## main results
 #make a path

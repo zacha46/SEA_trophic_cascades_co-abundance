@@ -23,7 +23,7 @@ library(tidyverse)  # For basic data wrangling
 library(plyr)       # For data summaries
 library(traitdata)  # For species trait data (e.g. body mass, trophic guild, home ranges)
 
-### Create a saving path to Dropbox of GitHub 
+### Create a saving path to Dropbox or GitHub 
 github = F # set to TRUE if saving to git 
 if(github){
   save_path = "~/GitHub Repositories/SEA_trophic_cascades_co-abundance/data_GitHub/"

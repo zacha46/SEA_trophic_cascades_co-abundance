@@ -23,6 +23,13 @@ library(tidyverse)  # For basic data wrangling
 library(plyr)       # For data summaries
 library(traitdata)  # For species trait data (e.g. body mass, trophic guild, home ranges)
 
+### Create a saving path to Dropbox or GitHub 
+github = F # set to TRUE if saving to git 
+if(github){
+  save_path = "~/GitHub Repositories/SEA_trophic_cascades_co-abundance/data_GitHub/"
+}else{
+  save_path = "~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step1_output/"
+}
 ```
 
 ```{r import captures}
@@ -246,12 +253,6 @@ summary(land_sum$total_area_sampled) # good! Nothing over 1000 square km
 hist(land_sum$total_area_sampled) # classic poisson, who is the biggie?
 land_sum$Landscape[land_sum$total_area_sampled > 700] # Eastern section of Thai forest reserve... could probably move that longitude a bit more East to make this smaller?
 
-## rename cols to be more clear
-names(land_sum)
-names(land_sum) = c("landscape", "total trap nights", "number of sampling units", "number of 5km polygons", "number of single-season surveys", "sampling duration", "start date", "end date", "number of data providers", "Xmin", "Xmax", "Ymin", "Ymax", "total area sampled km2", "number of deployments", "were tigers detected", "were leopards detected", "were dholes detected", "were clouded leopards detected")
-# save this! 
-# write.csv(land_sum, "data_GitHub/Landscape_summary_table_20250801.csv", row.names = F)
-
 ```
 
 ```{r Generate a table per landscape}
@@ -295,6 +296,14 @@ land_tn = ddply(add3, .(Landscape), summarize,
 setdiff(land_tn$Landscape, land_sum$Landscape)
 setdiff(land_sum$Landscape, land_tn$Landscape) # were good! 
 land_sum = merge(land_tn, land_sum, by = "Landscape")
+
+## rename cols to be more clear
+names(land_sum)
+names(land_sum) = c("landscape", "total trap nights", "number of sampling units", "number of 5km polygons", "number of single-season surveys", "sampling duration", "start date", "end date", "number of data providers", "Xmin", "Xmax", "Ymin", "Ymax", "total area sampled km2", "number of deployments", "were tigers detected", "were leopards detected", "were dholes detected", "were clouded leopards detected")
+
+# save this! 
+# write.csv(land_sum, paste(save_path, "Landscape_summary_table_", 
+#                           format(Sys.time(), format = "%Y%m%d"), ".csv", sep = ""), row.names = F)
 
 ## clean up
 rm(add, add2, add3, land_tn, land_caps, cap_land)
@@ -1020,24 +1029,17 @@ month<-str_sub(Sys.Date(),-5,-4)
 year<-str_sub(Sys.Date(),-10,-7)
 date = paste(year,month,day, sep = "")
 
-# ## grab the WD where we want to save data 
-# wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step1_output/"
+### Save all relevant files
+saveRDS(keep, paste(save_path, "species_vector_", length(keep), "_species_", scale, "_scale_", date, ".RDS", sep = ""))
 
+saveRDS(group_sp, paste(save_path, "group_living_", length(group_sp), "_species_", scale, "_scale_",  date, ".RDS", sep = ""))
 
-# ### Save all relevant files
-# saveRDS(keep, paste("data_GitHub/species_vector_", length(keep), "_species_", scale, "_scale_", date, ".RDS", sep = ""))
+write.csv(caps, paste(save_path, "clean_captures_to_make_UMFs_", scale, "_scale_",  date,".csv", sep = ""), row.names = F)
 
-# saveRDS(group_sp, paste("data_GitHub/group_living_", length(group_sp), "_species_", scale, "_scale_",  date, ".RDS", sep = ""))
-
-# write.csv(caps, paste("data_GitHub/clean_captures_to_make_UMFs_", scale, "_scale_",  date,".csv", sep = ""), row.names = F)
-
-# write.csv(meta, paste("data_GitHub/clean_metadata_to_make_UMFs_", scale, "_scale_",  date,".csv", sep = ""), row.names = F)
+write.csv(meta, paste(save_path, "clean_metadata_to_make_UMFs_", scale, "_scale_",  date,".csv", sep = ""), row.names = F)
 
 ## Also save trait data so I dont have to remake it later
-# write.csv(traits, paste("data_GitHub/clean_", nrow(traits), "_species_trait_data_", date, ".csv", sep = ""), row.names = F)
-
-
-
+write.csv(traits, paste(save_path, "clean_", nrow(traits), "_species_trait_data_", date, ".csv", sep = ""), row.names = F)
 
 ```
 

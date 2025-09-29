@@ -6,7 +6,7 @@
 ## But because models are too large to save ALL of them, 
 # this script will extract only the relevant dataframes. 
 
-## Submitted to HPC on July 2nd, 2025
+## Submitted to HPC on September 29th, 2025
 # Zachary Amir, z.amir@uq.edu.au
 
 ####### Set up #####
@@ -15,7 +15,7 @@ library(jagsUI)
 library(tidyverse)
 
 ## specify the number of cores to be uses, should be the same as the model 
-options(mc.cores = 3)
+options(mc.cores = 4)
 
 #### Read Job Array index value into R
 slurm = Sys.getenv("SLURM_ARRAY_TASK_ID")
@@ -87,28 +87,30 @@ bdata$cams = apply(bdata$cams, 2, as.numeric)
 ## new variable got saved as a 2D matrix, but needs to be a vector, so convert
 bdata$comm_det = as.vector(bdata$comm_det)
 
-## determine if top-down or bottom-up
-if(grepl("DOM-Panthera_tigris|DOM-Panthera_pardus|DOM-Cuon_alpinus|DOM-Neofelis_genus", n)){interaction_type = "top-down"}
-if(grepl("SUB-Panthera_tigris|SUB-Panthera_pardus|SUB-Cuon_alpinus||SUB-Neofelis_genus", n)){interaction_type = "bottom-up"}
-
-# Set truncation bounds for species interaction parameter
-if (interaction_type == "top-down") {
-  # a5_lower <- -3   # -3 is smallest it can be
-  # a5_upper <- .1    # cant be above zero, but needs wiggle room to be non-significant!
-  a5_mean = -0.5
-} else if (interaction_type == "bottom-up") {
-  # a5_lower <- -.1    # cant be below zero, but needs wiggle room to be non-significant!
-  # a5_upper <- 3    # 3 is largest it can be
-  a5_mean = 0.5
-} else {
-  stop("interaction_type must be either 'top-down' or 'bottom-up'")
-}
-
-## save in bdata
-# bdata$a5_lower = a5_lower
-# bdata$a5_upper = a5_upper
-bdata$a5_mean = a5_mean
-# rm(a5_upper, a5_lower, interaction_type)
+# ## determine if top-down or bottom-up
+# if(grepl("DOM-Panthera_tigris|DOM-Panthera_pardus|DOM-Cuon_alpinus|DOM-Neofelis_genus", n)){interaction_type = "top-down"}
+# if(grepl("SUB-Panthera_tigris|SUB-Panthera_pardus|SUB-Cuon_alpinus||SUB-Neofelis_genus", n)){interaction_type = "bottom-up"}
+# 
+# # Set truncation bounds for species interaction parameter
+# if (interaction_type == "top-down") {
+#   # a5_lower <- -3   # -3 is smallest it can be
+#   # a5_upper <- .1    # cant be above zero, but needs wiggle room to be non-significant!
+#   a5_mean = -0.5
+# } else if (interaction_type == "bottom-up") {
+#   # a5_lower <- -.1    # cant be below zero, but needs wiggle room to be non-significant!
+#   # a5_upper <- 3    # 3 is largest it can be
+#   a5_mean = 0.5
+# } else {
+#   stop("interaction_type must be either 'top-down' or 'bottom-up'")
+# }
+# 
+# ## save in bdata
+# # bdata$a5_lower = a5_lower
+# # bdata$a5_upper = a5_upper
+# bdata$a5_mean = a5_mean
+# # rm(a5_upper, a5_lower, interaction_type)
+##
+### Leaving this code for informed truncated prior SIV here for now, but saving it for different project. 
 
 ## if results are not already present, start the models! 
 print(paste("Begining to run co-abundance model for: ", n, " with MCMC settings: ", setting ,
@@ -117,7 +119,7 @@ print(paste("Begining to run co-abundance model for: ", n, " with MCMC settings:
 
 ####### Make the model in BUGS language and run it ####
 
-cat(file = "ZDA_Co_Abundance_Model_final_20250702.jags", 
+cat(file = "ZDA_Co_Abundance_Model_final_20250929.jags", 
     
     "model{
 
@@ -139,7 +141,6 @@ cat(file = "ZDA_Co_Abundance_Model_final_20250702.jags",
     # community detections
     a4[i] ~ dnorm(0, 0.01)
   
-  
     # Det intercept
     b0[i] ~ dnorm(0, 0.01)
     
@@ -152,8 +153,8 @@ cat(file = "ZDA_Co_Abundance_Model_final_20250702.jags",
       
     }
     
-  ## Species interaction, centered around positive or negative .5 based on top-down or bottom-up
-  a5 ~ dnorm(a5_mean, 1)
+  ## Species interaction
+  a5 ~ dnorm(0, 0.01)
     
   # Landscape RE hyper prior --> define it's variance
   sigma.a6 ~ dunif(0,5)
@@ -205,7 +206,7 @@ cat(file = "ZDA_Co_Abundance_Model_final_20250702.jags",
     # Abundance of Subordinate Species w/ iZIP
     N.sub[j] ~ dpois(lambda.sub[j] * Z.sub[j])
 
-      log(lambda.sub[j]) <- a0[1] + a1[1]*flii[j] + a2[1]*hfp[j] + a3[1]*elev[j] + a4[1]*comm_det[j] + a5*N.dom[j] + a6[area[j]] + a8[year[j]]
+      log(lambda.sub[j]) <- a0[1] + a1[1]*flii[j] + a2[1]*hfp[j] + a3[1]*elev[j] + a4[1]*comm_det[j] + a5*log(1+N.dom[j]) + a6[area[j]] + a8[year[j]]
     
     # Abundance of Dominant Species w/ iZIP 
     N.dom[j] ~ dpois(lambda.dom[j] * Z.dom[j])
@@ -281,10 +282,14 @@ cat(file = "ZDA_Co_Abundance_Model_final_20250702.jags",
   #Chi-Square Test Statistic- Subordinate
   fit.sub = sum(E.sub[,])
   fit.rep.sub = sum(E.rep.sub[,])
+  p.val.sub <- step(fit.rep.sub - fit.sub)
+  c.hat.sub <- fit.rep.sub / fit.sub
 
   #Chi-Square Test Statistic- Dominant
   fit.dom = sum(E.dom[,])
   fit.rep.dom = sum(E.rep.dom[,])
+  p.val.dom <- step(fit.rep.dom - fit.dom)
+  c.hat.dom <- fit.rep.dom / fit.dom
 
 } 
     ",fill = TRUE)
@@ -306,13 +311,13 @@ params = c('a0', 'a1', 'a2', 'a3', 'a4', 'a5',    # Abundance parameters
 
 # # Generate valid initial value for truncated version of a5
 # init_a5 <- runif(1, min = a5_lower + 0.01, max = a5_upper - 0.01) # add small buffer (0.01) to avoid edges of truncated range
-
-# Generate valid inital value for directional prior a5
-init_a5 <- rnorm(1, mean = a5_mean, sd = .5)
+# 
+# # Generate valid inital value for directional prior a5
+# init_a5 <- rnorm(1, mean = a5_mean, sd = .5)
 
 # Specify the initial values
 inits = function() {
-  list(a0=rnorm(2), a1=rnorm(2), a2=rnorm(2), a3=rnorm(2), a4=rnorm(2), a5=init_a5,
+  list(a0=rnorm(2), a1=rnorm(2), a2=rnorm(2), a3=rnorm(2), a4=rnorm(2), a5=rnorm(1),
        b0=rnorm(2), b2=rnorm(2),
        sd.p = runif(2, .4, .8), # Experimented and medium values seem to produce better convergence.
        a6=rnorm(bdata$narea), a7=rnorm(bdata$narea),
@@ -335,20 +340,20 @@ if(setting == "LOCAL_TEST"){
   ni <- 200;  nt <- 10; nb <- 60; nc <- 2; na = 500      # test on local computer quickly
 }
 if(setting == "SHORT"){
-  ni <- 3000;  nt <- 5; nb <- 60; nc <- 3; na = 1000      #quick test to make sure code works, 2.5 hr per mod
+  ni <- 3000;  nt <- 5; nb <- 60; nc <- 4; na = 1000      #quick test to make sure code works, 2.5 hr per mod
 }
 if(setting == "MIDDLE"){
-  ni = 75000;  nt = 18; nb = 15000 ; nc <- 3; na = 8000  #examine parameter values --> use this for prelim testing. 36-49 hrs per mod
+  ni = 75000;  nt = 18; nb = 15000 ; nc <- 4; na = 8000  #examine parameter values --> use this for prelim testing. 36-49 hrs per mod
 }
 if(setting == "LONG"){
-  ni = 250000;  nt = 20; nb = 50000 ; nc <- 3; na = 10000  #publication quality run --> ~160 hours per mod, all finish in < 2 weeks! 
+  ni = 250000;  nt = 20; nb = 50000 ; nc <- 4; na = 10000  #publication quality run --> ~160 hours per mod, all finish in < 2 weeks! 
 }
 
 # take the start time 
 start = Sys.time()
 
 ### Run the model 
-mod = jags(bdata, inits, params, "ZDA_Co_Abundance_Model_final_20250702.jags",
+mod = jags(bdata, inits, params, "ZDA_Co_Abundance_Model_final_20250929.jags",
            ## MCMC settings
            n.chains = nc, n.adapt = na, n.thin = nt, 
            n.iter = ni, n.burnin = nb, parallel = T)
@@ -437,37 +442,9 @@ write.csv(s, path, row.names = F)
 print(paste("Finished generating coefficent dataframe for: ", n, " at ", Sys.time(),
             ". Beginning PPC dataframe now.", sep = ""))
 
-####### Generate dataframe for PPC plots ########
-# 
-# # Data Prep for Plot
-# ppc.dat = data.frame("sub.sim" = mod$sims.list$fit.rep.sub,
-#                      "sub.real" = mod$sims.list$fit.sub,
-#                      "dom.sim" = mod$sims.list$fit.rep.dom,
-#                      "dom.real" = mod$sims.list$fit.dom)
-# 
-# ## Add a label to color the dots
-# ppc.dat$sub.label[mod$sims.list$fit.rep.sub > mod$sims.list$fit.sub]= "Above"
-# ppc.dat$sub.label[mod$sims.list$fit.rep.sub < mod$sims.list$fit.sub]= "Below"
-# 
-# ppc.dat$dom.label[mod$sims.list$fit.rep.dom > mod$sims.list$fit.dom]= "Above"
-# ppc.dat$dom.label[mod$sims.list$fit.rep.dom < mod$sims.list$fit.dom]= "Below"
-# 
-# ## dont forget to add the species pair! 
-# ppc.dat$Species_Pair = n
-# 
-# #### Save it! 
-# day<-substr(Sys.Date(),9, 10)
-# month<-substr(Sys.Date(),6,7)
-# year<-substr(Sys.Date(),1,4)
-# 
-# path = paste(paste(paste(paste("results/PPC_dataframes/", slurm, "_", setting, "_PPC_plotdata_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
-# write.csv(ppc.dat, path)
-# 
-# print(paste("Finished generating PPC plotdata dataframe for: ", n, " at ", Sys.time(),
-#             ". Beginning PPC values dataframe now.", sep = ""))
+####### Generate dataframes for PPC ########
 
-
-##### Generate dataframe w/ only BPV and C-hat values
+## Make a dataframe w/ only BPV and C-hat values, no need for plots w/ this many mods! 
 
 ## Create a dataframe to store results
 da = data.frame(matrix(NA, nrow = 0, ncol = 11))

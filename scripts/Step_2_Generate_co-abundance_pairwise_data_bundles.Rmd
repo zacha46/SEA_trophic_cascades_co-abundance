@@ -16,6 +16,22 @@ rm(list = ls())
 library(tidyverse)  # For basic data wrangling
 library(plyr)       # For data summaries
 
+### Create import/saving paths to Dropbox or GitHub 
+github = F # set to TRUE if saving to git 
+if(github){
+  save_path = "~/GitHub Repositories/SEA_trophic_cascades_co-abundance/data_CoA_bundles/"
+  umf_path = "~/GitHub Repositories/SEA_trophic_cascades_co-abundance/data_UMFs/"
+  import_dat_path = "~/GitHub Repositories/SEA_trophic_cascades_co-abundance/data_GitHub/"
+  oe_path = "~/GitHub Repositories/SEA_trophic_cascades_co-abundance/data_GitHub/LONG_OE_files_Oct_2023/"
+  cf_path = "~/GitHub Repositories/SEA_trophic_cascades_co-abundance/data_CoA_bundles/counterfactual_testing/"
+}else{
+  save_path = "~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step2_output_CoA_bundles/"
+  umf_path = "~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/UMFs/"
+  import_dat_path = "~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step1_output/"
+  oe_path = "~/Dropbox/Zach PhD/Ch3 Trophic release project/results/LONG_OE_files_Oct_2023/"
+  cf_path = "~//Dropbox/Zach PhD/Ch3 Trophic release project/data/step2_output_CoA_bundles/counterfactual_testing/"
+}
+
 ```
 
 ## Import data 
@@ -24,9 +40,8 @@ Import count matrices for each species that was generated on the High Performanc
 
 ```{r import matricies generated on HPC via loop}
 
-## specify where the data lives in dropbox 
-# wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/UMFs/"
-wd = paste(getwd(),"/data_UMFs/", sep = "")
+## specify where the data lives 
+wd = umf_path 
 
 ## Store imported data here
 umfs = list()
@@ -64,9 +79,7 @@ sort(names(umfs)) # looks good
 ### Also import data from step1 for comparison
 
 ## specify where the data lives
-# wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step1_output/"
-wd = paste(getwd(),"/data_GitHub/", sep = "")
-
+wd = import_dat_path 
 
 ## list all files that should be imported 
 files = list.files(wd)
@@ -87,7 +100,6 @@ scale = str_split(scale, "_")[[1]][3]
 
 ## clean up
 rm(files, wd)
-
 
 ```
 
@@ -646,9 +658,7 @@ After some preliminary testing, I realized that all co-abundance models don't ne
 ```{r Use OE files to determine GB per list, echo=FALSE}
 
 ## specify where the OE files live 
-# wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/results/LONG_OE_files_Oct_2023/"
-wd = paste(getwd(), "/data_GitHub/LONG_OE_files_Oct_2023/", sep = "")
-
+wd = oe_path 
 
 ## First, examine how many OE files we have 
 file = list.files(wd)
@@ -806,9 +816,7 @@ date = paste(year,month,day, sep = "")
 rm(day,month,year)
 
 ## specify where the data will be saved
-wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step2_output_CoA_bundles/"
-# wd = paste(getwd(), "/data_CoA_bundles/", sep = "")
-
+wd = save_path 
 
 # Save data per preference AND GB requirements!
 # pref 100 GB
@@ -1337,8 +1345,7 @@ date = paste(year,month,day, sep = "")
 rm(day,month,year)
  
 ## specify where the data lives
-# wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step2_output_CoA_bundles/counterfactual_testing/"
-wd = paste(getwd(), "/data_CoA_bundles/counterfactual_testing/", sep = "")
+wd = cf_path 
 
 # Save data 
 saveRDS(counterf2_bdata_list, paste(wd, "/Bundled_data_for_Bayes_co-abundance_mods_counterfactual1_isolate_extirpation_", length(counterf2_bdata_list), "_species_pairs_", scale, "_", date, ".RDS", sep = ""))
@@ -3060,4 +3067,3 @@ rm(day,month,year)
 # Save data 
 # saveRDS(counterf7_bdata_list, paste(wd, "/Bundled_data_for_Bayes_co-abundance_mods_counterfactual6_no_community_detections_", length(counterf7_bdata_list), "_species_pairs_", scale, "_", date, ".RDS", sep = ""))
 ```
-

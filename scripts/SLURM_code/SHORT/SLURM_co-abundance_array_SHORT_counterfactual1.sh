@@ -11,8 +11,8 @@
 # Select 1 task per CPU (b/c R is not MPI)
 #SBATCH --ntasks=1
 
-# Select 3 CPUS (aka threads) per node (one per MCMC chain)
-#SBATCH --cpus-per-task=3
+# Select 4 CPUS (aka threads) per node (one per MCMC chain)
+#SBATCH --cpus-per-task=4
 
 # Select 50,000 MB (50 GB) of memory per node 
 #SBATCH --mem=50000

@@ -15,6 +15,20 @@ rm(list = ls())
 ## load libraries
 library(tidyverse)        ## For basic data wrangling
 
+### Create import/saving paths to Dropbox or GitHub 
+github = F # set to TRUE if saving to git 
+if(github){
+  import_legacy_dat_path = "~/GitHub Repositories/SEA_trophic_cascades_co-abundance/data_GitHub/"
+  bundle_path = "~/GitHub Repositories/SEA_trophic_cascades_co-abundance/data_CoA_bundles/"
+  hpc_results_path = "~/GitHub Repositories/SEA_trophic_cascades_co-abundance/data_CoA_bundles/results_final/"
+  save_path = "~/GitHub Repositories/SEA_trophic_cascades_co-abundance/results_final/step3_output_combined_results/"
+}else{
+  import_legacy_dat_path = "~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step1_output/"
+  bundle_path = "~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step2_output_CoA_bundles/"
+  hpc_results_path = "~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/results/"
+  save_path = "~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step3_output_combined_results/"
+}
+
 ```
 
 ## Introduction
@@ -28,8 +42,7 @@ As a reminder, the co-abundance models were implemented on this R script: script
 ## this is the data that was used to create data bundles. Will be useful for comparisons later
 
 ## set WD to dropbox where the data lives
-wd = paste("/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step1_output/")
-# wd = paste(getwd(), "/data_GitHub/", sep = "") # update for github
+wd = import_legacy_dat_path 
 
 ## Import clean cam trap data here for referencing
 og_resamp_captures = read.csv(paste(wd,
@@ -44,9 +57,8 @@ og_resamp_meta = read.csv(paste(wd,
 
 ## first, I will import the bundled data to generate a vector of relevant species pairs 
 # but since I split the bundled data into multiple files, I must import them all. 
-wd = paste("/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/")
-files = list.files(paste(wd,"step2_output_CoA_bundles/", sep = ""))
-# files = list.files(paste(getwd(),"/data_CoA_bundles/", sep = "")) # update for github
+wd = bundle_path 
+files = list.files(wd)
 files = files[grepl("Bundled", files)]
 files = files[!grepl("MISSING", files)] # avoid reading in repeated data 
 # currently only interested in preferred
@@ -59,9 +71,7 @@ res = list()
 for(i in 1:length(files)){
   
   # import
-  b = readRDS(paste(wd, "step2_output_CoA_bundles/", files[i], sep = ""))
-  # b = readRDS(paste(getwd(),"/data_CoA_bundles/", files[i], sep = "")) # update for GitHub
-  
+  b = readRDS(paste(wd, files[i], sep = ""))
   # and save
   res[[i]] = b
   
@@ -94,8 +104,7 @@ all_combos = names(bdata)
 ```{r import coefficent dataframes}
 
 ## set WD to dropbox where the data lives
-wd = paste("/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/")
-# wd = paste(getwd(), "/results_final/", sep = "") # update for github
+wd = hpc_results_path
 
 # First, list all result files
 files = list.files(wd, recursive = T)
@@ -349,8 +358,7 @@ table(preform$mod_completion)
 ```{r Import PPC dataframes}
 
 # First, list all result files
-files = list.files(paste(wd, "results/", sep = ""), recursive = T)
-# files = list.files(wd, recursive = T) # update for github
+files = list.files(wd, recursive = T)
 # We dont want OE files (that informed GB requirements) or counter-factuals
 files = files[!grepl("OE", files)]
 files = files[!grepl("counterfactual1|counterfactual2|counterfactual3|counterfactual4|counterfactual5|counterfactual6", files)]
@@ -458,7 +466,7 @@ missing = c()
 if(length(missing)>0){
   
   # First, list all result files
-  files = list.files(paste(wd, "results/", sep = ""), recursive = T)
+  files = list.files(wd, recursive = T)
   # We dont want OE files (that informed GB requirements) or counter-factuals
   files = files[!grepl("OE", files)]
   files = files[!grepl("counterfactual2|counterfactual3|counterfactual4|counterfactual5|counterfactual6", files)]
@@ -530,8 +538,7 @@ rm(missing, setting, ppc_res)
 ```{r Import trait data and add to preformance dataframe}
 
 #load guild data
-# guilds = read.csv(paste(wd, "data/step1_output/clean_44_species_trait_data_20240928.csv", sep = ""))
-guilds = read.csv("data_GitHub/clean_44_species_trait_data_20250306.csv") # update for github 
+guilds = read.csv(paste(import_legacy_dat_path, "clean_44_species_trait_data_20240928.csv", sep = ""))
 
 str(guilds)
 ## looks good, dietary preferences are ready to go! 
@@ -1084,9 +1091,11 @@ rm(files, i,l,sp)
 
 ```{r Import sensitivity test coefficents}
 
+## establish where the results live 
+wd = hpc_results_path
+
 # First, list all result files
-files = list.files(paste(wd, "results/", sep = ""), recursive = T)
-# files = list.files(wd, recursive = T) # update for github
+files = list.files(wd, recursive = T) 
 # We dont want OE files (that informed GB requirements)
 files = files[!grepl("OE", files)]
 

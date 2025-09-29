@@ -17,6 +17,16 @@ library(tidyverse)        ## For basic data wrangling
 # library(plyr)             ## For ddply
 library(lmerTest)         ## For meta-regressions (w/ p-values) of model coefficents
 
+### Create import/saving paths to Dropbox or GitHub 
+github = F # set to TRUE if saving to git 
+if(github){
+  import_results_path = "~/GitHub Repositories/SEA_trophic_cascades_co-abundance/results_final/step3_output_combined_results/"
+  save_fig_path = "~/GitHub Repositories/SEA_trophic_cascades_co-abundance/figures/step5_output_forest_plot/"
+}else{
+  import_results_path = "~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step3_output_combined_results/"
+  save_fig_path = "~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/figures/step5_output_forest_plot/"
+}
+
 ```
 
 ## Introduction
@@ -27,8 +37,7 @@ This RMarkdown file will be used to implement a meta-regression on the coefficie
 ## Remember, this data was collated in step3!
 
 ## Set the working directory where the data lives
-# wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step3_output_combined_results/"
-wd = paste(getwd(), "/results_final/step3_output_combined_results/", sep = "") #update for github
+wd = import_results_path 
 
 ## list all relevant files
 files = list.files(wd)
@@ -627,8 +636,7 @@ Its going here in the GitHub Repository here: `figures/step5_output_forest_plot/
 
 ```{r Save the plots!}
 # specify the working directory
-# wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/figures/step5_output_forest_plot/"
-wd = paste(getwd(), "/figures/step5_output_forest_plot/", sep = "") # update for github
+wd = save_fig_path 
 
 # Grab the date
 day<-str_sub(Sys.Date(),-2)

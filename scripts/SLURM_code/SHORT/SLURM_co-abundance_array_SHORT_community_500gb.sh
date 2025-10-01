@@ -51,4 +51,4 @@ cd $SLURM_SUBMIT_DIR
 pwd
 
 # LOAD THE R SCRIPT, SUBMIT JOB FROM /scratch/user/uqzamir/, AND SPECIFY THE ARRAY INDEX 
-srun Rscript code/HPC_co-abundance_final.R $SLURM_ARRAY_TASK_ID
+srun Rscript code/HPC_co-abundance_model_final.R $SLURM_ARRAY_TASK_ID

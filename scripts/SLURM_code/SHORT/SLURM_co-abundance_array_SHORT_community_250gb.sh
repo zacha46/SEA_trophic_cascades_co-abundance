@@ -24,7 +24,7 @@
 #SBATCH --time=8:00:00
 
 # SPECIFY THE JOB ARRAY-
-#SBATCH --array=1-161
+#SBATCH --array=1-159
 
 # SPECIFY THE JOB NAME
 #SBATCH --job-name=comm_250

@@ -6,7 +6,7 @@
 ## But because models are too large to save ALL of them, 
 # this script will extract only the relevant dataframes. 
 
-## Submitted to HPC on September 29th, 2025
+## Submitted to HPC on October 1st, 2025
 # Zachary Amir, z.amir@uq.edu.au
 
 ####### Set up #####
@@ -303,10 +303,10 @@ params = c('a0', 'a1', 'a2', 'a3', 'a4', 'a5',    # Abundance parameters
            'var.b3','var.b4','b3', 'b4',          # source random effects
            "tau.p","eps.p.dom","eps.p.sub",       # OD params
            "fit.sub", "fit.rep.sub",              # Chi2 stat for sub, real then simulated
-           "fit.dom", "fit.rep.dom"               # Chi2 stat for dom, real then simulated
+           "fit.dom", "fit.rep.dom",              # Chi2 stat for dom, real then simulated
            # "E.dom", "E.rep.dom",
            # "E.sub", "E.rep.sub",
-           # "N.dom", "N.sub"                     # NOT monitoring abundance per site to save RAM on LONG mods. 
+           "N.dom", "N.sub"                     # NOT monitoring abundance per site to save RAM on LONG mods.
            )                         
 
 # # Generate valid initial value for truncated version of a5
@@ -434,7 +434,7 @@ day<-substr(Sys.Date(),9, 10)
 month<-substr(Sys.Date(),6,7)
 year<-substr(Sys.Date(),1,4)
 
-path = paste(paste(paste(paste("results/coefficent_dataframes/", slurm, "_", setting, "_", "_co-abundance_coefficents_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
+path = paste(paste(paste(paste("results/coefficent_dataframes/", slurm, "_", setting, "_", "co-abundance_coefficents_", n, "_", year,sep=""),month,sep=""),day,sep=""),".csv",sep="")
 write.csv(s, path, row.names = F)
 
 
@@ -499,6 +499,8 @@ bdata = dat[[slurm]]
 covars = read.csv(paste("data/UMF/",
                       list.files("data/UMF/")[grepl("clean_metadata", list.files("data/UMF/"))],
                       sep = ""))
+# # local testing
+# covars = read.csv("~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step1_output/clean_metadata_to_make_UMFs_5km_scale_20250306.csv")
 
 ## Thin covars to match sampling units in species matrixs
 covars = covars[covars$cell_id %in% rownames(bdata$y.dom),]

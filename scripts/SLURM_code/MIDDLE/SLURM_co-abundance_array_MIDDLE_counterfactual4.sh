@@ -1,5 +1,4 @@
-#!/bin/bash -l
-
+#!/bin/bash
 # SPECIFY YOUR GROUP NAME
 #SBATCH --account=a_luskin_ecl
 
@@ -8,26 +7,26 @@
 # Select 1 node per job
 #SBATCH --nodes=1
 
-# Select 1 task per CPU (b/c R is not MPI)
+# Select 1 task per node (b/c R is not MPI)
 #SBATCH --ntasks=1
 
-# Select 3 CPUS (aka threads) per node (one per MCMC chain)
-#SBATCH --cpus-per-task=3
+# Select 4 CPUS per node (one per MCMC chain)
+#SBATCH --cpus-per-task=4
 
-# Select 500,000 MB (500 GB) of memory per node 
-#SBATCH --mem=500000
+# Select 100,000 MB (100 GB) of memory per node 
+#SBATCH --mem=100000
 
 # Ensure we are in the general queue, not AI, debug, or GPU
 #SBATCH --partition=general
 
-# Select maximum hours (2 weeks, 336 hours) (h:m:s format) of walltime for long models 
-#SBATCH --time=336:00:00
+# Select 100 hours (h:m:s format) of walltime for mid-setting models 
+#SBATCH --time=100:00:00
 
 # SPECIFY THE JOB ARRAY-
-#SBATCH --array=1-33
+#SBATCH --array=1-64
 
 # SPECIFY THE JOB NAME
-#SBATCH --job-name=comm_500
+#SBATCH --job-name=CF4
 
 # SPECIFY .err AND .out FILE LOCATIONS
 #SBATCH --output=OE/output/slurm-%A_%a.out
@@ -40,15 +39,15 @@ if [ $? -ne 0 ]; then
   exit 3
 fi
 
-# SET THE 'setting', 'pref' & 'gb' VARIABLES THAT WILL BE LOADED IN R
-export SETTING="LONG" 
-export PREF="community" 
-export GB="500GB" 
+# SET THE 'setting' VARIABLE THAT WILL BE LOADED IN R
+export SETTING="MIDDLE" 
 
+# SET THE 'counter' VARIABLE THAT WILL BE LOADED IN R
+export COUNTER="counterfactual4_isolate_FLII"
 
 # SPECIFY THE PBS WORKING DIRECTORY AND PRINT TO VERIFY
 cd $SLURM_SUBMIT_DIR
 pwd
 
 # LOAD THE R SCRIPT, SUBMIT JOB FROM /scratch/user/uqzamir/, AND SPECIFY THE ARRAY INDEX 
-srun Rscript code/HPC_co-abundance_model_new_var_comm_det.R $SLURM_ARRAY_TASK_ID
+Rscript code/HPC_co-abundance_model_counterfactuals.R $SLURM_ARRAY_TASK_ID

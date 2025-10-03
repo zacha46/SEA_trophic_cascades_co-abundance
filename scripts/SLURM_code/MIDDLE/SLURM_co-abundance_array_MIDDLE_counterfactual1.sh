@@ -11,16 +11,16 @@
 #SBATCH --ntasks=1
 
 # Select 4 CPUS per node (one per MCMC chain)
-#SBATCH --cpus-per-task=3
+#SBATCH --cpus-per-task=4
 
-# Select 300,000 MB (300 GB) of memory per node 
-#SBATCH --mem=300000
+# Select 100,000 MB (100 GB) of memory per node 
+#SBATCH --mem=100000
 
 # Ensure we are in the general queue, not AI, debug, or GPU
 #SBATCH --partition=general
 
 # Select 100 hours (h:m:s format) of walltime for mid-setting models 
-#SBATCH --time=336:00:00
+#SBATCH --time=100:00:00
 
 # SPECIFY THE JOB ARRAY-
 #SBATCH --array=1-64
@@ -40,7 +40,7 @@ if [ $? -ne 0 ]; then
 fi
 
 # SET THE 'setting' VARIABLE THAT WILL BE LOADED IN R
-export SETTING="LONG" 
+export SETTING="MIDDLE" 
 
 # SET THE 'counter' VARIABLE THAT WILL BE LOADED IN R
 export COUNTER="counterfactual1_isolate_extirpation"
@@ -50,4 +50,4 @@ cd $SLURM_SUBMIT_DIR
 pwd
 
 # LOAD THE R SCRIPT, SUBMIT JOB FROM /scratch/user/uqzamir/, AND SPECIFY THE ARRAY INDEX 
-srun Rscript code/HPC_co-abundance_model_new_var_comm_det.R $SLURM_ARRAY_TASK_ID
+Rscript code/HPC_co-abundance_model_counterfactuals.R $SLURM_ARRAY_TASK_ID

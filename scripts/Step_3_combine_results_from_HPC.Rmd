@@ -28,7 +28,6 @@ if(github){
   hpc_results_path = "~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/results/"
   save_path = "~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step3_output_combined_results/"
 }
-
 ```
 
 ## Introduction
@@ -114,15 +113,15 @@ files = files[!grepl("counterfactual1|counterfactual2|counterfactual3|counterfac
 
 ## specify the MCMC setting were interested in 
 # setting = "LONG"
-setting = "MIDDLE"
-# setting = "SHORT"
+# setting = "MIDDLE"
+setting = "SHORT"
 
 ## Specify the spatial scale we are interested in 
 scale = "5km"
 
 ## Specify the specific iteration of tests were interested in
-# options are "Jan_2024", "Sep_2024" "Oct2024", "Dec2024", "June_2025", and "July_2025"
-time = "Sep_2024"
+# options are "Jan_2024", "Sep_2024" "Oct2024", "Dec2024", "June_2025", "July_2025", and "September_2025"
+time = "September_2025"
 
 # Subset for the MCMC settings were interested in 
 files = files[grepl(setting, files)]
@@ -365,8 +364,8 @@ files = files[!grepl("counterfactual1|counterfactual2|counterfactual3|counterfac
 
 ## specify the MCMC setting were interested in 
 # setting = "LONG"
-setting = "MIDDLE"
-# setting = "SHORT"
+# setting = "MIDDLE"
+setting = "SHORT"
 
 
 # Subset for the MCMC settings were interested in 
@@ -415,9 +414,7 @@ for(i in 1:length(files)){
   }# end multiple file conditon
   
   ## read the file 
-  d = read.csv(paste(wd, "results/", file, sep = ""))
-  # d = read.csv(paste("results_final/", file, sep = "")) # update for github
-
+  d = read.csv(paste(wd, file, sep = ""))
   
   ## add the MCMC setting
   d$MCMC_setting = setting
@@ -538,7 +535,7 @@ rm(missing, setting, ppc_res)
 ```{r Import trait data and add to preformance dataframe}
 
 #load guild data
-guilds = read.csv(paste(import_legacy_dat_path, "clean_44_species_trait_data_20240928.csv", sep = ""))
+guilds = read.csv(paste(import_legacy_dat_path, "clean_44_species_trait_data_20250306.csv", sep = ""))
 
 str(guilds)
 ## looks good, dietary preferences are ready to go! 
@@ -1100,8 +1097,8 @@ files = list.files(wd, recursive = T)
 files = files[!grepl("OE", files)]
 
 ## specify the MCMC setting were interested in 
-# setting = "SHORT"
-setting = "MIDDLE"
+setting = "SHORT"
+# setting = "MIDDLE"
 # setting = "LONG" # its finally time !
 
 # Subset for the MCMC settings were interested in 
@@ -1181,9 +1178,8 @@ for(i in 1:length(files_list)){
     #               function(x) grepl(x, f)))){
       
           # import it
-    dat = read.csv(paste(wd, "results/", f, sep = ""))
-    # dat = read.csv(paste("results_final/", f, sep = "")) # update for github
-    
+    dat = read.csv(paste(wd, f, sep = ""))
+
     # add the MCMC setting
     dat$MCMC_setting = setting
 
@@ -1255,14 +1251,14 @@ rm(coeff_pref, pref_pairs)
 
 ```{r Import sensitivity test PPC values}
 # First, list all result files
-files = list.files(paste(wd, "results/", sep = ""), recursive = T)
+files = list.files(wd, recursive = T)
 # files = list.files(wd, recursive = T) # update for github
 # We dont want OE files (that informed GB requirements)
 files = files[!grepl("OE", files)]
 
 ## specify the MCMC setting were interested in 
-# setting = "SHORT"
-setting = "MIDDLE"
+setting = "SHORT"
+# setting = "MIDDLE"
 # setting = "LONG"
 
 # Subset for the MCMC settings were interested in 
@@ -1339,9 +1335,8 @@ for(i in 1:length(files_list)){
     #               function(x) grepl(x, f)))){
       
       # import it
-      dat = read.csv(paste(wd, "results/", f, sep = ""))
-      # dat = read.csv(paste("results_final/", f, sep = "")) # update for github
-      
+      dat = read.csv(paste(wd, f, sep = ""))
+
       # add the MCMC setting
       dat$MCMC_setting = setting
       
@@ -1399,7 +1394,8 @@ rm(ppc_pref)
 
 ```{r Import sensitivity data bundles}
 ## The idea is to track which models are completed vs not
-cf_data_files = list.files(paste(wd, "data/step2_output_CoA_bundles/", sep = ""), recursive = T)
+wd = bundle_path
+cf_data_files = list.files(wd, recursive = T)
 # cf_data_files = list.files("data_CoA_bundles/") # update for github 
 ## remove old files
 cf_data_files = cf_data_files[! grepl("OLD", cf_data_files)]
@@ -1413,8 +1409,7 @@ for(i in 1:length(cf_data_files)){
   # grab empty df
   df = cf_mods[0,]
   # make a path
-  path = paste(wd, "data/step2_output_CoA_bundles/", cf_data_files[i], sep = "")
-  # path = paste("data_CoA_bundles/counterfactual_testing/", cf_data_files[i], sep = "") # update for github
+  path = paste(wd, cf_data_files[i], sep = "")
   # import
   dat = readRDS(path)
   # grab the names

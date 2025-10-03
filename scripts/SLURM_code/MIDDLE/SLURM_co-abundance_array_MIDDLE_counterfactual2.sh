@@ -11,7 +11,7 @@
 #SBATCH --ntasks=1
 
 # Select 4 CPUS per node (one per MCMC chain)
-#SBATCH --cpus-per-task=3
+#SBATCH --cpus-per-task=4
 
 # Select 100,000 MB (100 GB) of memory per node 
 #SBATCH --mem=100000
@@ -23,10 +23,10 @@
 #SBATCH --time=100:00:00
 
 # SPECIFY THE JOB ARRAY-
-#SBATCH --array=1-64
+#SBATCH --array=1-40
 
 # SPECIFY THE JOB NAME
-#SBATCH --job-name=CoA-MID
+#SBATCH --job-name=CF2
 
 # SPECIFY .err AND .out FILE LOCATIONS
 #SBATCH --output=OE/output/slurm-%A_%a.out
@@ -42,13 +42,12 @@ fi
 # SET THE 'setting' VARIABLE THAT WILL BE LOADED IN R
 export SETTING="MIDDLE" 
 
-# SET THE 'pref' VARIABLE THAT WILL BE LOADED IN R
-export PREF="preferred" 
+# SET THE 'counter' VARIABLE THAT WILL BE LOADED IN R
+export COUNTER="counterfactual2_site_matching"
 
 # SPECIFY THE PBS WORKING DIRECTORY AND PRINT TO VERIFY
 cd $SLURM_SUBMIT_DIR
 pwd
 
 # LOAD THE R SCRIPT, SUBMIT JOB FROM /scratch/user/uqzamir/, AND SPECIFY THE ARRAY INDEX 
-Rscript code/HPC_co-abundance_model_new_var_comm_det.R $SLURM_ARRAY_TASK_ID
-
+Rscript code/HPC_co-abundance_model_counterfactuals.R $SLURM_ARRAY_TASK_ID

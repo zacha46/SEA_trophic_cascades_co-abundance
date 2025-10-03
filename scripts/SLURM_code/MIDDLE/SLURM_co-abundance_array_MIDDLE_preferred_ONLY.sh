@@ -23,10 +23,10 @@
 #SBATCH --time=100:00:00
 
 # SPECIFY THE JOB ARRAY-
-#SBATCH --array=1-55
+#SBATCH --array=1-64
 
 # SPECIFY THE JOB NAME
-#SBATCH --job-name=CF2
+#SBATCH --job-name=CoA-MID
 
 # SPECIFY .err AND .out FILE LOCATIONS
 #SBATCH --output=OE/output/slurm-%A_%a.out
@@ -42,12 +42,13 @@ fi
 # SET THE 'setting' VARIABLE THAT WILL BE LOADED IN R
 export SETTING="MIDDLE" 
 
-# SET THE 'counter' VARIABLE THAT WILL BE LOADED IN R
-export COUNTER="counterfactual2_site_matching"
+# SET THE 'pref' VARIABLE THAT WILL BE LOADED IN R
+export PREF="preferred" 
 
 # SPECIFY THE PBS WORKING DIRECTORY AND PRINT TO VERIFY
 cd $SLURM_SUBMIT_DIR
 pwd
 
 # LOAD THE R SCRIPT, SUBMIT JOB FROM /scratch/user/uqzamir/, AND SPECIFY THE ARRAY INDEX 
-Rscript code/HPC_co-abundance_model_counterfactuals.R $SLURM_ARRAY_TASK_ID
+Rscript code/HPC_co-abundance_model_new_var_comm_det.R $SLURM_ARRAY_TASK_ID
+

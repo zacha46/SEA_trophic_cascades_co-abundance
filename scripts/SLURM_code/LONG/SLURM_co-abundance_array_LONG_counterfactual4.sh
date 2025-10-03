@@ -11,22 +11,22 @@
 #SBATCH --ntasks=1
 
 # Select 4 CPUS per node (one per MCMC chain)
-#SBATCH --cpus-per-task=3
+#SBATCH --cpus-per-task=4
 
-# Select 50,000 MB (50 GB) of memory per node 
-#SBATCH --mem=50000
+# Select 300,000 MB (300 GB) of memory per node 
+#SBATCH --mem=300000
 
 # Ensure we are in the general queue, not AI, debug, or GPU
 #SBATCH --partition=general
 
-# Select 2 hours (h:m:s format) of walltime for mid-setting models 
-#SBATCH --time=2:00:00
+# Select 100 hours (h:m:s format) of walltime for mid-setting models 
+#SBATCH --time=336:00:00
 
 # SPECIFY THE JOB ARRAY-
-#SBATCH --array=1-30
+#SBATCH --array=1-64
 
 # SPECIFY THE JOB NAME
-#SBATCH --job-name=CoA-SIM
+#SBATCH --job-name=CF4
 
 # SPECIFY .err AND .out FILE LOCATIONS
 #SBATCH --output=OE/output/slurm-%A_%a.out
@@ -40,11 +40,14 @@ if [ $? -ne 0 ]; then
 fi
 
 # SET THE 'setting' VARIABLE THAT WILL BE LOADED IN R
-export SETTING="MIDDLE" 
+export SETTING="LONG" 
+
+# SET THE 'counter' VARIABLE THAT WILL BE LOADED IN R
+export COUNTER="counterfactual4_isolate_FLII"
 
 # SPECIFY THE PBS WORKING DIRECTORY AND PRINT TO VERIFY
 cd $SLURM_SUBMIT_DIR
 pwd
 
 # LOAD THE R SCRIPT, SUBMIT JOB FROM /scratch/user/uqzamir/, AND SPECIFY THE ARRAY INDEX 
-Rscript code/HPC_co-abundance_model_simulations.R $SLURM_ARRAY_TASK_ID
+srun Rscript code/HPC_co-abundance_model_counterfactuals.R $SLURM_ARRAY_TASK_ID

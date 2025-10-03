@@ -11,8 +11,8 @@
 # Select 1 task per CPU (b/c R is not MPI)
 #SBATCH --ntasks=1
 
-# Select 3 CPUS (aka threads) per node (one per MCMC chain)
-#SBATCH --cpus-per-task=3
+# Select 4 CPUS (aka threads) per node (one per MCMC chain)
+#SBATCH --cpus-per-task=4
 
 # Select 100,000 MB (100 GB) of memory per node 
 #SBATCH --mem=100000
@@ -24,7 +24,7 @@
 #SBATCH --time=100:00:00
 
 # SPECIFY THE JOB ARRAY-
-#SBATCH --array=1-55
+#SBATCH --array=1-53
 
 # SPECIFY THE JOB NAME
 #SBATCH --job-name=pref_250
@@ -51,4 +51,4 @@ cd $SLURM_SUBMIT_DIR
 pwd
 
 # LOAD THE R SCRIPT, SUBMIT JOB FROM /scratch/user/uqzamir/, AND SPECIFY THE ARRAY INDEX 
-srun Rscript code/HPC_co-abundance_model_new_var_comm_det.R $SLURM_ARRAY_TASK_ID
+srun Rscript code/HPC_co-abundance_model_final.R $SLURM_ARRAY_TASK_ID

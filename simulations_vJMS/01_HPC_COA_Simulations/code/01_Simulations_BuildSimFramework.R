@@ -526,7 +526,7 @@ SIV.sweep$bHFP.sub <- ifelse(SIV.sweep$SIV <= 0, -0.1, -0.4)
 SIV.sweep$bELEV.sub<- ifelse(SIV.sweep$SIV <= 0, -0.2, 0.2)
 
 # Create the number of replicates, given we have stochasticity
-simulation.replicates <- data.frame("replicate" = 1:10)
+simulation.replicates <- data.frame("replicate" = 1:100)
 
 # Expand the grid with replicates and the SIV
 simulation.parameter.grid <- merge(merge(scenario.df, SIV.sweep), simulation.replicates) 
@@ -536,7 +536,7 @@ simulation.parameter.grid <- merge(merge(scenario.df, SIV.sweep), simulation.rep
 simulation.parameter.grid$index <- 1:nrow(simulation.parameter.grid)
 
 # Save file for downstream analyses
-saveRDS(simulation.parameter.grid, "simulations_vJMS/simulation_parameter_grid.rds")
+saveRDS(simulation.parameter.grid, "data/simulation_parameter_grid.rds")
 
 
 # keep environment clean
@@ -580,7 +580,7 @@ names(simData) <- seq_len(nrow(simulation.parameter.grid))
 # Write and Save output files for HPC analysis.
 
 # Save file for downstream analyses
-saveRDS(simData,  "simulations_vJMS/sim_data_list.rds")
+saveRDS(simData,  "data/sim_data_list.rds")
 
 # END
 

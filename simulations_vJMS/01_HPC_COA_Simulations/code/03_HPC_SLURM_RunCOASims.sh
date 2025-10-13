@@ -20,10 +20,10 @@
 #SBATCH --partition=general
 
 # Select 4 hours (h:m:s format) of walltime for small mods; we should not need that long
-#SBATCH --time=8:00:00
+#SBATCH --time=20:00:00
 
 # SPECIFY THE JOB ARRAY-
-#SBATCH --array=1-231
+#SBATCH --array=1-924
 
 # SPECIFY THE JOB NAME
 #SBATCH --job-name=COASims
@@ -47,8 +47,8 @@ cd $SLURM_SUBMIT_DIR
 pwd
 
 # Compute iteration range for this array task
-start=$(( ($SLURM_ARRAY_TASK_ID - 1) * 10 + 1 ))
-end=$(( $SLURM_ARRAY_TASK_ID * 10 ))
+start=$(( ($SLURM_ARRAY_TASK_ID - 1) * 25 + 1 ))
+end=$(( $SLURM_ARRAY_TASK_ID * 25 ))
 
 echo "Running iterations $start to $end in job ID $SLURM_JOB_ID"
 

@@ -165,10 +165,21 @@ mod <- jagsUI::jags(data   = sim$data,
 
 # Params to compare
 params <- c("a0", "a1", "a2", "a3", "a5", 
-            "sigma.a6", "sigma.b3"####
+            "sigma.a6", "sigma.b3"
             )
 
 df_compare <- extract_true_and_jags(sim$true, mod, params)
+
+# extract N's for downstream comparisons
+
+# Check how many sites 
+length.N <- length(mod$q50$N.dom)
+N.df <- data.frame("parameter" = c(rep("N.dom", length.N), rep("N.sub", length.N)),
+                   "site" = c(1:length.N, 1:length.N),
+                   "true" = c(sim$true$N.dom, sim$true$N.sub),
+                   "lower" = c(mod$q2.5$N.dom, mod$q2.5$N.sub),
+                   "median" = c(mod$q50$N.dom, mod$q50$N.sub),
+                   "upper" = c(mod$q97.5$N.dom, mod$q97.5$N.sub))
 
 # PPC Extraction
 PPC.df <- data.frame("parameter" = c("p.val.dom", "p.val.sub", "c.hat.dom", "c.hat.sub"),
@@ -177,6 +188,7 @@ PPC.df <- data.frame("parameter" = c("p.val.dom", "p.val.sub", "c.hat.dom", "c.h
 
 # Bundle up all results
 output <- list('parameters' = df_compare,
+               'abundance' = N.df,
                'PPC' = PPC.df)
 
 saveRDS(output, paste0("results/simulation_output_", slurm, ".rds"))

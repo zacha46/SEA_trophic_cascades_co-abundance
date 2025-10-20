@@ -301,87 +301,134 @@ plot_coverage_grid(c("Base",
                path = path)
 dev.off()
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-scenario <- "Spatial Spillover - High"
-
-scenario_df <- collected %>% 
-  filter(scenario_name == scenario)
-
-df_all <- map2_dfr(
-  scenario_df$indices, scenario_df$SIV,
-  function(indices, siv) {
-    map_dfr(indices, function(slurm) {
-      readRDS(
-        paste0(path, "results/simulation_output_", slurm, ".rds")
-      )$abundance %>%
-        mutate(SIV = siv, replicate = slurm)
+### PPC plots
+plot_scenario_PPC <- function(scenarios, collected, path, PPC_metric) {
+  
+  # Filter only selected scenarios
+  scenario_df <- collected %>% 
+    filter(scenario_name %in% scenarios)
+  
+  # Read, tag, and combine all scenario data
+  df_all <- map_dfr(1:nrow(scenario_df), function(i) {
+    this_scenario <- scenario_df$scenario_name[i]
+    this_SIV <- scenario_df$SIV[i]
+    these_indices <- scenario_df$indices[[i]]
+    
+    map_dfr(these_indices, function(slurm) {
+      df <- readRDS(paste0(path, "results/simulation_output_", slurm, ".rds"))$PPC
+      df$scenario_name <- this_scenario
+      df$SIV <- this_SIV
+      df
     })
+  })
+  
+  # Filter for parameter of interest
+  if(PPC_metric == 'p'){
+    filtered.siv <- df_all %>%
+      filter(parameter %in% c("p.val.dom",
+                              "p.val.sub")) %>%
+      mutate(scenario_name = factor(scenario_name, levels = scenarios))
+    
+    p<-ggplot(filtered.siv, aes(x = factor(SIV), y = mean, fill = parameter)) +
+      #geom_point(position = position_dodge(width = 0.5), size = 2, alpha = 0.3) +
+      geom_boxplot()+
+      geom_hline(yintercept = 0.25, linetype = "dashed", color = "grey40") +
+      geom_hline(yintercept = 0.75, linetype = "dashed", color = "grey40") +
+      facet_wrap(~scenario_name, scales = "fixed") +
+      labs(
+        x = "SIV",
+        y = "Bayesian P-Value",
+        title = "Posterior Predictive P-values Across SIV"
+      ) +
+      scale_fill_manual(values = c("p.val.dom" = "brown", "p.val.sub" = "darkgreen"),
+                         name = "Parameter") +
+      theme_classic(base_size = 13) +
+      theme(
+        strip.background = element_rect(fill = "grey90", color = "black"),
+        strip.text = element_text(face = "bold"),
+        panel.border = element_rect(color = "black", fill = NA),
+        plot.title = element_text(hjust = 0.5),
+        plot.margin = margin(10, 10, 10, 10)
+      )
+    
   }
-)
+  
+  if(PPC_metric == 'c'){
+    filtered.siv <- df_all %>%
+      filter(parameter %in% c("c.hat.dom",
+                              "c.hat.sub")) %>%
+      mutate(scenario_name = factor(scenario_name, levels = scenarios))
+  
+  
+  p<-ggplot(filtered.siv, aes(x = factor(SIV), y = mean, fill = parameter)) +
+    #geom_point(position = position_dodge(width = 0.5), size = 2, alpha = 0.3) +
+    geom_boxplot()+
+    geom_hline(yintercept = 0.8, linetype = "dashed", color = "grey40") +
+    geom_hline(yintercept = 1.2, linetype = "dashed", color = "grey40") +
+    facet_wrap(~scenario_name, scales = "fixed") +
+    labs(
+      x = "SIV",
+      y = "Bayesian C-hat",
+      title = "Posterior Predictive C-hat Across SIV"
+    ) +
+    scale_fill_manual(values = c("c.hat.dom" = "brown", "c.hat.sub" = "darkgreen"),
+                       name = "Parameter") +
+    theme_classic(base_size = 13) +
+    theme(
+      strip.background = element_rect(fill = "grey90", color = "black"),
+      strip.text = element_text(face = "bold"),
+      panel.border = element_rect(color = "black", fill = NA),
+      plot.title = element_text(hjust = 0.5),
+      plot.margin = margin(10, 10, 10, 10)
+    )
+  
+  }
+  p
+}
 
-coverage_df <- df_all %>%
-  mutate(covered = true >= lower & true <= upper) %>%
-  group_by(parameter, SIV, site) %>%
-  summarise(coverage = mean(covered), .groups = "drop")
-
-coverage_site <- coverage_df %>%
-  group_by(parameter, site) %>%
-  summarise(
-    coverage_prop = mean(coverage),  # averaged over SIV & replicates
-    .groups = "drop"
-  )
-
-ggplot(coverage_site, aes(x = factor(site), y = coverage_prop)) +
-  geom_point(alpha = 0.6, color = "steelblue", size = 2) +
-  geom_hline(yintercept = 0.95, linetype = "dashed", color = "grey40") +
-  facet_wrap(~parameter, ncol = 1, scales = "free_y") +
-  labs(y = "Coverage proportion", x = "Site") +
-  theme_classic(base_size = 13) +
-  theme(panel.grid.minor = element_blank()) +
-  ylim(0.5, 1)
-
-
-
-sim_data_list <- readRDS(paste0(path, "data/sim_data_list.rds"))[collected$indices[[98]]]
-
-
-
-
-
-
-
-
-nrmse_site <- df_all %>%
-  group_by(parameter, site) %>%
-  summarise(
-    nrmse = sqrt(mean((median - true)^2)) / mean(true, na.rm=TRUE),
-    .groups = "drop"
-  )
-
-ggplot(nrmse_site, aes(x = factor(site), y = nrmse, fill = parameter)) +
-  geom_col(alpha = 0.8, position = "dodge") +
-  facet_wrap(~parameter, ncol = 1, scales = "free_y") +
-  labs(y = "NRMSE", x = "Site") +
-  theme_classic(base_size = 13) +
-  theme(panel.grid.minor = element_blank(),
-        legend.position = "none")
+plot_scenario_PPC(c("Base",
+                    "Unmeasured Variation - Low","Unmeasured Variation - High",
+                    "State Process Overdispersion - Low","State Process Overdispersion - High",
+                    "Unmeasured Spatial Covariate - Low","Unmeasured Spatial Covariate - High",
+                    "Double Counting - Low","Double Counting - High",
+                    "Spatial Spillover - Low",
+                    "Spatial Spillover - High"), 
+                  collected,
+                  path,
+                  PPC_metric = 'p')
 
 
+# Plotting P-values
 
+#### P-values
+scen.iterate <- c("Base",
+  "Unmeasured Variation - Low","Unmeasured Variation - High",
+  "State Process Overdispersion - Low","State Process Overdispersion - High",
+  "Unmeasured Spatial Covariate - Low","Unmeasured Spatial Covariate - High",
+  "Double Counting - Low","Double Counting - High",
+  "Spatial Spillover - Low",
+  "Spatial Spillover - High")
 
+for(i in scen.iterate){
+  pdf(paste0("/Users/sassen/Dropbox/Co-abundance Simulations Project/Figures/PPC/P_Values/",i,".pdf"),
+      height = 15, width = 12)
+  print(plot_scenario_PPC(c(i), 
+                    collected,
+                    path,
+                    PPC_metric = 'p'))
+  dev.off()
+}
 
+# C-hats
 
+for(i in scen.iterate){
+  pdf(paste0("/Users/sassen/Dropbox/Co-abundance Simulations Project/Figures/PPC/C_Hat/",i,".pdf"),
+      height = 15, width = 12)
+  print(plot_scenario_PPC(c(i), 
+                          collected,
+                          path,
+                          PPC_metric = 'c'))
+  dev.off()
+}
 
+### END

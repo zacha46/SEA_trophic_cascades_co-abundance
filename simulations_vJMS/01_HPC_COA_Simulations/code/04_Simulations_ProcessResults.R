@@ -3,6 +3,7 @@
 # packages
 library(tidyverse)
 library(patchwork)
+library(cowplot)
 
 # set path (change to dropbox)
 path <- "/Users/sassen/Desktop/01_HPC_COA_Simulations/"
@@ -92,8 +93,6 @@ plot_scenario <- function(scenario, collected) {
     ylim(min(min(coverage_site$coverage_prop)-0.05,.5), 1)
   
   p1/p2
-  
-  
   
 }
 
@@ -431,4 +430,306 @@ for(i in scen.iterate){
   dev.off()
 }
 
+
+### Final task - a table neatly summarising our scenarios
+
+# grab it from the design grid, just first 11
+# be mindful that SIVs and covariates swap
+
+simulation_parameter_grid[1:11,]
+
+output_scenario_table <- data.frame(
+  'Scenario' = c("Unmeasured Variation",
+                 "State Process Overdispersion", "Unmeasured Spatial Covariate",
+                 "Double Counting", "Spatial Spillover", "Spatial Spillover"),
+  'Parameters' = c('Unmeasured SD',
+                            'Theta (Overdispersion)', 'Spatial Covariate Beta (Slope)',
+                            'Double Counting Rate', 'Individual Spillover Rate','Population Fraction Exposed'),
+  'Parameter_Value_Low' = c(0.2, 2, 0.5, 0.2, 0.2, 0.15),
+  'Parameter_Value_High' = c(0.4, 1.5, 1.5, 0.5, 0.9, 0.15)
+  
+)
+
+simulation_parameter_grid[1:11,] |>
+  select(scenario_name, SIV) -> temp
+  
+
+result_summary_table <- rbind(temp, transform(temp, SIV = 1))
+
+
+rm(temp)
+
 ### END
+
+### The SIV Comparison plot, showing the passing or failing of counterfactuals
+scenarios <- c("Base",
+               "Unmeasured Variation - Low","Unmeasured Variation - High",
+               "State Process Overdispersion - Low","State Process Overdispersion - High",
+               "Unmeasured Spatial Covariate - Low","Unmeasured Spatial Covariate - High",
+               "Double Counting - Low","Double Counting - High",
+               "Spatial Spillover - Low",
+               "Spatial Spillover - High")
+
+plot.all.counter.factuals <- function(scenarios, collected){
+  # Filter only selected scenarios
+  scenario_df <- collected %>% 
+    filter(scenario_name %in% scenarios)
+  
+  # Read, tag, and combine all scenario data
+  df_all <- map_dfr(1:nrow(scenario_df), function(i) {
+    this_scenario <- scenario_df$scenario_name[i]
+    these_indices <- scenario_df$indices[[i]]
+    
+    map_dfr(these_indices, function(slurm) {
+      df <- readRDS(paste0(path, "results/simulation_output_", slurm, ".rds"))$parameters[9,]
+      df$scenario_name <- this_scenario
+      df
+    })
+  })
+  
+  # Read, tag, and combine all scenario data
+  df_all.ppc <- map_dfr(1:nrow(scenario_df), function(i) {
+    this_scenario <- scenario_df$scenario_name[i]
+    this_SIV <- scenario_df$SIV[i]
+    these_indices <- scenario_df$indices[[i]]
+    
+    map_dfr(these_indices, function(slurm) {
+      df <- readRDS(paste0(path, "results/simulation_output_", slurm, ".rds"))$PPC
+      df$scenario_name <- this_scenario
+      df$SIV <- this_SIV
+      df
+    })
+  })
+  
+  ppc.df <- df_all.ppc |>
+    mutate(replicate = as.integer(gl(nrow(df_all.ppc) / 4, 4))) |>
+    select(replicate, SIV, parameter, mean)|>
+    pivot_wider(
+      names_from = parameter,
+      values_from = mean
+    )
+  
+  final.result.df <- cbind(df_all, ppc.df) |> 
+    mutate(result = ifelse(p.val.dom >= .85 | p.val.dom <= .15 | p.val.sub >= .85 | p.val.sub <= .15 | (true < 0 & median > 0) | (true > 0 & median < 0) | (upper > 0 & lower < 0 ) , 
+                           "Failed Support Criteria",
+                           "Passed Support Criteria")) 
+  
+ final.result.df$scenario_name <- factor(final.result.df$scenario_name,
+                                          levels = scenarios)
+  
+  
+  # Faceted plot
+  p<-ggplot(final.result.df, aes(x = true, y = median)) +
+    # Add coloured quadrants first
+    geom_rect(aes(xmin = -Inf, xmax = 0, ymin = 0, ymax = Inf),
+              fill = "grey80", alpha = 0.1) +   # top-left
+    geom_rect(aes(xmin = 0, xmax = Inf, ymin = -Inf, ymax = 0),
+              fill = "grey80", alpha = 0.1) +   # bottom-right
+    #geom_linerange(aes(ymin = lower, ymax = upper,
+    #               color = result), alpha = 0.2, size = 1.2) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+    geom_jitter(aes(color = result), size = 1, alpha = 0.8, shape = 16) +
+    geom_point(aes(y = true, color = "Truth"), shape = 18, size = 1.5) +
+    facet_wrap(~ scenario_name,nrow = 3, ncol = 4, scales = "fixed") +
+    labs(
+      x = "True SIV",
+      y = "Posterior Estimate",
+      title = "Posterior SIV Across Scenarios",
+      colour = 'Result'
+    ) + ylim(-1.5, 1.5)+   # Text annotations
+    annotate("text", x = -Inf, y = Inf, label = "SIV not valid",
+             hjust = -0.1, vjust = 2.1, size = 2.3, fontface = "bold") +
+    annotate("text", x = Inf, y = -Inf, label = "SIV not valid",
+             hjust = 1.1, vjust = -1.1, size = 2.3, fontface = "bold") +
+    theme_classic(base_size = 13) +
+    theme(
+      strip.background = element_rect(fill = "grey90", color = "black"),
+      strip.text = element_text(face = "bold"),
+      panel.border = element_rect(color = "black", fill = NA),
+      plot.title = element_text(hjust = 0.5),
+      plot.margin = margin(10, 10, 10, 10),
+      legend.position = "bottom",
+      legend.text = element_text(size = 12),
+      legend.title = element_text(size = 13, face = "bold"),
+    ) + scale_colour_manual(values =c("Failed Support Criteria" = alpha("#B0B0B0",0.8), 
+                                      "Passed Support Criteria" = alpha("#6BAE6B",0.8),
+                                      "Truth" = 'red'),
+                            guide = guide_legend(override.aes = list(size = 4)))
+  
+  print(p)
+}
+
+# Save to Dropbox
+pdf(paste0("/Users/sassen/Dropbox/Co-abundance Simulations Project/Figures/Final SIV Figures/SIV_Grid.pdf"),
+    height = 10, width = 15)
+plot.all.counter.factuals(scenarios, collected)
+dev.off()
+
+# Individuals
+for (scen in scenarios){
+  pdf(paste0("/Users/sassen/Dropbox/Co-abundance Simulations Project/Figures/Final SIV Figures/",scen,".pdf"),
+      height = 7.5, width = 12)
+  plot.all.counter.factuals(scen, collected)
+  dev.off()
+}
+
+# Additional conceptual graph, neatly showing the progression of counterfactual application
+plot.counter.factuals.conceptual <- function(scenarios, collected, type = '1'){
+  lower.y = -1
+  upper.y = 1
+  if(scenarios %in% c("Unmeasured Spatial Covariate - Low",
+                      c("Unmeasured Spatial Covariate - High"))){
+    lower.y = -2.5
+    upper.y = 2.5
+  }
+  
+  # Filter only selected scenarios
+  scenario_df <- collected %>% 
+    filter(scenario_name %in% scenarios)
+  
+  # Read, tag, and combine all scenario data
+  df_all <- map_dfr(1:nrow(scenario_df), function(i) {
+    this_scenario <- scenario_df$scenario_name[i]
+    these_indices <- scenario_df$indices[[i]]
+    
+    map_dfr(these_indices, function(slurm) {
+      df <- readRDS(paste0(path, "results/simulation_output_", slurm, ".rds"))$parameters[9,]
+      df$scenario_name <- this_scenario
+      df
+    })
+  })
+  
+  # Read, tag, and combine all scenario data
+  df_all.ppc <- map_dfr(1:nrow(scenario_df), function(i) {
+    this_scenario <- scenario_df$scenario_name[i]
+    this_SIV <- scenario_df$SIV[i]
+    these_indices <- scenario_df$indices[[i]]
+    
+    map_dfr(these_indices, function(slurm) {
+      df <- readRDS(paste0(path, "results/simulation_output_", slurm, ".rds"))$PPC
+      df$scenario_name <- this_scenario
+      df$SIV <- this_SIV
+      df
+    })
+  })
+  
+  ppc.df <- df_all.ppc |>
+    mutate(replicate = as.integer(gl(nrow(df_all.ppc) / 4, 4))) |>
+    select(replicate, SIV, parameter, mean)|>
+    pivot_wider(
+      names_from = parameter,
+      values_from = mean
+    )
+  
+  if(type == 'All'){
+    final.result.df <- cbind(df_all, ppc.df) |> 
+      mutate(result = ifelse(p.val.dom >= .85 | p.val.dom <= .15 | p.val.sub >= .85 | p.val.sub <= .15 | (true < 0 & median > 0) | (true > 0 & median < 0) | (upper > 0 & lower < 0 ) , 
+                             "Excluded",
+                             "Passed Support Criteria"),
+             )
+    title.name = 'Supported'
+  }
+  
+  if(type == '3'){
+    final.result.df <- cbind(df_all, ppc.df) |> 
+      mutate(result = ifelse(p.val.dom >= .85 | p.val.dom <= .15 | p.val.sub >= .85 | p.val.sub <= .15 , 
+                             "Failed Support Criteria",
+                             "Passed Support Criteria"))
+    title.name = 'Unsupported_wrong_direction'
+  }
+  
+  if(type == '2'){
+    final.result.df <- cbind(df_all, ppc.df) |> 
+      mutate(result = ifelse(p.val.dom >= .85 | p.val.dom <= .15 | p.val.sub >= .85 | p.val.sub <= .15, "Excluded", 
+                             ifelse(
+                             (upper > 0 & lower < 0 ) , 
+                             "Failed Support Criteria",
+                             "Passed Support Criteria")))
+    title.name = 'Unsupported_unclear_SIV'
+  }
+
+  if(type == '1'){
+    final.result.df <- cbind(df_all, ppc.df) |> 
+      mutate(result = ifelse(p.val.dom >= .85 | p.val.dom <= .15 | p.val.sub >= .85 | p.val.sub <= .15 | upper > 0 & lower < 0, "Excluded", 
+                             ifelse(
+                               ((true < 0 & median > 0) | (true > 0 & median < 0) ) , 
+                               "Failed Support Criteria",
+                               "Passed Support Criteria")))
+    title.name = 'Unsupported_wrong_direction'
+  }
+  
+  final.result.df$scenario_name <- factor(final.result.df$scenario_name,
+                                          levels = scenarios)
+  
+  
+  # Faceted plot
+  p1<- ggplot(final.result.df, aes(x = true, y = median)) +
+    # Add coloured quadrants first
+    geom_rect(aes(xmin = -Inf, xmax = 0, ymin = 0, ymax = Inf),
+              fill ="grey80", alpha = ifelse(type == '1', 0.1, 0)) +   # top-left
+    geom_rect(aes(xmin = 0, xmax = Inf, ymin = -Inf, ymax = 0),
+              fill ="grey80", alpha = ifelse(type == '1', 0.1, 0)) +   # bottom-right
+    #geom_linerange(aes(ymin = lower, ymax = upper,
+    #               color = result), alpha = 0.2, size = 1.2) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
+    geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
+    geom_jitter(aes(color = result), size = 1, shape = 16) +
+    geom_point(aes(y = true, color = "Truth"), shape = 18, size = 1.5) +
+    #facet_wrap(~ scenario_name,nrow = 3, ncol = 4, scales = "fixed") +
+    labs(
+      x = "True SIV",
+      y = "Posterior Estimate",
+      title = title.name,
+      colour = 'Result'
+    ) + ylim(lower.y, upper.y)+   # Text annotations
+    annotate("text", x = -Inf, y = Inf, label = ifelse(type == '1',"SIV not valid", ""),
+             hjust = -0.1, vjust = 2.1, size = 2.3, fontface = "bold") +
+    annotate("text", x = Inf, y = -Inf, label = ifelse(type == '1',"SIV not valid", ""),
+             hjust = 1.1, vjust = -1.1, size = 2.3, fontface = "bold") +
+    theme_classic(base_size = 13) +
+    theme(
+      strip.background = element_rect(fill = "grey90", color = "black"),
+      strip.text = element_text(face = "bold"),
+      panel.border = element_rect(color = "black", fill = NA),
+      plot.title = element_text(hjust = 0.5),
+      plot.margin = margin(10, 10, 10, 10),
+      legend.position = "bottom",
+      legend.text = element_text(size = 12),
+      legend.title = element_text(size = 13, face = "bold"),
+    ) + scale_colour_manual(values =c('Excluded' = rgb(1, 0, 0, alpha = 0),
+                                      "Failed Support Criteria" = alpha("#B0B0B0",0.8), 
+                                      "Passed Support Criteria" = alpha("#6BAE6B",0.8),
+                                      "Truth" = 'red'),
+                            guide = guide_legend(override.aes = list(size = 4)))
+  return(p1)
+}
+
+for (scen in scenarios){
+  # Plot all scenarios
+  p_U3 <- plot.counter.factuals.conceptual(scenarios = scen, collected, type = '3') + theme(legend.position = "none") + theme(plot.margin = margin(5, 0.3, 5, 2))
+  p_U2 <- plot.counter.factuals.conceptual(scenarios= scen, collected, type = '2') + theme(axis.title.y = element_blank())+ theme(legend.position = "none") + theme(plot.margin = margin(5,  0.3, 5,  0.3))
+  p_U1 <- plot.counter.factuals.conceptual(scenarios= scen, collected, type = '1') + theme(axis.title.y = element_blank())+ theme(legend.position = "none") + theme(plot.margin = margin(5,  0.3, 5,  0.3))
+  p_S <- plot.counter.factuals.conceptual(scenarios= scen, collected, type = 'All') + theme(axis.title.y = element_blank())+ theme(legend.position = "none") + theme(plot.margin = margin(5, 2, 5,  0.3))
+  
+  legend <- get_legend(
+    p_U3 + theme(legend.position = "bottom",
+                 legend.box.margin = margin(0,0,0,0))
+  )
+  combined <- plot_grid(
+    p_U3, p_U2, p_U1, p_S,
+    nrow = 1, align = "v", axis = "l"
+  )
+  final_plot <- plot_grid(
+    combined, legend,
+    ncol = 1, rel_heights = c(1, 0.1)  # 0.1 = space for legend
+  )
+  
+  pdf(paste0("/Users/sassen/Dropbox/Co-abundance Simulations Project/Figures/SIV Counterfactuals/",scen,".pdf"),
+      height = 5, width = 15)
+  print(final_plot)
+  dev.off()
+}
+# END
+
+

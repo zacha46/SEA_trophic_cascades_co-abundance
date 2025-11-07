@@ -21,7 +21,7 @@ rm(list = ls())
 ## load libraries
 library(tidyverse)  # For basic data wrangling
 library(plyr)       # For data summaries
-library(traitdata)  # For species trait data (e.g. body mass, trophic guild, home ranges)
+# library(traitdata)  # For species trait data (e.g. body mass, trophic guild, home ranges)
 
 ### Create a saving path to Dropbox or GitHub 
 github = F # set to TRUE if saving to git 

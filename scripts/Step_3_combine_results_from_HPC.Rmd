@@ -112,16 +112,16 @@ files = files[!grepl("OE", files)]
 files = files[!grepl("counterfactual1|counterfactual2|counterfactual3|counterfactual4|counterfactual5|counterfactual6|counterfactual7", files)]
 
 ## specify the MCMC setting were interested in 
-# setting = "LONG"
+setting = "LONG"
 # setting = "MIDDLE"
-setting = "SHORT"
+# setting = "SHORT"
 
 ## Specify the spatial scale we are interested in 
 scale = "5km"
 
 ## Specify the specific iteration of tests were interested in
-# options are "Jan_2024", "Sep_2024" "Oct2024", "Dec2024", "June_2025", "July_2025", and "September_2025"
-time = "September_2025"
+# options are "Jan_2024", "Sep_2024" "Oct2024", "Dec2024", "June_2025", "July_2025", "September_2025", and "Oct2025"
+time = "Dec2024"
 
 # Subset for the MCMC settings were interested in 
 files = files[grepl(setting, files)]
@@ -363,9 +363,9 @@ files = files[!grepl("OE", files)]
 files = files[!grepl("counterfactual1|counterfactual2|counterfactual3|counterfactual4|counterfactual5|counterfactual6", files)]
 
 ## specify the MCMC setting were interested in 
-# setting = "LONG"
+setting = "LONG"
 # setting = "MIDDLE"
-setting = "SHORT"
+# setting = "SHORT"
 
 
 # Subset for the MCMC settings were interested in 
@@ -1097,9 +1097,9 @@ files = list.files(wd, recursive = T)
 files = files[!grepl("OE", files)]
 
 ## specify the MCMC setting were interested in 
-setting = "SHORT"
+# setting = "SHORT"
 # setting = "MIDDLE"
-# setting = "LONG" # its finally time !
+setting = "LONG" # its finally time !
 
 # Subset for the MCMC settings were interested in 
 files = files[grepl(setting, files)]
@@ -1257,12 +1257,14 @@ files = list.files(wd, recursive = T)
 files = files[!grepl("OE", files)]
 
 ## specify the MCMC setting were interested in 
-setting = "SHORT"
+# setting = "SHORT"
 # setting = "MIDDLE"
-# setting = "LONG"
+setting = "LONG"
 
 # Subset for the MCMC settings were interested in 
 files = files[grepl(setting, files)]
+# and the correct time frame
+files = files[grepl(time, files)]
 
 # Grab all coefficent dataframe files
 files = files[grepl("/counterfactual_PPC_dataframes/", files)]
@@ -1422,7 +1424,7 @@ for(i in 1:length(cf_data_files)){
   if(grepl("counterfactual3", cf_data_files[i])){ df$counter_factual_test = "isolate_altitude" }
   if(grepl("counterfactual4", cf_data_files[i])){ df$counter_factual_test = "isolate_FLII" }
   if(grepl("counterfactual5", cf_data_files[i])){ df$counter_factual_test = "isolate_HFP" }
-  if(grepl("counterfactual6", cf_data_files[i])){ df$counter_factual_test = "remove_community_detections" }
+  # if(grepl("counterfactual6", cf_data_files[i])){ df$counter_factual_test = "remove_community_detections" }
   # and rbind with final res
   cf_mods = rbind(cf_mods, df)
 }
@@ -1578,7 +1580,6 @@ agree_comm = c(a,b)
 rm(a,b)
 
 ```
-
 
 ```{r split out sensitivity tests on a per species pair basis}
 

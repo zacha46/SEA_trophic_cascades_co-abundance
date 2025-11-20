@@ -1136,6 +1136,9 @@ all_plots$unsup_bottom_up_siv_hists
 
 ```{r Import counterfactual results}
 
+### Set the working directory where the data lives
+wd = import_results_path
+
 # First, list the relevant files
 files = list.files(wd)
 # only want counterfactuals
@@ -1147,12 +1150,22 @@ files = files[!grepl("supported_preferred_models", files)]
 
 ## import the data! 
 ppc_values_cf = read.csv(paste(wd, files, sep = ""))
-rm(files)
+
+#
+##
+### Also import the newly split results per sp pair
+
+# grab new files
+files = list.files(wd)
+# only want counterfactuals
+files = files[grepl("counterfactual", files)]
+s_file = files[grepl("species-pair", files)]
+# import it 
+preform_sp_cf = read.csv(paste(wd, s_file, sep = ""))
 
 ```
 
-```{r Visualize counter-factual histograms into one figure}
-
+```{r Prep plotting data per model CF}
 ## goal here is to recreate the SIV histogram, but facet-wrap it for the 4 different tests
 ## but make sure there are no crazy outliers (esp b/c of MIDDLE testing)
 summary(ppc_values_cf$Interaction_Estimate) # there are a few big negative values! 
@@ -1183,38 +1196,143 @@ ppc_values_cf$counter_factual_test = factor(ppc_values_cf$counter_factual_test,
                                                        "isolate_extirpations",
                                                        "isolate_altitude", "isolate_FLII",
                                                        "isolate_HFP"))
+```
 
+```{r Prep plotting data per species pair CF}
+#
+##
+### Repeat the process, but this time for ppc_values_cf 
+
+## first copy over preform to a new data frame 
+plot_dat_sp_cf = preform_sp_cf
+# and determine the relevant species
+plot_dat_sp_cf$rel_species[grepl("Panthera_tigris", plot_dat_sp_cf$pair_id)] = "Panthera_tigris"
+plot_dat_sp_cf$rel_species[grepl("Panthera_pardus", plot_dat_sp_cf$pair_id)] = "Panthera_pardus"
+plot_dat_sp_cf$rel_species[grepl("Cuon_alpinus", plot_dat_sp_cf$pair_id)] = "Cuon_alpinus"
+plot_dat_sp_cf$rel_species[grepl("Neofelis_genus", plot_dat_sp_cf$pair_id)] = "Neofelis_genus"
+
+## set order manually b/c order is silly on graph
+plot_dat_sp_cf$rel_species = factor(plot_dat_sp_cf$rel_species, levels = c("Neofelis_genus","Cuon_alpinus",
+                                                               "Panthera_pardus","Panthera_tigris"))
+table(plot_dat_sp_cf$rel_species)
+
+## create a new column for simple groupings: top-down, bottom-up and unsupported
+plot_dat_sp_cf$support_simple = plot_dat_sp_cf$direction
+plot_dat_sp_cf$support_simple_conserv = plot_dat_sp_cf$direction
+
+### edit support_simple to allow for unsupported mods
+plot_dat_sp_cf$support_simple[grepl("unsupported", plot_dat_sp_cf$support)] = "unsupported"
+table(plot_dat_sp_cf$support_simple)
+
+### and do the same for conservative values
+plot_dat_sp_cf$support_simple_conserv[grepl("unsupported", plot_dat_sp_cf$support_conserv)] = "unsupported"
+table(plot_dat_sp_cf$support_simple_conserv) # same as above, this is redundant! 
+
+## remove NA values from plot_dat_sp_cf if present --> from non-completed mods
+if(any(is.na(plot_dat_sp_cf$Interaction_Estimate))){
+  plot_dat_sp_cf = plot_dat_sp_cf[! is.na(plot_dat_sp_cf$Interaction_Estimate), ]
+}
+
+## Check if there are extreme species interaction values (> |2|)
+summary(plot_dat_sp_cf$Interaction_Estimate)  # some large values overall
+
+## Check pref models
+summary(plot_dat_sp_cf$Interaction_Estimate[plot_dat_sp_cf$preference == "preferred"]) # narrow range here, all good! 
+
+## thin results to only be the same species pairs as the models dataframe 
+plot_dat_sp_cf = plot_dat_sp_cf[plot_dat_sp_cf$preference == "preferred", ]
+
+## set factors so unsupported is in the back 
+plot_dat_sp_cf$support_simple = factor(plot_dat_sp_cf$support_simple, levels = c("top-down", "bottom-up", "unsupported"))
+plot_dat_sp_cf$support_simple_conserv = factor(plot_dat_sp_cf$support_simple_conserv, levels = c("top-down", "bottom-up", "unsupported"))
+
+
+## make the support column more informative
+plot_dat_sp_cf$support[plot_dat_sp_cf$support == "Supported" & plot_dat_sp_cf$direction == "top-down"] = "top-down"
+#plot_dat_sp_cf$support_conserv[plot_dat_sp_cf$support_conserv == "Supported" & plot_dat_sp_cf$direction == "top-down"] = "top-down"
+plot_dat_sp_cf$support[plot_dat_sp_cf$support == "Supported" & plot_dat_sp_cf$direction == "bottom-up"] = "bottom-up"
+#plot_dat_sp_cf$support_conserv[plot_dat_sp_cf$support_conserv == "Supported" & plot_dat_sp_cf$direction == "bottom-up"] = "bottom-up"
+## Just to make code work, copy supports
+plot_dat_sp_cf$support_conserv = plot_dat_sp_cf$support
+
+## make letters all lowercase
+plot_dat_sp_cf$support= tolower(plot_dat_sp_cf$support)
+plot_dat_sp_cf$support_conserv = tolower(plot_dat_sp_cf$support_conserv)
+
+## and set factor level 
+plot_dat_sp_cf$support = factor(plot_dat_sp_cf$support, levels = c("top-down", "bottom-up", "unsupported"))
+plot_dat_sp_cf$support_conserv = factor(plot_dat_sp_cf$support_conserv, levels = c("top-down", "bottom-up", "unsupported"))
+
+### Verify plot_dat_sp_cf has the correct info 
+table(plot_dat_sp_cf$rel_species[plot_dat_sp_cf$direction == "top-down"])
+table(plot_dat_sp_cf$rel_species[plot_dat_sp_cf$direction == "bottom-up"]) # all critters accounted for 
+## double check support
+table(plot_dat_sp_cf$support[plot_dat_sp_cf$direction == "top-down"])
+table(plot_dat_sp_cf$support_conserv[plot_dat_sp_cf$direction == "top-down"])
+table(plot_dat_sp_cf$support[plot_dat_sp_cf$direction == "bottom-up"])
+table(plot_dat_sp_cf$support_conserv[plot_dat_sp_cf$direction == "bottom-up"]) # All good!
+
+## Set the facet wrap factor levels for nice ordering
+plot_dat_sp_cf$counter_factual_test = factor(plot_dat_sp_cf$counter_factual_test,
+                                             levels = c("original_test", "site_matching_ThaiEFC",
+                                                        #"isolate_abundance_declines",
+                                                        # "remove_community_detections",
+                                                        "isolate_extirpations",
+                                                        "isolate_altitude", "isolate_FLII",
+                                                        "isolate_HFP"))
+```
+
+```{r Decide to use models or sp pairs}
+## Make this a conditional statement so we dont have to change the code below! 
+if(plot_type == "species-pairs"){
+  plot_dat_cf = plot_dat_sp_cf
+  hist_y = "Number of species pairs"
+} 
+
+if(plot_type == "models"){
+  plot_dat_cf = ppc_values_cf
+  hist_y = "Number of pairwise co-abundance models"
+}
+```
+
+```{r Visualize counter-factual histograms into one figure}
 ## Add info about # and percent in each category 
-sum_table_cf = ddply(ppc_values_cf, .(counter_factual_test, support_simple), summarize,
+if(plot_type == "species-pairs"){
+  sum_table_cf = ddply(plot_dat_cf, .(counter_factual_test, support_simple), summarize,
+                  num_lvl = length(pair_id))
+}
+if(plot_type == "models"){
+  sum_table_cf = ddply(plot_dat_cf, .(counter_factual_test, support_simple), summarize,
                   num_lvl = length(Species_Pair))
+}
 ## Calculate percentage per test 
-sum_table_cf$percent[sum_table_cf$counter_factual_test == "original_test"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "original_test"] /  length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "original_test"]) * 100, 1)
+sum_table_cf$percent[sum_table_cf$counter_factual_test == "original_test"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "original_test"] /  length(plot_dat_cf$counter_factual_test[plot_dat_cf$counter_factual_test == "original_test"]) * 100, 1)
 
-sum_table_cf$percent[sum_table_cf$counter_factual_test == "site_matching_ThaiEFC"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "site_matching_ThaiEFC"] / length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "site_matching_ThaiEFC"]) * 100, 1)
+sum_table_cf$percent[sum_table_cf$counter_factual_test == "site_matching_ThaiEFC"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "site_matching_ThaiEFC"] / length(plot_dat_cf$counter_factual_test[plot_dat_cf$counter_factual_test == "site_matching_ThaiEFC"]) * 100, 1)
 
-# sum_table_cf$percent[sum_table_cf$counter_factual_test == "isolate_abundance_declines"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "isolate_abundance_declines"] / length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "isolate_abundance_declines"]) * 100, 1)
+# sum_table_cf$percent[sum_table_cf$counter_factual_test == "isolate_abundance_declines"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "isolate_abundance_declines"] / length(plot_dat_cf$counter_factual_test[plot_dat_cf$counter_factual_test == "isolate_abundance_declines"]) * 100, 1)
 
-# sum_table_cf$percent[sum_table_cf$counter_factual_test == "remove_community_detections"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "remove_community_detections"] / length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "remove_community_detections"]) * 100, 1)
+# sum_table_cf$percent[sum_table_cf$counter_factual_test == "remove_community_detections"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "remove_community_detections"] / length(plot_dat_cf$counter_factual_test[plot_dat_cf$counter_factual_test == "remove_community_detections"]) * 100, 1)
 
-sum_table_cf$percent[sum_table_cf$counter_factual_test == "isolate_extirpations"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "isolate_extirpations"] / length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "isolate_extirpations"]) * 100, 1)
+sum_table_cf$percent[sum_table_cf$counter_factual_test == "isolate_extirpations"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "isolate_extirpations"] / length(plot_dat_cf$counter_factual_test[plot_dat_cf$counter_factual_test == "isolate_extirpations"]) * 100, 1)
 
-sum_table_cf$percent[sum_table_cf$counter_factual_test == "isolate_altitude"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "isolate_altitude"] / length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "isolate_altitude"]) * 100, 1)
+sum_table_cf$percent[sum_table_cf$counter_factual_test == "isolate_altitude"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "isolate_altitude"] / length(plot_dat_cf$counter_factual_test[plot_dat_cf$counter_factual_test == "isolate_altitude"]) * 100, 1)
 
-sum_table_cf$percent[sum_table_cf$counter_factual_test == "isolate_HFP"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "isolate_HFP"] /      length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "isolate_HFP"]) * 100, 1)
+sum_table_cf$percent[sum_table_cf$counter_factual_test == "isolate_HFP"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "isolate_HFP"] /      length(plot_dat_cf$counter_factual_test[plot_dat_cf$counter_factual_test == "isolate_HFP"]) * 100, 1)
 
-sum_table_cf$percent[sum_table_cf$counter_factual_test == "isolate_FLII"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "isolate_FLII"] /     length(ppc_values_cf$counter_factual_test[ppc_values_cf$counter_factual_test == "isolate_FLII"]) * 100, 1)
+sum_table_cf$percent[sum_table_cf$counter_factual_test == "isolate_FLII"] = round(sum_table_cf$num_lvl[sum_table_cf$counter_factual_test == "isolate_FLII"] /     length(plot_dat_cf$counter_factual_test[plot_dat_cf$counter_factual_test == "isolate_FLII"]) * 100, 1)
 
 ## inspect
 sum_table_cf # looks good! 
 
 ## make the plot 
 counterfactual_siv_hist = 
-  ggplot(ppc_values_cf, aes(x = Interaction_Estimate, fill = support_simple))+
+  ggplot(plot_dat_cf, aes(x = Interaction_Estimate, fill = support_simple))+
   geom_histogram(aes(y=after_stat(count)), colour="black", binwidth = .1, alpha = 1)+
   theme_classic()+
   geom_vline(aes(xintercept = 0), linetype = "dashed", color = "firebrick4", alpha = .5)+
   scale_fill_manual(values = new_colors) +
-  scale_y_continuous(breaks = seq(0, max(table(ppc_values_cf$support_simple)), by = 2)) + 
+  scale_y_continuous(breaks = seq(0, max(table(plot_dat_cf$support_simple)), by = 2)) + 
   labs(x = "Species Interaction Value", y = hist_y, color = NULL)+
   facet_wrap(~counter_factual_test) + 
   guides(fill = "none") + 
@@ -1226,7 +1344,6 @@ counterfactual_siv_hist =
 ## save it in the list! 
 all_plots[[length(all_plots)+1]] = counterfactual_siv_hist
 names(all_plots)[length(all_plots)] = "counterfactual_siv_hist"
-
 
 ```
 
@@ -1315,7 +1432,7 @@ write.csv(nonsupport, path, row.names = F)
 
 ## and counterfactuals
 #make a path
-path = paste(wd, "percentages_for_counter-factual_histograms_", date, ".csv", sep = "")
+path = paste(wd, "percentages_for_counter-factual_histograms_", plot_type, "_", date, ".csv", sep = "")
 # and save! 
 write.csv(sum_table_cf, path, row.names = F)
 

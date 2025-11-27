@@ -167,8 +167,8 @@ dat$pred_prey[dat$sub_sp %in% c("Panthera_pardus","Panthera_tigris",
 # create a new column that incorporates predator vs prey and top-down vs bottom up 
 dat$support_pred_prey[dat$support == "Supported" & dat$direction == "top-down"] = "supported_top-down"      # this is auto prey
 dat$support_pred_prey[dat$support == "Supported" & dat$direction == "bottom-up"] = "supported_bottom-up"    # this is auto predators
-dat$support_pred_prey[grepl("Unsupport", dat$support) & dat$direction == "top-down"] = "unsupported_top-down"   # this is auto prey
-dat$support_pred_prey[grepl("Unsupport", dat$support) & dat$direction == "bottom-up"] = "unsupported_bottom-up" # this is auto predators
+dat$support_pred_prey[grepl("unsupport", dat$support) & dat$direction == "top-down"] = "unsupported_top-down"   # this is auto prey
+dat$support_pred_prey[grepl("unsupport", dat$support) & dat$direction == "bottom-up"] = "unsupported_bottom-up" # this is auto predators
 table(dat$support_pred_prey) # divide each by 4 for total number of mods (b/c 4 covs per mod)
 
 
@@ -664,6 +664,12 @@ ggsave(path, facet_var, width = 15, height = 9, units = "in")
 # # save! 
 # ggsave(path, simple_forest, width = 13, height = 9, units = "in")
 
+## finally, dont forget to save the data used to make the plot! 
+dat$support_conserv = NULL
+dat$guild_pair = NULL
+dat$MCMC_setting = NULL
+dat$preference = NULL # only preferred
+path = paste(wd, "meta-regression_raw_covariates_to_share_", date, ".csv", sep = "")
+# write.csv(dat, path, row.names = F)
 
 ```
-

@@ -537,7 +537,7 @@ plot.all.counter.factuals <- function(scenarios, collected){
     geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
     geom_vline(xintercept = 0, linetype = "dashed", color = "grey40") +
     geom_jitter(aes(color = result), size = 1, alpha = 0.8, shape = 16) +
-    geom_point(aes(y = true, color = "Truth"), shape = 18, size = 1.5) +
+    geom_point(aes(y = true, color = "Truth"), shape = 18, size = 2) +
     facet_wrap(~ scenario_name,nrow = 3, ncol = 4, scales = "fixed") +
     labs(
       x = "True SIV",
@@ -546,19 +546,24 @@ plot.all.counter.factuals <- function(scenarios, collected){
       colour = 'Result'
     ) + ylim(-1.5, 1.5)+   # Text annotations
     annotate("text", x = -Inf, y = Inf, label = "SIV not valid",
-             hjust = -0.1, vjust = 2.1, size = 2.3, fontface = "bold") +
+             hjust = -0.1, vjust = 2.1, size = 4, fontface = "bold") +
     annotate("text", x = Inf, y = -Inf, label = "SIV not valid",
-             hjust = 1.1, vjust = -1.1, size = 2.3, fontface = "bold") +
+             hjust = 1.1, vjust = -1.1, size = 4, fontface = "bold") +
     theme_classic(base_size = 13) +
     theme(
       strip.background = element_rect(fill = "grey90", color = "black"),
-      strip.text = element_text(face = "bold"),
       panel.border = element_rect(color = "black", fill = NA),
       plot.title = element_text(hjust = 0.5),
       plot.margin = margin(10, 10, 10, 10),
       legend.position = "bottom",
       legend.text = element_text(size = 12),
-      legend.title = element_text(size = 13, face = "bold"),
+      axis.text.y = element_text(size = 18),        # bigger Y-axis numbers
+      axis.text.x = element_text(size = 18),        # bigger X-axis text 
+      axis.title = element_text(size = 18),         # axis titles
+      axis.title.y = element_text(size = 20),       # bigger y title 
+      axis.title.x = element_text(size = 20),       # Bigger X title
+      strip.text = element_text(size = 13, face = "bold"),  # larger facet labels
+      legend.title = element_text(size = 18, face = "bold"),
     ) + scale_colour_manual(values =c("Failed Support Criteria" = alpha("#B0B0B0",0.8), 
                                       "Passed Support Criteria" = alpha("#6BAE6B",0.8),
                                       "Truth" = 'red'),
@@ -568,7 +573,8 @@ plot.all.counter.factuals <- function(scenarios, collected){
 }
 
 # Save to Dropbox
-pdf(paste0("/Users/sassen/Dropbox/Co-abundance Simulations Project/Figures/Final SIV Figures/SIV_Grid.pdf"),
+pdf(paste0("~/Dropbox/Co-abundance Simulations Project/Figures/Final SIV Figures/SIV_Grid_", 
+           format(Sys.Date(), "%Y%m%d"), ".pdf", sep = ""),
     height = 10, width = 15)
 plot.all.counter.factuals(scenarios, collected)
 dev.off()

@@ -6,7 +6,8 @@ library(patchwork)
 library(cowplot)
 
 # set path (change to dropbox)
-path <- "/Users/sassen/Desktop/01_HPC_COA_Simulations/"
+# path <- "/Users/sassen/Desktop/01_HPC_COA_Simulations/" # for Joop
+path = "/Users/zachary_amir/Dropbox/Co-abundance Simulations Project/Code and Results/01_HPC_COA_Simulations/" # for Zach
 
 # import necessary environment files
 simulation_parameter_grid <- readRDS(paste0(path, "data/simulation_parameter_grid.rds"))
@@ -272,22 +273,28 @@ plot_coverage_grid <- function(scenarios, collected, path) {
   # Plot coverage grid
   ggplot(coverage_site, aes(x = factor(site), y = coverage_prop)) +
     geom_point(alpha = 0.6, color = "steelblue", size = 2) +
-    geom_hline(yintercept = 0.95, linetype = "dashed", color = "grey40") +
+    geom_hline(yintercept = 0.85, linetype = "dashed", color = "grey40") +
     facet_wrap(~ scenario_name + parameter, scales = "free_y", ncol = 4) +
-    labs(y = "Coverage proportion", x = "Site",
+    labs(y = "Coverage proportion", x = "Sampling unit",
          title = "Coverage Across Scenarios and Parameters") +
-    theme_classic(base_size = 13) +
+    theme_classic(base_size = 16) + # larger base text 
     theme(
+      axis.text.y = element_text(size = 18),        # bigger Y-axis numbers
+      axis.text.x = element_blank(),                # Hide X-axis (not useful here!)
+      axis.title = element_text(size = 18),         # axis titles
+      axis.title.y = element_text(size = 20),       # bigger y title 
+      axis.title.x = element_text(size = 20),       # Bigger X title
+      strip.text = element_text(size = 16, face = "bold"),  # larger facet labels
       panel.grid.minor = element_blank(),
       panel.border = element_rect(colour = "black", fill = NA, linewidth = 1),
       strip.background = element_rect(fill = "grey90", color = "black"),
-      strip.text = element_text(face = "bold"),
-      plot.title = element_text(hjust = 0.5)
+      plot.title = element_text(hjust = 0.5, size = 20) # larger title 
     ) +
     ylim(min(min(coverage_site$coverage_prop)-0.05,.5), 1)
 }
 
-pdf("/Users/sassen/Dropbox/Co-abundance Simulations Project/Figures/Grid Overview Abundance.pdf",
+pdf(paste("~/Dropbox/Co-abundance Simulations Project/Figures/Grid Overview Abundance_", 
+          format(Sys.Date(), "%Y%m%d") , ".pdf", sep = ""),
     height = 15, width = 20)
 plot_coverage_grid(c("Base",
                  "Unmeasured Variation - Low","Unmeasured Variation - High",

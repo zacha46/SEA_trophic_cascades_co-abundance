@@ -23,13 +23,6 @@ library(tidyverse)  # For basic data wrangling
 library(plyr)       # For data summaries
 # library(traitdata)  # For species trait data (e.g. body mass, trophic guild, home ranges)
 
-### Create a saving path to Dropbox or GitHub 
-github = F # set to TRUE if saving to git 
-if(github){
-  save_path = "~/GitHub Repositories/SEA_trophic_cascades_co-abundance/data_GitHub/"
-}else{
-  save_path = "~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step1_output/"
-}
 ```
 
 ```{r import captures}
@@ -208,7 +201,6 @@ meta = meta[meta$survey_id %in% caps$survey_id,]
 ```{r Import non-resampled data for referencing}
 
 ### this will be important for determining the number of deployments used total and per survey 
-
 ## specify the working diretory where og data lives
 og_wd = "/Users/zachary_amir/Dropbox/CT capture histories database/Asian ECL raw CT data/Step4_output_pre-resampling/"
 
@@ -237,7 +229,8 @@ land_sum = ddply(meta, .(Landscape), summarize,
                  num_su = (length(unique(cell_id))),
                  num_polygon = length(unique(Polygon5km)),
                  num_survey = length(unique(survey_id)),
-                 duration = as.numeric(difftime(max(Sampling_end), min(Sampling_begin), units = "days")),
+                 duration = as.numeric(difftime(max(Sampling_end), 
+                                                min(Sampling_begin), units = "days")),
                  start_date = min(Sampling_begin),
                  end_date = max(Sampling_end),
                  data_sources = length(unique(source)),
@@ -245,7 +238,12 @@ land_sum = ddply(meta, .(Landscape), summarize,
                  Xmin = min(Avg_Longitude),
                  Xmax = max(Avg_Longitude),
                  Ymin = min(Avg_Latitude),
-                 Ymax = max(Avg_Latitude))
+                 Ymax = max(Avg_Latitude),
+                 # add mean for the three covariates
+                 mean_flii = mean(Avg_FLLI),
+                 mean_hfp  = mean(Avg_human_footprint),
+                 mean_elev = mean(Avg_altitude)
+                 )
 
 ## create total_area_sampled by multiplying polygon count w/ 5
 land_sum$total_area_sampled = land_sum$num_polygon*5
@@ -258,9 +256,36 @@ land_sum$Landscape[land_sum$total_area_sampled > 700] # Eastern section of Thai 
 ```{r Generate a table per landscape}
 ## The idea here is to provide more context for the Reviewer 2 who wanted to learn more about the data
 ## so this will be included as a supplementary table
-head(land_sum) # and weve already got a start here, added all we can from the resampled data 
 
-## extract relevant information from non-resampled meta data
+## Summarize information per landscape from re-sampled data 
+land_sum = ddply(meta, .(Landscape), summarize,
+                 # deployment survey information 
+                 num_su       = (length(unique(cell_id))),
+                 num_polygon  = length(unique(Polygon5km)),
+                 num_survey   = length(unique(survey_id)),
+                 duration     = as.numeric(difftime(max(Sampling_end), 
+                                                   min(Sampling_begin), units = "days")),
+                 start_date   = min(Sampling_begin),
+                 end_date     = max(Sampling_end),
+                 data_sources = length(unique(source)),
+                 # add bounding box for the spatial nerds out there... I C U! 
+                 Xmin = min(Avg_Longitude),
+                 Xmax = max(Avg_Longitude),
+                 Ymin = min(Avg_Latitude),
+                 Ymax = max(Avg_Latitude),
+                 # add means for the three covariates
+                 mean_flii = round(mean(Avg_FLLI), 3), 
+                 mean_hfp  = round(mean(Avg_human_footprint), 3), 
+                 mean_elev = round(mean(Avg_altitude), 3)
+                 )
+
+## create total_area_sampled by multiplying polygon count w/ 5
+land_sum$total_area_sampled = land_sum$num_polygon*5
+summary(land_sum$total_area_sampled) # good! Nothing over 1000 square km 
+hist(land_sum$total_area_sampled) # classic poisson, who is the biggie?
+land_sum$Landscape[land_sum$total_area_sampled > 700] # Eastern section of Thai forest reserve... could probably move that longitude a bit more East to make this smaller?
+
+### incorporate number of non-resampled deployments from OG metadata
 land_sum_nonresamp = ddply(og_meta, .(Landscape), summarize,
                            num_dep = (length(unique(deployment_id))))
 # make sure its safe to merge
@@ -297,18 +322,16 @@ setdiff(land_tn$Landscape, land_sum$Landscape)
 setdiff(land_sum$Landscape, land_tn$Landscape) # were good! 
 land_sum = merge(land_tn, land_sum, by = "Landscape")
 
+## clean up
+rm(add, add2, add3, land_tn)
+
 ## rename cols to be more clear
 names(land_sum)
-names(land_sum) = c("landscape", "total trap nights", "number of sampling units", "number of 5km polygons", "number of single-season surveys", "sampling duration", "start date", "end date", "number of data providers", "Xmin", "Xmax", "Ymin", "Ymax", "total area sampled km2", "number of deployments", "were tigers detected", "were leopards detected", "were dholes detected", "were clouded leopards detected")
-
+names(land_sum) = c("landscape", "total trap nights", "number of sampling units", "number of 5km polygons", "number of single-season surveys", "sampling duration", "start date", "end date", "number of data providers", "Xmin", "Xmax", "Ymin", "Ymax", "mean forest integrity", "mean human footprint", "mean elevation", "total area sampled km2", "number of deployments", "were tigers detected", "were leopards detected", "were dholes detected", "were clouded leopards detected")
 # save this! 
-# write.csv(land_sum, paste(save_path, "Landscape_summary_table_", 
-#                           format(Sys.time(), format = "%Y%m%d"), ".csv", sep = ""), row.names = F)
-
-## clean up
-rm(add, add2, add3, land_tn, land_caps, cap_land)
-
-
+save_path = paste("~/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step1_output/Landscape_summary_table_",
+                  format(Sys.Date(), "%Y%m%d"), ".csv", sep = "")
+# write.csv(land_sum, save_path, row.names = F)
 ```
 
 ## Camera trap data included for analysis  
@@ -909,63 +932,26 @@ By adding the observation sequence to the captures, we lost `r paste(lost*100, "
 
 ```{r Determine species to be analyzed as a group}
 
-# ## first, determine which species will need to be analyzed as groups rather than individuals 
-# # because of very large group sizes skewing results
-# big = ddply(caps[caps$Species %in% keep,], .(Species), summarize,
-#             max_count = max(total_indiv_records),
-#             mean_count = mean(total_indiv_records),
-#             mode_count = median(total_indiv_records))
-# 
-# big$Species[big$mean_count >= 2] #this is probably it... 
-# # big$Species[big$max_count >= 10] #but this is concerning 
-# 
-# ## go w/ mean >= 2 for now and inspect for later
-# group_sp = big$Species[big$mean_count >= 2]
-# # adding muntjacs and ALL macaque species because they were probelmatic in the past 
-# group_sp = c(group_sp, "Muntiacus_genus", "Macaca_fascicularis" )
-# rm(big)
+## first, determine which species will need to be analyzed as groups rather than individuals 
+# because of very large group sizes skewing results
+big = ddply(caps[caps$Species %in% keep,], .(Species), summarize,
+            max_count = max(total_indiv_records),
+            mean_count = mean(total_indiv_records),
+            mode_count = median(total_indiv_records))
 
-### Re-imagining group sizes here --> limit group size bases on mean AND max counts 
-cap_counts = data.frame(matrix(nrow = 0, ncol = 2))
-names(cap_counts) = c("Species", "capped_total_count")
-for(sp in keep){
-  
-  # Grab all relevant counts for the current species
-  sp_counts <- caps[["total_indiv_records"]][caps$Species == sp]
-  sp_counts <- sp_counts[!is.na(sp_counts) & sp_counts > 0] # make sure no NA or zeros to skew calculations
-  
-  # Calculate mean and max counts
-  mean_count <- mean(sp_counts)
-  max_count <- max(sp_counts)
-  
-  # Determine species-specific cap limit based on rules (adjust as needed)
-  cap_val <- if (mean_count > 10 || max_count > 20) {
-    7
-  } else if (mean_count > 5 || max_count > 10) {
-    5
-  } else if (mean_count > 3 || max_count > 5) {
-    3
-  } else {
-    Inf
-  }
-  
-  ## save in results df 
-  res = cap_counts[0,]
-  res[1, "Species"] = sp
-  res[1, "capped_total_count"] = cap_val
-  # combine w/ the total 
-  cap_counts = distinct(rbind(res, cap_counts))
-  
-} # end per sp 
+big$Species[big$mean_count >= 2] #this is probably it... 
+# big$Species[big$max_count >= 10] #but this is concerning 
+
+## go w/ mean >= 2 for now and inspect for later
+group_sp = big$Species[big$mean_count >= 2]
+# adding muntjacs and ALL macaque species because they were probelmatic in the past 
+group_sp = c(group_sp, "Muntiacus_genus", "Macaca_fascicularis" )
+rm(big)
+
 
 ```
 
-I have also determined which species need to be analyzed as groups instead of inviduals because of very large group sizes cause N-mixture models to crash and create unrealistic estimates. 
-
-* Species with **mean counts greater than 10 or maximum counts greater than 20** were limited to 7 and this includes: `r paste(cap_counts$Species[cap_counts$capped_total_count == 7], collapse = ", ")`. 
-* Species with **mean counts greater than 5 or maximum counts greater than 10** were limited to 5 and this includes: `r paste(cap_counts$Species[cap_counts$capped_total_count == 5], collapse = ", ")`. 
-* Species with **mean counts greater than 3 or maximum counts greater than 5** were limited to 3 and this includes: `r paste(cap_counts$Species[cap_counts$capped_total_count == 3], collapse = ", ")`. 
-* All other species did not have their counts limited, and this includes: `r paste(cap_counts$Species[cap_counts$capped_total_count == Inf], collapse = ", ")`. 
+I have also determined which species need to be analyzed as groups instead of inviduals because of very large group sizes cause N-mixture models to crash and create unrealistic estimates. __This includes `r length(group_sp)` species: `r paste(sort(group_sp), collapse = ", ")`__.
 
 ```{r Prepare metadata and check for colinearity}
 
@@ -1029,17 +1015,24 @@ month<-str_sub(Sys.Date(),-5,-4)
 year<-str_sub(Sys.Date(),-10,-7)
 date = paste(year,month,day, sep = "")
 
-### Save all relevant files
-saveRDS(keep, paste(save_path, "species_vector_", length(keep), "_species_", scale, "_scale_", date, ".RDS", sep = ""))
+# ## grab the WD where we want to save data 
+# wd = "/Users/zachary_amir/Dropbox/Zach PhD/Ch3 Trophic release project/SEA_TC_GitHub_data_storage/data/step1_output/"
 
-saveRDS(group_sp, paste(save_path, "group_living_", length(group_sp), "_species_", scale, "_scale_",  date, ".RDS", sep = ""))
 
-write.csv(caps, paste(save_path, "clean_captures_to_make_UMFs_", scale, "_scale_",  date,".csv", sep = ""), row.names = F)
+# ### Save all relevant files
+saveRDS(keep, paste("data_GitHub/species_vector_", length(keep), "_species_", scale, "_scale_", date, ".RDS", sep = ""))
 
-write.csv(meta, paste(save_path, "clean_metadata_to_make_UMFs_", scale, "_scale_",  date,".csv", sep = ""), row.names = F)
+saveRDS(group_sp, paste("data_GitHub/group_living_", length(group_sp), "_species_", scale, "_scale_",  date, ".RDS", sep = ""))
+
+write.csv(caps, paste("data_GitHub/clean_captures_to_make_UMFs_", scale, "_scale_",  date,".csv", sep = ""), row.names = F)
+
+write.csv(meta, paste("data_GitHub/clean_metadata_to_make_UMFs_", scale, "_scale_",  date,".csv", sep = ""), row.names = F)
 
 ## Also save trait data so I dont have to remake it later
-write.csv(traits, paste(save_path, "clean_", nrow(traits), "_species_trait_data_", date, ".csv", sep = ""), row.names = F)
+write.csv(traits, paste("data_GitHub/clean_", nrow(traits), "_species_trait_data_", date, ".csv", sep = ""), row.names = F)
+
+
+
 
 ```
 

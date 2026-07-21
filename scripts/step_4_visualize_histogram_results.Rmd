@@ -1391,25 +1391,25 @@ for(i in 1:length(all_plots)){
   path = paste(wd, n, "_", date, ".png", sep = "")
   ## custom sizing per graph
   if(grepl("concept", n)){
-    ggsave(path, p, width = 13, height = 4, units = "in")
+    ggsave(path, p, width = 13, height = 4, units = "in", dpi = 600)
   }
   if(grepl("unsup", n)){
-    ggsave(path, p, width = 10, height = 10, units = "in")
+    ggsave(path, p, width = 10, height = 10, units = "in", dpi = 600)
   }
   if(grepl("community", n) & !grepl("all_large_carn", n)){
-    ggsave(path, p, width = 10, height = 10, units = "in")
+    ggsave(path, p, width = 10, height = 10, units = "in", dpi = 600)
   }
   if(grepl("preferred", n) & !grepl("all_large_carn", n)){
-    ggsave(path, p, width = 10, height = 10, units = "in")
+    ggsave(path, p, width = 10, height = 10, units = "in", dpi = 600)
   }
   if(grepl("community", n) & grepl("all_large_carn", n)){
-    ggsave(path, p, width = 12, height = 4, units = "in")
+    ggsave(path, p, width = 12, height = 4, units = "in", dpi = 600)
   }
   if(grepl("preferred", n) & grepl("all_large_carn", n)){
-    ggsave(path, p, width = 12, height = 4, units = "in")
+    ggsave(path, p, width = 12, height = 4, units = "in", dpi = 600)
   }
   if(grepl("counterfactual", n)){
-    ggsave(path, p, width = 15, height = 7, units = "in")
+    ggsave(path, p, width = 15, height = 7, units = "in", dpi = 600)
   }
 
 }
